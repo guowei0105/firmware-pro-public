@@ -1,4 +1,4 @@
-name: "build-touch"
+name: "build-touch1s"
 
 on:
   schedule:
@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  build-touch:
+  build-touch1s:
     runs-on: ubuntu-20.04
 
     steps:
