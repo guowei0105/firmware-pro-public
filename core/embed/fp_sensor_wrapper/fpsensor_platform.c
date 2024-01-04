@@ -1,6 +1,7 @@
 #include "fpsensor_platform.h"
 #include "fpsensor_driver.h"
 #include "irq.h"
+#include "systick.h"
 
 SPI_HandleTypeDef spi_fp;
 static bool fp_touched = false;
@@ -256,6 +257,7 @@ uint8_t fpsensor_hard_reset()
 
     return FPSENSOR_OK;
 }
+
 /*
 * Function：    fpsensor_delay_ms
 * Description： 延时函数。
@@ -267,13 +269,13 @@ uint8_t fpsensor_hard_reset()
 */
 void fpsensor_delay_ms(uint32_t Timeout)
 {
-    HAL_Delay(Timeout);
+    dwt_delay_ms(Timeout);
 }
 
 #include "secbool.h"
 
-extern secbool se_fp_write(uint16_t offset, const void *val_dest, uint16_t len,uint8_t index,uint8_t total);
-extern secbool se_fp_read(uint16_t offset, void *val_dest, uint16_t len,uint8_t index,uint8_t total);
+extern secbool se_fp_write(uint16_t offset, const void* val_dest, uint16_t len, uint8_t index, uint8_t total);
+extern secbool se_fp_read(uint16_t offset, void* val_dest, uint16_t len, uint8_t index, uint8_t total);
 
 /*
 * Function：    SF_Init
