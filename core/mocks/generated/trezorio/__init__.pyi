@@ -17,24 +17,6 @@ class BLE:
         Send command to the BLE.
         """
 
-
-# extmod/modtrezorio/modtrezorio-buz.h
-class BUZ:
-    """
-    """
-
-    def __init__(
-        self,
-    ) -> None:
-        """
-        """
-
-    def ctrl(self, msg: bytes) -> None:
-        """
-        Start or stop the buzzer.
-        """
-
-
 # extmod/modtrezorio/modtrezorio-flash.h
 class FlashOTP:
     """
@@ -130,9 +112,45 @@ class MOTOR:
         """
         """
 
-    def ctrl(self, cmd: int) -> None:
+    def tick(self) -> None:
         """
-        Control the motor.
+        Strong vibrate
+        """
+
+    def tock(self) -> None:
+        """
+        Weak vibrate
+        """
+
+# extmod/modtrezorio/modtrezorio-nfc.h
+class NFC:
+    """
+    """
+
+    def __init__(
+        self,
+    ) -> None:
+        """
+        """
+
+    def pwr_ctrl(self, on_off: bool) -> int:
+        """
+        Control NFC power.
+        """
+
+    def wait_card(self, timeout_ms: int) -> int:
+        """
+        Wait for card with timeout.
+        """
+
+    def send_recv(self, send: bytearray) -> Tuple[int, bytearray]:
+        """
+        Send receive data through NFC.
+        """
+
+    def send_recv_single_shot(self, send: bytearray, timeout_ms: int) -> Tuple[int, bytearray]:
+        """
+        Wait for card, then send receive data through NFC.
         """
 
 

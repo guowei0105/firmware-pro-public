@@ -63,6 +63,7 @@ secbool se_write_certificate(const uint8_t *cert, uint16_t cert_len);
 secbool se_read_certificate(uint8_t *cert, uint16_t *cert_len);
 secbool se_has_cerrificate(void);
 secbool se_sign_message(uint8_t *msg, uint32_t msg_len, uint8_t *signature);
+secbool se_set_session_key_ex(uint8_t addr, const uint8_t *session_key);
 secbool se_set_session_key(const uint8_t *session_key);
 
 secbool se_containsMnemonic(const char *mnemonic);
@@ -121,7 +122,9 @@ secbool se_fingerprint_state(void);
 secbool se_fingerprint_lock(void);
 secbool se_fingerprint_unlock(void);
 
-secbool se_fp_write(uint16_t offset, const void *val_dest, uint16_t len,uint8_t index,uint8_t total);
-secbool se_fp_read(uint16_t offset, void *val_dest, uint16_t len,uint8_t index,uint8_t total);
+secbool se_fp_write(uint16_t offset, const void *val_dest, uint16_t len,
+                    uint8_t index, uint8_t total);
+secbool se_fp_read(uint16_t offset, void *val_dest, uint16_t len, uint8_t index,
+                   uint8_t total);
 
 #endif

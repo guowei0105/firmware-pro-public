@@ -531,7 +531,7 @@ secbool se_sign_message(uint8_t *msg, uint32_t msg_len, uint8_t *signature) {
   return thd89_transmit(sign, sizeof(sign), signature, &signature_len);
 }
 
-static secbool se_set_session_key_ex(uint8_t addr, const uint8_t *session_key) {
+secbool se_set_session_key_ex(uint8_t addr, const uint8_t *session_key) {
   uint8_t cmd[32] = {0x00, 0xF6, 0x00, 0x02, 0x10};
   uint16_t resp_len = 0;
   memcpy(cmd + 5, session_key, SESSION_KEYLEN);
@@ -1513,10 +1513,9 @@ secbool se_fp_write(uint16_t offset, const void *val_dest, uint16_t len,
 
   if (len > SE_DATA_MAX_LEN && ui_callback != NULL) {
     show_progress = true;
-    if(index==0){
+    if (index == 0) {
       ui_callback(0, 0, NULL);
     }
-    
   }
 
   while (len) {
@@ -1535,7 +1534,8 @@ secbool se_fp_write(uint16_t offset, const void *val_dest, uint16_t len,
     len -= packet_len;
 
     if (show_progress && ui_callback != NULL) {
-      percent = (packet_offset * 100) / (len_bak * total)+ (index*100)/total;
+      percent =
+          (packet_offset * 100) / (len_bak * total) + (index * 100) / total;
       ui_callback(0, percent * 10, NULL);
     }
   }
@@ -1560,7 +1560,7 @@ secbool se_fp_read(uint16_t offset, void *val_dest, uint16_t len, uint8_t index,
 
   if (len > SE_DATA_MAX_LEN && ui_callback != NULL) {
     show_progress = true;
-    if(index==0){
+    if (index == 0) {
       ui_callback(0, 0, NULL);
     }
   }
@@ -1580,7 +1580,8 @@ secbool se_fp_read(uint16_t offset, void *val_dest, uint16_t len, uint8_t index,
     packet_offset += packet_len;
     len -= packet_len;
     if (show_progress && ui_callback != NULL) {
-      percent = (packet_offset * 100) / (len_bak * total) + (index*100)/total;
+      percent =
+          (packet_offset * 100) / (len_bak * total) + (index * 100) / total;
       ui_callback(0, percent * 10, NULL);
     }
   }

@@ -4,6 +4,7 @@
 
 #include "display.h"
 
+#include <stdbool.h>
 #include <string.h>
 
 static QSPI_HandleTypeDef hqspi;
@@ -330,6 +331,10 @@ uint32_t qspi_flash_read_id(void) {
   QSPI_CommandTypeDef command;
   uint8_t buf[3];
 
+  if (memory_mapped) {
+    qspi_flash_quit_memory_mapped();
+  }
+
   command.InstructionMode = QSPI_INSTRUCTION_1_LINE;
   command.AddressSize = QSPI_ADDRESS_24_BITS;
   command.AlternateByteMode = QSPI_ALTERNATE_BYTES_NONE;
@@ -350,6 +355,10 @@ uint32_t qspi_flash_read_id(void) {
 
   if (HAL_QSPI_Receive(&hqspi, buf, HAL_QPSI_TIMEOUT_DEFAULT_VALUE) != HAL_OK) {
     return 0;
+  }
+
+  if (memory_mapped) {
+    qspi_flash_memory_mapped();
   }
 
   id = (buf[0] << 16) | (buf[1] << 8) | buf[2];

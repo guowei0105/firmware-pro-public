@@ -5,8 +5,8 @@
 #include <stdint.h>
 #include <string.h>
 
-#define PRODUCT_STRING "OneKey Touch"
-#define SE_NAME "ATECC608"
+#define PRODUCT_STRING "OneKey Pro"
+#define SE_NAME "THD89"
 
 typedef struct __attribute__((packed)) {
   char product[2];
@@ -40,5 +40,10 @@ void device_get_enc_key(uint8_t key[32]);
 
 void device_test(bool force);
 void device_burnin_test(bool force);
+#if !PRODUCTION
+bool device_backup_otp(bool overwrite);
+bool device_restore_otp();
+bool device_overwrite_serial(char *dev_serial);
+#endif
 
 #endif
