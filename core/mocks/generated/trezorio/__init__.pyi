@@ -12,10 +12,11 @@ class BLE:
         """
         """
 
-    def ctrl(self, cmd: byte, value: byte) -> None:
+    def ctrl(self, cmd: byte, value: bytes) -> None:
         """
         Send command to the BLE.
         """
+
 
 # extmod/modtrezorio/modtrezorio-flash.h
 class FlashOTP:
@@ -122,6 +123,7 @@ class MOTOR:
         Weak vibrate
         """
 
+
 # extmod/modtrezorio/modtrezorio-nfc.h
 class NFC:
     """
@@ -148,7 +150,8 @@ class NFC:
         Send receive data through NFC.
         """
 
-    def send_recv_single_shot(self, send: bytearray, timeout_ms: int) -> Tuple[int, bytearray]:
+    def send_recv_single_shot(self, send: bytearray, timeout_ms: int) ->
+    Tuple[int, bytearray]:
         """
         Wait for card, then send receive data through NFC.
         """
@@ -245,10 +248,15 @@ class USB:
         Cleans up the USB stack.
         """
 
-    def state(self) -> bool:
+    def connected(self) -> bool:
         """
-        Get USB state.
+        Get USB connect state.
         """
+
+    def state(self) -> int:
+      """
+      Get USB state.
+      """
 
 
 # extmod/modtrezorio/modtrezorio-vcp.h
@@ -321,3 +329,4 @@ BUTTON_LEFT: int  # button number of left button
 BUTTON_RIGHT: int  # button number of right button
 WireInterface = Union[HID, WebUSB, SPI]
 USB_CHECK: int # interface id for check of USB data connection
+FINGERPRINT_STATE: int # interface id of the fingerprint state events

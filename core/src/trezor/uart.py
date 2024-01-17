@@ -27,11 +27,104 @@ _CMD_NRF_VERSION = const(5)  # ble firmware version
 _CMD_DEVICE_CHARGING_STATUS = const(8)
 _CMD_BATTERY_STATUS = const(9)
 _CMD_SIDE_BUTTON_PRESS = const(10)
+_CMD_LED_BRIGHTNESS = const(12)
 CHARGING = False
 SCREEN: PairCodeDisplay | None = None
 BLE_ENABLED: bool | None = None
 NRF_VERSION: str | None = None
 BLE_CTRL = io.BLE()
+FLASH_LED_BRIGHTNESS: int | None = None
+
+
+async def handle_fingerprint():
+    from trezorio import fingerprint
+    from trezor.lvglui.scrs import fingerprints
+
+    while True:
+        fingerprint.sleep()
+        state = await loop.wait(io.FINGERPRINT_STATE)
+        if __debug__:
+            print(f"state == {state}")
+
+        if any(
+            (
+                not fingerprints.has_fingerprints(),
+                not device.is_fingerprint_unlock_enabled(),
+                not config.is_unlocked(),
+                fingerprints.is_unlocked(),
+                utils.is_collecting_fingerprint(),
+                display.backlight() == 0,
+            )
+        ):
+            await loop.sleep(2000)
+            fingerprint.sleep()
+            continue
+
+        try:
+            detected = fingerprint.detect()
+            if detected:
+                await loop.sleep(100)
+                if not fingerprint.detect():
+                    continue
+                if __debug__:
+                    print("finger detected ....")
+                try:
+                    match_id = fingerprint.match()
+                    fps = fingerprint.list_template()
+                    assert fps is not None
+                    assert match_id in fps
+                except Exception as e:
+                    if __debug__:
+                        log.exception(__name__, e)
+                        print("fingerprint mismatch")
+                    warning_level = 0
+                    if isinstance(e, fingerprint.ExtractFeatureFail):
+                        warning_level = 4
+                    elif isinstance(e, (fingerprint.NoFp, fingerprint.GetImageFail)):
+                        warning_level = 3
+                    elif isinstance(e, fingerprint.NotMatch):
+                        # increase failed count
+                        failed_count = device.finger_failed_count()
+                        if failed_count < utils.MAX_FP_ATTEMPTS:
+                            device.finger_failed_count_incr()
+                        else:
+                            if config.is_unlocked():
+                                config.lock()
+
+                        warning_level = 1 if failed_count < utils.MAX_FP_ATTEMPTS else 2
+                    from trezor.lvglui.scrs.lockscreen import LockScreen
+
+                    # failed prompt
+                    visible, scr = LockScreen.retrieval()
+                    if visible and scr is not None:
+                        motor.vibrate()
+                        scr.show_tips(warning_level)
+                        scr.show_finger_mismatch_anim()
+                    await loop.sleep(500)
+                else:
+                    if __debug__:
+                        print(f"fingerprint match {match_id}")
+                    # # 1. publish signal
+
+                    if fingerprints.has_takers():
+                        if __debug__:
+                            print("publish signal")
+                        fingerprints.signal_match()
+                    else:
+                        # 2. unlock
+                        res = fingerprints.unlock()
+                        if __debug__:
+                            print(f"uart unlock result {res}")
+                        await base.unlock_device()
+                    await loop.sleep(2000)
+                    continue
+            else:
+                await loop.sleep(200)
+        except Exception as e:
+            if __debug__:
+                log.exception(__name__, e)
+            loop.clear()
+            return  # pylint: disable=lost-exception
 
 
 async def handle_usb_state():
@@ -64,10 +157,16 @@ async def handle_usb_state():
                     StatusBar.get_instance().set_battery_img(
                         utils.BATTERY_CAP, CHARGING
                     )
+                    _request_charging_status()
             usb_auto_lock = device.is_usb_lock_enabled()
             if usb_auto_lock and device.is_initialized() and config.has_pin():
+                from trezor.lvglui.scrs import fingerprints
+
                 if config.is_unlocked():
-                    config.lock()
+                    if fingerprints.is_available() and fingerprints.is_unlocked():
+                        fingerprints.lock()
+                    else:
+                        config.lock()
                     await safe_reloop()
                     # single to restart the main loop
                     raise loop.TASK_CLOSED
@@ -147,6 +246,9 @@ async def process_push() -> None:
     elif cmd == _CMD_NRF_VERSION:
         # retrieve nrf version
         _retrieve_nrf_version(value)
+    elif cmd == _CMD_LED_BRIGHTNESS:
+        # retrieve led brightness
+        _retrieve_flashled_brightness(value)
     else:
         if __debug__:
             print("unknown or not care command:", cmd)
@@ -166,13 +268,26 @@ async def _deal_button_press(value: bytes) -> None:
     res = ustruct.unpack(">B", value)[0]
     if res == _PRESS_SHORT:
         if display.backlight():
+            if utils.is_collecting_fingerprint():
+                from trezor.lvglui.scrs.fingerprints import (
+                    CollectFingerprintProgress,
+                )
+
+                if CollectFingerprintProgress.has_instance():
+                    CollectFingerprintProgress.get_instance().prompt_tips()
+                    return
             display.backlight(0)
             if device.is_initialized():
                 if utils.is_initialization_processing():
                     return
                 utils.AUTO_POWER_OFF = True
+                from trezor.lvglui.scrs import fingerprints
+
                 if config.has_pin() and config.is_unlocked():
-                    config.lock()
+                    if fingerprints.is_available() and fingerprints.is_unlocked():
+                        fingerprints.lock()
+                    else:
+                        config.lock()
                 await loop.race(safe_reloop(), loop.sleep(200))
                 # single to restart the main loop
                 raise loop.TASK_CLOSED
@@ -182,7 +297,7 @@ async def _deal_button_press(value: bytes) -> None:
         from trezor.lvglui.scrs.homescreen import PowerOff
 
         PowerOff(
-            re_loop=True
+            True
             if not utils.is_initialization_processing() and device.is_initialized()
             else False
         )
@@ -202,7 +317,6 @@ async def _deal_charging_state(value: bytes) -> None:
         _POWER_STATUS_CHARGING,
     ):
         if res != _POWER_STATUS_CHARGING:
-            print("charging with a charger now .......")
             utils.turn_on_lcd_if_possible()
         if CHARGING:
             return
@@ -258,6 +372,16 @@ async def _deal_ble_status(value: bytes) -> None:
             device.set_ble_status(enable=False)
 
 
+def _retrieve_flashled_brightness(value: bytes) -> None:
+    if value != b"":
+        global FLASH_LED_BRIGHTNESS
+        flag, FLASH_LED_BRIGHTNESS = ustruct.unpack(">BB", value)
+        if __debug__:
+            print("flag:", flag)
+            print(f"flash led brightness: {FLASH_LED_BRIGHTNESS}")
+        utils.FLASH_LED_BRIGHTNESS = FLASH_LED_BRIGHTNESS
+
+
 def _retrieve_ble_name(value: bytes) -> None:
     if value != b"":
         utils.BLE_NAME = value.decode("utf-8")
@@ -275,27 +399,27 @@ def _retrieve_nrf_version(value: bytes) -> None:
 
 def _request_ble_name():
     """Request ble name."""
-    BLE_CTRL.ctrl(0x83, 0x01)
+    BLE_CTRL.ctrl(0x83, b"\x01")
 
 
 def _request_ble_version():
     """Request ble version."""
-    BLE_CTRL.ctrl(0x83, 0x02)
+    BLE_CTRL.ctrl(0x83, b"\x02")
 
 
 def _request_battery_level():
     """Request battery level."""
-    BLE_CTRL.ctrl(0x82, 0x04)
+    BLE_CTRL.ctrl(0x82, b"\x04")
 
 
 def _request_ble_status():
     """Request current ble status."""
-    BLE_CTRL.ctrl(0x81, 0x04)
+    BLE_CTRL.ctrl(0x81, b"\x04")
 
 
 def _request_charging_status():
     """Request charging status."""
-    BLE_CTRL.ctrl(0x82, 0x05)
+    BLE_CTRL.ctrl(0x82, b"\x05")
 
 
 def fetch_all():
@@ -305,19 +429,20 @@ def fetch_all():
     _request_ble_status()
     _request_battery_level()
     _request_charging_status()
+    _fetch_flashled_brightness()
 
 
 def fetch_ble_info():
     if not utils.BLE_NAME:
-        BLE_CTRL.ctrl(0x83, 0x01)
+        BLE_CTRL.ctrl(0x83, b"\x01")
 
     global NRF_VERSION
     if NRF_VERSION is None:
-        BLE_CTRL.ctrl(0x83, 0x02)
+        BLE_CTRL.ctrl(0x83, b"\x02")
 
     global BLE_ENABLED
     if BLE_ENABLED is None:
-        BLE_CTRL.ctrl(0x81, 0x04)
+        BLE_CTRL.ctrl(0x81, b"\x04")
 
 
 def ctrl_ble(enable: bool) -> None:
@@ -325,14 +450,48 @@ def ctrl_ble(enable: bool) -> None:
     @param enable: True to open, False to close
     """
     if not device.ble_enabled() and enable:
-        BLE_CTRL.ctrl(0x81, 0x01)
+        BLE_CTRL.ctrl(0x81, b"\x01")
     elif device.ble_enabled() and not enable:
-        BLE_CTRL.ctrl(0x81, 0x02)
+        BLE_CTRL.ctrl(0x81, b"\x02")
+
+
+def _ctrl_flashled(enable: bool, brightness=15) -> None:
+    """Request to open or close flashlight.
+    @param enable: True to open, False to close
+    """
+    BLE_CTRL.ctrl(
+        0x85, b"\x01" + (int.to_bytes(brightness, 1, "big") if enable else b"\x00")
+    )
+
+
+def _fetch_flashled_brightness() -> None:
+    """Request to get led brightness."""
+    BLE_CTRL.ctrl(0x85, b"\x02")
+
+
+def flashled_open() -> None:
+    """Request to open led."""
+    utils.FLASH_LED_BRIGHTNESS = 15
+    _ctrl_flashled(True)
+
+
+def flashled_close() -> None:
+    """Request to close led."""
+    utils.FLASH_LED_BRIGHTNESS = 0
+    _ctrl_flashled(False)
+
+
+def is_flashled_opened() -> bool:
+    """Check if led is opened."""
+    if utils.FLASH_LED_BRIGHTNESS is None:
+        _fetch_flashled_brightness()
+        return False
+    return utils.FLASH_LED_BRIGHTNESS > 0
 
 
 def ctrl_power_off() -> None:
     """Request to power off the device."""
-    BLE_CTRL.ctrl(0x82, 0x01)
+    BLE_CTRL.ctrl(0x82, b"\x01")
 
 
 def get_ble_name() -> str:
