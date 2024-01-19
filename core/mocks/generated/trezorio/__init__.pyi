@@ -112,6 +112,11 @@ class MOTOR:
     ) -> None:
         """
         """
+        
+    def reset(self) -> None:
+        """
+        Reset motor and stop any on going vibrate 
+        """
 
     def tick(self) -> None:
         """
