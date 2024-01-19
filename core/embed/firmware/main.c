@@ -97,8 +97,6 @@ int main(void) {
 
   SystemCoreClockUpdate();
 
-  device_para_init();
-
   // Enable MPU
   mpu_config_firmware();
 
@@ -174,6 +172,8 @@ int main(void) {
   device_burnin_test(false);
 
   ensure(se_sync_session_key(), "se start up failed");
+
+  device_para_init();
 
   copyflash2sdram();
 #endif
@@ -300,7 +300,7 @@ void UsageFault_Handler(void) {
 
 __attribute__((noreturn)) void reboot_to_bootloader() {
   jump_to_with_flag(BOOTLOADER_START + IMAGE_HEADER_SIZE,
-                    STAY_IN_BOOTLOADER_FLAG);
+                    BOOT_TARGET_BOOTLOADER);
   for (;;)
     ;
 }
