@@ -20,51 +20,45 @@
 #include <string.h>
 
 #include "blake2s.h"
+#include "ble.h"
 #include "common.h"
 #include "compiler_traits.h"
 #include "display.h"
 #include "emmc.h"
+#include "emmc_fs.h"
 #include "ff.h"
 #include "flash.h"
 #include "i2c.h"
 #include "image.h"
+#include "lowlevel.h"
+#include "memzero.h"
 #include "mipi_lcd.h"
-#include "qspi_flash.h"
 #include "rng.h"
-#include "systick.h"
-#ifdef TREZOR_MODEL_T
 #include "sdcard.h"
 #include "sdram.h"
+#include "systick.h"
 #include "touch.h"
-#endif
+#include "usart.h"
 #include "usb.h"
-
-#include "lowlevel.h"
 #include "version.h"
 
-#include "memzero.h"
+#include STM32_HAL_H
 
-#include "ble.h"
-#include "emmc_fs.h"
-#include "usart.h"
+// helper macros
+#define FORCE_IGNORE_RETURN(x) \
+  { __typeof__(x) __attribute__((unused)) d = (x); }
+#define _TO_STR(x) #x
+#define TO_STR(x) _TO_STR(x)
 
-#define BOARD_MODE 1
-#define BOOT_MODE 2
+// defines
+#define BOARD_VERSION \
+  TO_STR(VERSION_MAJOR) "." TO_STR(VERSION_MINOR) "." TO_STR(VERSION_PATCH)
 #define PIXEL_STEP 5
 
 #if PRODUCTION
 const uint8_t BOARDLOADER_KEY_M = 4;
 const uint8_t BOARDLOADER_KEY_N = 7;
-#else
-const uint8_t BOARDLOADER_KEY_M = 2;
-const uint8_t BOARDLOADER_KEY_N = 3;
-#endif
-
-#define FORCE_IGNORE_RETURN(x) \
-  { __typeof__(x) __attribute__((unused)) d = (x); }
-
 static const uint8_t * const BOARDLOADER_KEYS[] = {
-#if PRODUCTION
     (const uint8_t
     *)"\x15\x4b\x8a\xb2\x61\xcc\x88\x79\x48\x3f\x68\x9a\x2d\x41\x24\x3a\xe7\xdb\xc4\x02\x16\x72\xbb\xd2\x5c\x33\x8a\xe8\x4d\x93\x11\x54",
     (const uint8_t
@@ -79,21 +73,16 @@ static const uint8_t * const BOARDLOADER_KEYS[] = {
     *)"\x4b\x71\x13\x4f\x18\xe0\x07\x87\xc5\x83\xd4\x07\x42\xcc\x18\x8e\x17\xfc\x85\xad\xe4\xcb\x47\x2d\xae\x5e\xf8\xe0\x69\xf0\xfe\xc5",
     (const uint8_t
     *)"\x2e\xcf\x80\xc8\x2b\x44\x98\x48\xc0\x00\x33\x50\x92\x13\x95\x51\xbf\xe4\x7b\x3c\x73\x17\xb4\x99\x50\xf6\x5e\x1d\x82\x43\x20\x24",
+};
 #else
-// TREZOR dev_key
-// (const uint8_t
-// *)"\xdb\x99\x5f\xe2\x51\x69\xd1\x41\xca\xb9\xbb\xba\x92\xba\xa0\x1f\x9f\x2e\x1e\xce\x7d\xf4\xcb\x2a\xc0\x51\x90\xf3\x7f\xcc\x1f\x9d",
-// (const uint8_t
-// *)"\x21\x52\xf8\xd1\x9b\x79\x1d\x24\x45\x32\x42\xe1\x5f\x2e\xab\x6c\xb7\xcf\xfa\x7b\x6a\x5e\xd3\x00\x97\x96\x0e\x06\x98\x81\xdb\x12",
-// (const uint8_t
-// *)"\x22\xfc\x29\x77\x92\xf0\xb6\xff\xc0\xbf\xcf\xdb\x7e\xdb\x0c\x0a\xa1\x4e\x02\x5a\x36\x5e\xc0\xe3\x42\xe8\x6e\x38\x29\xcb\x74\xb6",
-
-// ONEKEY dev_key
+const uint8_t BOARDLOADER_KEY_M = 2;
+const uint8_t BOARDLOADER_KEY_N = 3;
+static const uint8_t * const BOARDLOADER_KEYS[] = {
   (const uint8_t *)"\x57\x11\x4f\x0a\xa6\x69\xd2\xf8\x37\xe0\x40\xab\x9b\xb5\x1c\x00\x99\x12\x09\xf8\x4b\xfd\x7b\xf0\xf8\x93\x67\x62\x46\xfb\xa2\x4a",
   (const uint8_t *)"\xdc\xae\x8e\x37\xdf\x5c\x24\x60\x27\xc0\x3a\xa9\x51\xbd\x6e\xc6\xca\xa7\xad\x32\xc1\x66\xb1\xf5\x48\xa4\xef\xcd\x88\xca\x3c\xa5",
   (const uint8_t *)"\x77\x29\x12\xab\x61\xd1\xdc\x4f\x91\x33\x32\x5e\x57\xe1\x46\xab\x9f\xac\x17\xa4\x57\x2c\x6f\xcd\xf3\x55\xf8\x00\x36\x10\x00\x04",
-#endif
 };
+#endif
 
 // clang-format off
 static const uint8_t toi_icon_onekey[] = {
@@ -119,16 +108,19 @@ static const uint8_t toi_icon_safeos[] = {
 };
 // clang-format on
 
-#define BOARD_VERSION "OneKey Boardloader 1.6.0\n"
-
-#if defined(STM32H747xx)
-
-#include "stm32h7xx_hal.h"
-
 extern volatile uint32_t system_reset;
 
 // axi ram 512k
 uint8_t *boardloader_buf = (uint8_t *)0x24000000;
+
+// this is mainly for ignore/supress faults during flash read (for check
+// purpose). if bus fault enabled, it will catched by BusFault_Handler, then we
+// could ignore it. if bus fault disabled, it will elevate to hard fault, this
+// is not what we want
+static secbool handle_flash_ecc_error = secfalse;
+static void set_handle_flash_ecc_error(secbool val) {
+  handle_flash_ecc_error = val;
+}
 
 // fault handlers
 void HardFault_Handler(void) {
@@ -144,6 +136,35 @@ void MemManage_Handler_SO(void) {
 }
 
 void BusFault_Handler(void) {
+  // if want handle flash ecc error
+  if (handle_flash_ecc_error == sectrue) {
+    // dbgprintf_Wait("Internal flash ECC error detected at 0x%X", SCB->BFAR);
+
+    // check if it's triggered by flash DECC
+    if (flash_check_ecc_fault()) {
+      // reset flash controller error flags
+      flash_clear_ecc_fault(SCB->BFAR);
+
+      // reset bus fault error flags
+      SCB->CFSR &= ~(SCB_CFSR_BFARVALID_Msk | SCB_CFSR_PRECISERR_Msk);
+      __DSB();
+      SCB->SHCSR &= ~(SCB_SHCSR_BUSFAULTACT_Msk);
+      __DSB();
+
+      // try to fix ecc error and reboot
+      if (flash_fix_ecc_fault_BOOTLOADER(SCB->BFAR)) {
+        error_shutdown("Internal flash ECC error", "Cleanup successful",
+                       "Bootloader reinstall may required",
+                       "If the issue persists, contact support.");
+      } else {
+        error_shutdown("Internal error", "Cleanup failed",
+                       "Reboot to try again",
+                       "If the issue persists, contact support.");
+      }
+    }
+  }
+
+  // normal route
   error_shutdown("Internal error", "(BF)", NULL, NULL);
 }
 
@@ -188,7 +209,7 @@ void show_poweron_bar(void) {
 
 static secbool validate_bootloader(image_header *const hdr) {
   secbool result = secfalse;
-  // set_handle_flash_ecc_error(sectrue);
+  set_handle_flash_ecc_error(sectrue);
 
   secbool boot_hdr_valid = load_image_header(
       (const uint8_t *)BOOTLOADER_START, BOOTLOADER_IMAGE_MAGIC,
@@ -202,7 +223,7 @@ static secbool validate_bootloader(image_header *const hdr) {
                ? sectrue
                : secfalse;
 
-  // set_handle_flash_ecc_error(secfalse);
+  set_handle_flash_ecc_error(secfalse);
   return result;
 }
 
@@ -256,18 +277,13 @@ static secbool try_bootloader_update(bool do_update, bool auto_reboot) {
 
   // if bootloader update is interrupted right after flash sector erase, header
   // will be losted and bootloader upgrade will be possible
-  // thus, as a minimum defence, wipe user storage area if downgrade or
-  // bootloader not valid
+  // this has been discussed and decided to not take further action
 
   // handle downgrade or invalid bootloader
   if (bootloader_valid == sectrue) {
     if (memcmp(&file_hdr.version, &hdr.version, 4) < 0) {
-      ensure(flash_erase_sectors(STORAGE_SECTORS, STORAGE_SECTORS_COUNT, NULL),
-             NULL);
+      return secfalse;
     }
-  } else {
-    ensure(flash_erase_sectors(STORAGE_SECTORS, STORAGE_SECTORS_COUNT, NULL),
-           NULL);
   }
 
   // update process
@@ -275,7 +291,7 @@ static secbool try_bootloader_update(bool do_update, bool auto_reboot) {
 
   display_backlight(255);
   display_clear();
-  display_printf(BOARD_VERSION);
+  display_printf("OneKey Boardloader " BOARD_VERSION "\n");
   display_printf("=====================\n");
   display_printf("Bootloader Update\n");
   display_printf("!!! DO NOT POWER OFF !!!\n");
@@ -307,6 +323,8 @@ static secbool try_bootloader_update(bool do_update, bool auto_reboot) {
   // write
   size_t processed_bytes = 0;
   size_t flash_sectors_index = 0;
+  uint16_t last_progress = 0;
+  uint16_t current_progress = 0;
   while (processed_bytes < file_info.size) {
     for (size_t sector_offset = 0;
          sector_offset <
@@ -320,9 +338,12 @@ static secbool try_bootloader_update(bool do_update, bool auto_reboot) {
                              ? 32  // since we could only write 32 byte a time
                              : (file_info.size - processed_bytes);
 
-      //TODO: fix the ghosting text while updating
-      display_printf("\rWriting: %u%%",
-                     (uint16_t)(processed_bytes * 100 / file_info.size));
+      current_progress = (uint16_t)(processed_bytes * 100 / file_info.size);
+      if ((last_progress != current_progress)) {
+        display_printf("\rWriting: %u%%", current_progress);
+        last_progress = current_progress;
+        hal_delay(100);  // slow down a little to reduce lcd refresh flickering
+      }
     }
     if (temp_state != sectrue) break;
 
@@ -483,11 +504,6 @@ int main(void) {
   rng_init();
   clear_otg_hs_memory();
 
-  // ext flash
-  qspi_flash_init();
-  qspi_flash_config();
-  qspi_flash_memory_mapped();
-
   // emmc init and volume check
   emmc_fs_init();
   if (!emmc_fs_is_partitioned()) {
@@ -516,7 +532,7 @@ int main(void) {
       try_bootloader_update(true, true);
     } else {
       display_clear();
-      display_printf(BOARD_VERSION);
+      display_printf("OneKey Boardloader " BOARD_VERSION "\n");
       display_printf("USB Mass Storage Mode\n");
       display_printf("======================\n\n");
       usb_msc_init();
@@ -543,176 +559,3 @@ int main(void) {
 
   return 0;
 }
-
-#else
-
-// we use SRAM as SD card read buffer (because DMA can't access the CCMRAM)
-extern uint32_t sram_start[];
-#define sdcard_buf sram_start
-
-#if defined TREZOR_MODEL_T
-static uint32_t check_sdcard(void) {
-  if (sectrue != sdcard_power_on()) {
-    return 0;
-  }
-
-  uint64_t cap = sdcard_get_capacity_in_bytes();
-  if (cap < 1024 * 1024) {
-    sdcard_power_off();
-    return 0;
-  }
-
-  memzero(sdcard_buf, IMAGE_HEADER_SIZE);
-
-  const secbool read_status =
-      sdcard_read_blocks(sdcard_buf, 0, IMAGE_HEADER_SIZE / SDCARD_BLOCK_SIZE);
-
-  sdcard_power_off();
-
-  image_header hdr;
-
-  if ((sectrue == read_status) &&
-      (sectrue ==
-       load_image_header((const uint8_t *)sdcard_buf, BOOTLOADER_IMAGE_MAGIC,
-                         BOOTLOADER_IMAGE_MAXSIZE, BOARDLOADER_KEY_M,
-                         BOARDLOADER_KEY_N, BOARDLOADER_KEYS, &hdr))) {
-    return hdr.codelen;
-  } else {
-    return 0;
-  }
-}
-
-static void progress_callback(int pos, int len) { display_printf("."); }
-
-static secbool copy_sdcard(void) {
-  display_backlight(255);
-
-  display_printf("Trezor Boardloader\n");
-  display_printf("==================\n\n");
-
-  display_printf("bootloader found on the SD card\n\n");
-  display_printf("applying bootloader in 10 seconds\n\n");
-  display_printf("unplug now if you want to abort\n\n");
-
-  uint32_t codelen;
-
-  for (int i = 10; i >= 0; i--) {
-    display_printf("%d ", i);
-    hal_delay(1000);
-    codelen = check_sdcard();
-    if (0 == codelen) {
-      display_printf("\n\nno SD card, aborting\n");
-      return secfalse;
-    }
-  }
-
-  display_printf("\n\nerasing flash:\n\n");
-
-  // erase all flash (except boardloader)
-  static const uint8_t sectors[] = {
-      FLASH_SECTOR_STORAGE_1,
-      FLASH_SECTOR_STORAGE_2,
-      3,
-      FLASH_SECTOR_BOOTLOADER,
-      FLASH_SECTOR_FIRMWARE_START,
-      7,
-      8,
-      9,
-      10,
-      FLASH_SECTOR_FIRMWARE_END,
-      FLASH_SECTOR_UNUSED_START,
-      13,
-      14,
-      FLASH_SECTOR_UNUSED_END,
-      FLASH_SECTOR_FIRMWARE_EXTRA_START,
-      18,
-      19,
-      20,
-      21,
-      22,
-      FLASH_SECTOR_FIRMWARE_EXTRA_END,
-  };
-  if (sectrue !=
-      flash_erase_sectors(sectors, sizeof(sectors), progress_callback)) {
-    display_printf(" failed\n");
-    return secfalse;
-  }
-  display_printf(" done\n\n");
-
-  ensure(flash_unlock_write(), NULL);
-
-  // copy bootloader from SD card to Flash
-  display_printf("copying new bootloader from SD card\n\n");
-
-  ensure(sdcard_power_on(), NULL);
-
-  memzero(sdcard_buf, SDCARD_BLOCK_SIZE);
-
-  for (int i = 0; i < (IMAGE_HEADER_SIZE + codelen) / SDCARD_BLOCK_SIZE; i++) {
-    ensure(sdcard_read_blocks(sdcard_buf, i, 1), NULL);
-    for (int j = 0; j < SDCARD_BLOCK_SIZE / sizeof(uint32_t); j++) {
-      ensure(flash_write_word(FLASH_SECTOR_BOOTLOADER,
-                              i * SDCARD_BLOCK_SIZE + j * sizeof(uint32_t),
-                              sdcard_buf[j]),
-             NULL);
-    }
-  }
-
-  sdcard_power_off();
-  ensure(flash_lock_write(), NULL);
-
-  display_printf("\ndone\n\n");
-  display_printf("Unplug the device and remove the SD card\n");
-
-  return sectrue;
-}
-#endif
-
-int main(void) {
-  reset_flags_reset();
-
-  // need the systick timer running before many HAL operations.
-  // want the PVD enabled before flash operations too.
-  periph_init();
-
-  if (sectrue != flash_configure_option_bytes()) {
-    // display is not initialized so don't call ensure
-    const secbool r =
-        flash_erase_sectors(STORAGE_SECTORS, STORAGE_SECTORS_COUNT, NULL);
-    (void)r;
-    return 2;
-  }
-
-  clear_otg_hs_memory();
-
-  display_init();
-  display_clear();
-
-#if defined TREZOR_MODEL_T
-  sdcard_init();
-
-  if (check_sdcard()) {
-    return copy_sdcard() == sectrue ? 0 : 3;
-  }
-#endif
-
-  image_header hdr;
-
-  ensure(load_image_header((const uint8_t *)BOOTLOADER_START,
-                           BOOTLOADER_IMAGE_MAGIC, BOOTLOADER_IMAGE_MAXSIZE,
-                           BOARDLOADER_KEY_M, BOARDLOADER_KEY_N,
-                           BOARDLOADER_KEYS, &hdr),
-         "invalid bootloader header");
-
-  const uint8_t sectors[] = {
-      FLASH_SECTOR_BOOTLOADER,
-  };
-  ensure(check_image_contents(&hdr, IMAGE_HEADER_SIZE, sectors, 1),
-         "invalid bootloader hash");
-
-  jump_to(BOOTLOADER_START + IMAGE_HEADER_SIZE);
-
-  return 0;
-}
-
-#endif
