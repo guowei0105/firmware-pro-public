@@ -272,7 +272,7 @@ secbool flash_write_word(uint8_t sector, uint32_t offset, uint32_t data) {
 
 secbool flash_write_words(uint8_t sector, uint32_t offset, uint32_t data[8]) {
   uint32_t flash_word[8];
-  int retry = -1;
+  int retry = 0;
 
   uint32_t address = (uint32_t)flash_get_address(sector, offset, 4);
   if (address == 0) {
@@ -292,7 +292,7 @@ secbool flash_write_words(uint8_t sector, uint32_t offset, uint32_t data[8]) {
   }
 rewrite:
   retry++;
-  if (retry == 3) {
+  if (retry > 3) {
     return secfalse;
   }
   memcpy(flash_word, data, 32);
@@ -359,6 +359,29 @@ bool flash_clear_ecc_fault(uint32_t address) {
   }
   return false;
 }
+
+#if !PRODUCTION
+// sector erase method, large effect area
+bool flash_fix_ecc_fault_BOARDLOADER(uint32_t address) {
+  if (!IS_FLASH_PROGRAM_ADDRESS_BANK1(address)) {
+    return false;
+  }
+
+  // find which sector the address is on
+  uint32_t offset = address - FLASH_BANK1_BASE;
+  uint8_t sector = offset / FLASH_BOOTLOADER_SECTOR_SIZE;
+
+  // sanity check
+  if (sector != FLASH_SECTOR_BOARDLOADER) {
+    return false;
+  }
+
+  // wipe sector
+  if (sectrue != flash_erase(sector)) return false;
+
+  return true;
+}
+#endif
 
 // sector erase method, large effect area
 bool flash_fix_ecc_fault_BOOTLOADER(uint32_t address) {
