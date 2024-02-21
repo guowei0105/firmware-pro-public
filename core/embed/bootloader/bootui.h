@@ -55,6 +55,7 @@ void ui_screen_progress_bar_update(char* msg_status, char* notes, int progress);
 void ui_screen_wipe_confirm(void);
 void ui_screen_wipe(void);
 void ui_screen_wipe_progress(int pos, int len);
+void ui_screen_wipe_done(void);
 
 void ui_screen_done(int restart_seconds, secbool full_redraw);
 
@@ -87,6 +88,7 @@ enum BAT_LEVEL {
 void ui_title_update(void);
 int ui_user_input(int zones);
 int ui_input_poll(int zones, bool poll);
+void ui_bootloader_simple(void);
 void ui_bootloader_first(const image_header* const hdr);
 void ui_bootloader_second(const image_header* const hdr);
 void ui_wipe_confirm(const image_header* const hdr);
