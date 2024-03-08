@@ -28,6 +28,11 @@
 static char boardloader_version[32] = {0};
 #define FW_CHUNK_SIZE 65536
 
+typedef struct {
+  char version[16];
+  char build_id[16];
+} board_info_t;
+
 #if PRODUCTION
 
 static int onekey_known_boardloader(const uint8_t *hash) {
@@ -45,6 +50,14 @@ static int onekey_known_boardloader(const uint8_t *hash) {
              "\xc7\x5d\x55\x32\x08\xa1\x4b\x7b\x9e\xdd\xdf\xc5\x33\x15\x9a\x5e",
              32)) {
     memcpy(boardloader_version, "1.6.2", strlen("1.6.2"));
+    return 1;
+  }
+  if (0 ==
+      memcmp(hash,
+             "\xc0\xbb\x85\xe5\xb2\xfc\xd6\x76\x59\x6d\xb2\x53\xa6\x68\x50\xbe"
+             "\x4d\x04\x1d\xa9\x99\x49\xd9\x95\x29\xe2\x0f\xb9\x18\x3a\x17\xb4",
+             32)) {
+    memcpy(boardloader_version, "1.6.3", strlen("1.6.3"));
     return 1;
   }
   memcpy(boardloader_version, "unknown boardloader",
@@ -71,6 +84,14 @@ static int onekey_known_boardloader(const uint8_t *hash) {
     memcpy(boardloader_version, "1.6.2", strlen("1.6.2"));
     return 1;
   }
+  if (0 ==
+      memcmp(hash,
+             "\x19\xb9\x98\xef\xe8\xb2\x3c\x80\x14\x8b\xa0\x2d\xfe\x4a\xb7\x65"
+             "\xba\xc2\x1e\x22\xf2\x0f\x23\xcd\x60\xc5\xd2\xbe\x80\xe3\x4c\x5c",
+             32)) {
+    memcpy(boardloader_version, "1.6.3", strlen("1.6.3"));
+    return 1;
+  }
   memcpy(boardloader_version, "unknown boardloader",
          strlen("unknown boardloader"));
   return 1;
@@ -80,16 +101,42 @@ static int onekey_known_boardloader(const uint8_t *hash) {
 
 char *get_boardloader_version(void) {
   uint8_t hash[32] = {0};
+  SHA256_CTX context = {0};
 
   if (strlen(boardloader_version) == 0) {
-    sha256_Raw((uint8_t *)BOARDLOADER_START,
-               BOOTLOADER_START - BOARDLOADER_START, hash);
+    sha256_Init(&context);
+    sha256_Update(&context, (uint8_t *)BOARDLOADER_START,
+                  BOARDLOADER_SIZE - 32);
+    sha256_Update(
+        &context,
+        (uint8_t*)"\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00"
+        "\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00",
+        32);
+    sha256_Final(&context, hash);
     sha256_Raw(hash, 32, hash);
 
     onekey_known_boardloader(hash);
   }
 
   return boardloader_version;
+}
+
+char *get_boardloader_build_id(void) {
+  static char boardloader_build_id[16] = {0};
+  uint8_t build_id_len = 0;
+
+  board_info_t *board_info =
+      (board_info_t *)(BOARDLOADER_START + BOARDLOADER_SIZE -
+                       sizeof(board_info_t));
+  build_id_len =
+      strnlen(board_info->build_id, sizeof(board_info->build_id) - 1);
+  if (build_id_len > 0 && board_info->build_id[0] != 0xFF) {
+    memcpy(boardloader_build_id, board_info->build_id, build_id_len);
+  } else {
+    memcpy(boardloader_build_id, "unknown", strlen("unknown"));
+  }
+
+  return boardloader_build_id;
 }
 
 uint8_t *get_boardloader_hash(void) {
