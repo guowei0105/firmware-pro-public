@@ -430,6 +430,7 @@ async def _deal_ble_status(value: bytes) -> None:
         if config.is_unlocked():
             device.set_ble_status(enable=True)
     elif res == _BLE_STATUS_CLOSED:
+        utils.BLE_CONNECTED = False
         if not device.is_initialized():
             StatusBar.get_instance().show_ble(StatusBar.BLE_STATE_ENABLED)
             ctrl_ble(True)
@@ -543,9 +544,9 @@ def ctrl_ble(enable: bool) -> None:
     """Request to open or close ble.
     @param enable: True to open, False to close
     """
-    if (not device.ble_enabled() or not device.is_initialized()) and enable:
+    if enable:
         BLE_CTRL.ctrl(0x81, b"\x01")
-    elif device.ble_enabled() and not enable:
+    else:
         BLE_CTRL.ctrl(0x81, b"\x02")
 
 
