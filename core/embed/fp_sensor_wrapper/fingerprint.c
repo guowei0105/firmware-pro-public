@@ -86,8 +86,6 @@ int fingerprint_detect(void)
     return FpsDetectFinger();
 }
 
-  #include "mipi_lcd.h"
-
 FP_RESULT fingerprint_enroll(uint8_t counter)
 {
 
@@ -224,7 +222,8 @@ int fingerprint_get_list(uint8_t* list, uint8_t len)
 
 void fp_test(void)
 {
-    display_printf("TouchPro Demo Mode\n");
+    display_printf("Function Test\n");
+    display_printf("%s\n", __func__);
     display_printf("======================\n\n");
 
     uint8_t count = 0;
@@ -289,7 +288,8 @@ void fp_test(void)
 
 void fingerprint_test(void)
 {
-    display_printf("TouchPro Demo Mode\n");
+    display_printf("Function Test\n");
+    display_printf("%s\n", __func__);
     display_printf("======================\n\n");
     char fpver[32];
     FpLibVersion(fpver);
