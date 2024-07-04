@@ -17,7 +17,7 @@
 #define SLIP_ESC_ESC 0xDD
 
 #define default_delay 20
-#define long_delay 100
+#define long_delay 200
 
 static uint16_t mtu_len = 64;
 
@@ -237,7 +237,7 @@ static bool ping_boot(uint8_t id) {
 }
 
 static void enter_boot(void) {
-  ble_usart_irq_disable();
+  ble_usart_irq_ctrl(false);
   SET_COMBUS_LOW();
   BLE_RST_PIN_LOW();  // reset ble
   hal_delay(100);
@@ -298,8 +298,19 @@ bool updateBle(uint8_t *init_data, uint8_t init_len, uint8_t *firmware,
   return true;
 }
 
+bool bluetooth_detect_dfu() {
+  ble_usart_irq_ctrl(false);
+
+  bool in_dfu = false;
+  in_dfu = ping_boot(0x5a);
+
+  ble_usart_irq_ctrl(true);
+
+  return in_dfu;
+}
+
 void bluetooth_reset() {
-  ble_usart_irq_disable();
+  ble_usart_irq_ctrl(false);
   SET_COMBUS_HIGH();  // make sure dfu io released
   BLE_RST_PIN_LOW();  // reset ble
   hal_delay(100);

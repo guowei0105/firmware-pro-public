@@ -484,7 +484,7 @@ static BOOT_TARGET decide_boot_target(STAY_REASON *stay_reason) {
     // delay
     hal_delay(1);
   }
-  ble_usart_irq_disable();
+  ble_usart_irq_ctrl(false);
   // display_bar(160, 352, 160, 4, COLOR_BLACK);// what is this for?
 
   // if manual override stay at this level no more checks

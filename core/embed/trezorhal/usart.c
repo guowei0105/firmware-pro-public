@@ -92,7 +92,7 @@ void ble_usart_send(uint8_t *buf, uint32_t len) {
 }
 
 bool ble_read_byte(uint8_t *buf) {
-  if (HAL_UART_Receive(huart, buf, 1, 100) == HAL_OK) {
+  if (HAL_UART_Receive(huart, buf, 1, 50) == HAL_OK) {
     return true;
   }
   return false;
@@ -106,7 +106,13 @@ secbool ble_usart_can_read(void) {
   }
 }
 
-void ble_usart_irq_disable(void) { HAL_NVIC_DisableIRQ(UART4_IRQn); }
+void ble_usart_irq_ctrl(bool enable) {
+  if (enable)
+    // HAL_NVIC_EnableIRQ(UART4_IRQn);
+    ble_usart_init();
+  else
+    HAL_NVIC_DisableIRQ(UART4_IRQn);
+}
 
 uint32_t ble_usart_read(uint8_t *buf, uint32_t lenth) {
   uint32_t len = 0;

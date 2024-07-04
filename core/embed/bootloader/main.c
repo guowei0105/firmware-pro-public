@@ -644,6 +644,12 @@ static BOOT_TARGET decide_boot_target(vendor_header* const vhdr,
     return boot_target;
   }
 
+  // check bluetooth state
+  if (bluetooth_detect_dfu()) {
+    boot_target = BOOT_TARGET_BOOTLOADER;
+    return boot_target;
+  }
+
   // check firmware
   if (sectrue == validate_firmware_headers(vhdr, hdr)) {
     if (sectrue == validate_firmware_code(vhdr, hdr)) {

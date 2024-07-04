@@ -33,7 +33,7 @@ enum {
 };
 
 void ble_usart_init(void);
-void ble_usart_irq_disable(void);
+void ble_usart_irq_ctrl(bool enable);
 bool ble_read_byte(uint8_t *buf);
 void ble_usart_send_byte(uint8_t data);
 void ble_usart_send(uint8_t *buf, uint32_t len);
