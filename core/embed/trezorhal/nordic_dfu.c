@@ -313,10 +313,10 @@ void bluetooth_reset() {
   ble_usart_irq_ctrl(false);
   SET_COMBUS_HIGH();  // make sure dfu io released
   BLE_RST_PIN_LOW();  // reset ble
-  hal_delay(100);
+  hal_delay(50);
   BLE_RST_PIN_HIGH();
   hal_delay(500);
-  ble_usart_init();
+  ble_usart_irq_ctrl(true);
 }
 
 bool bluetooth_enter_dfu() {

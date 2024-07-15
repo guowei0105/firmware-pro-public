@@ -107,11 +107,24 @@ secbool ble_usart_can_read(void) {
 }
 
 void ble_usart_irq_ctrl(bool enable) {
-  if (enable)
-    // HAL_NVIC_EnableIRQ(UART4_IRQn);
-    ble_usart_init();
-  else
+  if (enable) {
+    HAL_NVIC_EnableIRQ(UART4_IRQn);
+    __HAL_UART_ENABLE_IT(huart, UART_IT_RXFNE);
+    __HAL_UART_ENABLE_IT(huart, UART_IT_ERR);
+  } else {
     HAL_NVIC_DisableIRQ(UART4_IRQn);
+    if (__HAL_UART_GET_FLAG(huart, UART_FLAG_WUF)) {
+      __HAL_UART_CLEAR_FLAG(huart, UART_CLEAR_WUF);
+    }
+    if (__HAL_UART_GET_FLAG(huart, UART_FLAG_RXFNE) != 0) {
+      volatile uint8_t data = 0;
+      data = (uint8_t)(huart->Instance->RDR);
+      (void)data;
+    }
+    if (__HAL_UART_GET_FLAG(huart, UART_FLAG_ORE) != 0) {
+      __HAL_UART_CLEAR_FLAG(huart, UART_CLEAR_OREF);
+    }
+  }
 }
 
 uint32_t ble_usart_read(uint8_t *buf, uint32_t lenth) {
