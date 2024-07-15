@@ -20,7 +20,6 @@
 #include <string.h>
 
 #include "blake2s.h"
-#include "ble.h"
 #include "common.h"
 #include "compiler_traits.h"
 #include "display.h"
@@ -39,6 +38,7 @@
 #include "touch.h"
 #include "usart.h"
 #include "usb.h"
+#include "util_macros.h"
 #include "version.h"
 
 #include STM32_HAL_H
@@ -183,11 +183,26 @@ void UsageFault_Handler(void) {
   error_shutdown("Internal error", "(UF)", NULL, NULL);
 }
 
-static inline void dispaly_boardloader_title() {
+const char *STAY_REASON_str[] = {
+    ENUM_NAME_ARRAY_ITEM(STAY_REASON_NONE),
+    ENUM_NAME_ARRAY_ITEM(STAY_REASON_REQUIRED_BY_FLAG),
+    ENUM_NAME_ARRAY_ITEM(STAY_REASON_MANUAL_OVERRIDE),
+    ENUM_NAME_ARRAY_ITEM(STAY_REASON_INVALID_DEPENDENCY),
+    ENUM_NAME_ARRAY_ITEM(STAY_REASON_INVALID_NEXT_TARGET),
+    ENUM_NAME_ARRAY_ITEM(STAY_REASON_UPDATE_NEXT_TARGET),
+    ENUM_NAME_ARRAY_ITEM(STAY_REASON_UNKNOWN),
+};
+static inline void dispaly_boardloader_title(char *message,
+                                             STAY_REASON stay_reason) {
+  if ((stay_reason < STAY_REASON_NONE) || (stay_reason > STAY_REASON_UNKNOWN))
+    stay_reason = STAY_REASON_UNKNOWN;
   display_backlight(255);
   display_clear();
   display_printf("OneKey Boardloader " VERSION_STR "\n");
-  display_printf("======================\n");
+  display_printf("---------------------------------------\n");
+  display_printf("%s\n", STAY_REASON_str[stay_reason]);
+  display_printf("---------------------------------------\n");
+  display_print(message, -1);
 }
 
 void show_poweron_bar(void) {
@@ -315,8 +330,8 @@ static secbool try_bootloader_update(bool do_update, bool auto_reboot) {
   // update process
   secbool temp_state;
 
-  dispaly_boardloader_title();
-  display_printf("Bootloader Update\n");
+  dispaly_boardloader_title("Bootloader Update\n",
+                            STAY_REASON_UPDATE_NEXT_TARGET);
   display_printf("!!! DO NOT POWER OFF !!!\n");
   display_printf("\r\n");
 
@@ -421,6 +436,142 @@ static secbool try_bootloader_update(bool do_update, bool auto_reboot) {
   return sectrue;
 }
 
+typedef enum {
+  // C = center
+  // T = top
+  // L = left
+  TOUCH_AREA_OTHER = 0,  //
+  TOUCH_AREA_C,          //
+  TOUCH_AREA_TL,         //
+  TOUCH_AREA_TR,         //
+  TOUCH_AREA_BL,         //
+  TOUCH_AREA_BR,         //
+} TOUCH_AREA;
+
+const char *TOUCH_AREA_str[] = {
+    ENUM_NAME_ARRAY_ITEM(TOUCH_AREA_OTHER),  //
+    ENUM_NAME_ARRAY_ITEM(TOUCH_AREA_C),      //
+    ENUM_NAME_ARRAY_ITEM(TOUCH_AREA_TL),     //
+    ENUM_NAME_ARRAY_ITEM(TOUCH_AREA_TR),     //
+    ENUM_NAME_ARRAY_ITEM(TOUCH_AREA_BL),     //
+    ENUM_NAME_ARRAY_ITEM(TOUCH_AREA_BR),     //
+};
+
+static const uint16_t touch_area_block_size = 50;
+static TOUCH_AREA touch_pos_to_area(uint16_t x, uint16_t y) {
+  if (x < 0 || x > MAX_DISPLAY_RESX) return TOUCH_AREA_OTHER;
+  if (x < 0 || x > MAX_DISPLAY_RESY) return TOUCH_AREA_OTHER;
+
+  if (x <= touch_area_block_size && y <= touch_area_block_size)
+    return TOUCH_AREA_TL;
+  if (x >= MAX_DISPLAY_RESX - touch_area_block_size &&
+      y <= touch_area_block_size)
+    return TOUCH_AREA_TR;
+
+  if (x <= touch_area_block_size &&
+      y >= MAX_DISPLAY_RESY - touch_area_block_size)
+    return TOUCH_AREA_BL;
+  if (x >= MAX_DISPLAY_RESX - touch_area_block_size &&
+      y >= MAX_DISPLAY_RESY - touch_area_block_size)
+    return TOUCH_AREA_BR;
+
+  if ((x >= (MAX_DISPLAY_RESX / 2 - (touch_area_block_size / 2)) &&
+       x <= (MAX_DISPLAY_RESX / 2 + (touch_area_block_size / 2))) &&
+      (y >= (MAX_DISPLAY_RESY / 2 - (touch_area_block_size / 2)) &&
+       y <= (MAX_DISPLAY_RESY / 2 + (touch_area_block_size / 2))))
+    return TOUCH_AREA_C;
+
+  return TOUCH_AREA_OTHER;
+}
+#if false
+// testing and calibrating purpose functions
+static void touch_area_display()
+{
+  display_clear();
+  display_bar(0, 0, touch_area_block_size, touch_area_block_size, COLOR_RED); // TOUCH_AREA_TL
+  display_bar(
+      MAX_DISPLAY_RESX - touch_area_block_size, 0, touch_area_block_size, touch_area_block_size, COLOR_BLUE
+  ); // TOUCH_AREA_TR
+  display_bar(
+      0, MAX_DISPLAY_RESY - touch_area_block_size, touch_area_block_size, touch_area_block_size, COLOR_GREEN
+  ); // TOUCH_AREA_BL
+  display_bar(
+      MAX_DISPLAY_RESX - touch_area_block_size, MAX_DISPLAY_RESY - touch_area_block_size, touch_area_block_size,
+      touch_area_block_size, COLOR_DARK
+  ); // TOUCH_AREA_BR
+  display_bar(
+      (MAX_DISPLAY_RESX / 2 - (touch_area_block_size / 2)), (MAX_DISPLAY_RESY / 2 - (touch_area_block_size / 2)),
+      touch_area_block_size, touch_area_block_size, COLOR_WHITE
+  ); // TOUCH_AREA_C
+}
+static void touch_area_test()
+{
+  // check manual overrides
+  uint32_t touch_data = 0;
+  uint16_t touch_start_pos[2] = {0, 0}; // {x,y}
+  uint16_t touch_move_pos[2] = {0, 0}; // {x,y}
+  uint16_t touch_end_pos[2] = {0, 0}; // {x,y}
+  TOUCH_AREA ta_start = TOUCH_AREA_OTHER;
+  TOUCH_AREA ta_end = TOUCH_AREA_OTHER;
+  bool touch_center_cross = false;
+
+  while(true){
+
+    // pull touch screen
+    touch_data = touch_read();
+    if (touch_data != 0) {
+      if(touch_data & TOUCH_START)
+      {
+        // reset on new touch event
+        touch_center_cross = false;
+        ta_start = TOUCH_AREA_OTHER;
+        ta_end = TOUCH_AREA_OTHER;
+
+        touch_start_pos[0] = (touch_data >> 12) & 0xFFF;
+        touch_start_pos[1] = (touch_data >> 0) & 0xFFF;
+        
+        ta_start = touch_pos_to_area(touch_start_pos[0], touch_start_pos[1]);
+      }
+      if(touch_data & TOUCH_MOVE)
+      {
+        touch_move_pos[0] = (touch_data >> 12) & 0xFFF;
+        touch_move_pos[1] = (touch_data >> 0) & 0xFFF;
+
+        if(TOUCH_AREA_C == touch_pos_to_area(touch_move_pos[0], touch_move_pos[1]))
+          touch_center_cross = true;
+      }
+      if(touch_data & TOUCH_END)
+      {
+        touch_end_pos[0] = (touch_data >> 12) & 0xFFF;
+        touch_end_pos[1] = (touch_data >> 0) & 0xFFF;
+
+        ta_end = touch_pos_to_area(touch_end_pos[0], touch_end_pos[1]);
+
+        display_print_clear();
+        display_printf("start=%s \nend=%s \ncenter_cross=%s \n", TOUCH_AREA_str[ta_start], TOUCH_AREA_str[ta_end], (touch_center_cross?"Y":"N"));
+      }
+    }
+
+    // check if condition meet
+    if(touch_center_cross && ta_start == TOUCH_AREA_TL && ta_end == TOUCH_AREA_BR)
+    {
+      display_print_clear();
+      display_printf("BOOT_TARGET_BOARDLOADER\n");
+      while(!touch_click()){}
+      break;
+    }
+
+    if(touch_center_cross && ta_start == TOUCH_AREA_TR && ta_end == TOUCH_AREA_BL)
+    {
+      display_print_clear();
+      display_printf("BOOT_TARGET_BOOTLOADER\n");
+      while(!touch_click()){}
+      break;
+    }
+  }
+}
+#endif
+
 static BOOT_TARGET decide_boot_target(STAY_REASON *stay_reason) {
   // get boot target flag
   BOOT_TARGET boot_target = *BOOT_TARGET_FLAG_ADDR;  // cache flag
@@ -439,44 +590,61 @@ static BOOT_TARGET decide_boot_target(STAY_REASON *stay_reason) {
   }
 
   // check manual overrides
-  bool swipe_detected = false;
-  uint32_t touch_data = 0, x_start = 0, y_start = 0, x_mov = 0, y_mov = 0;
+  uint32_t touch_data = 0;
+  uint16_t touch_start_pos[2] = {0, 0};  // {x,y}
+  uint16_t touch_move_pos[2] = {0, 0};   // {x,y}
+  uint16_t touch_end_pos[2] = {0, 0};    // {x,y}
+  TOUCH_AREA ta_start = TOUCH_AREA_OTHER;
+  TOUCH_AREA ta_end = TOUCH_AREA_OTHER;
+  bool touch_center_cross = false;
 
-  ble_usart_init();
   for (int timer = 0; timer < 1600; timer++) {
     // display bar
     if (timer % 8 == 0) {
       show_poweron_bar();
     }
 
-    // pull touch screen, check for swip up or tap
+    // pull touch screen
     touch_data = touch_read();
     if (touch_data != 0) {
       if (touch_data & TOUCH_START) {
-        x_start = x_mov = (touch_data >> 12) & 0xFFF;
-        y_start = y_mov = touch_data & 0xFFF;
-      }
+        // reset on new touch event
+        touch_center_cross = false;
+        ta_start = TOUCH_AREA_OTHER;
+        ta_end = TOUCH_AREA_OTHER;
 
+        touch_start_pos[0] = (touch_data >> 12) & 0xFFF;
+        touch_start_pos[1] = (touch_data >> 0) & 0xFFF;
+
+        ta_start = touch_pos_to_area(touch_start_pos[0], touch_start_pos[1]);
+      }
       if (touch_data & TOUCH_MOVE) {
-        x_mov = (touch_data >> 12) & 0xFFF;
-        y_mov = touch_data & 0xFFF;
-      }
+        touch_move_pos[0] = (touch_data >> 12) & 0xFFF;
+        touch_move_pos[1] = (touch_data >> 0) & 0xFFF;
 
-      if ((abs(x_start - x_mov) > 100) || (abs(y_start - y_mov) > 100)) {
-        swipe_detected = true;
+        if (TOUCH_AREA_C ==
+            touch_pos_to_area(touch_move_pos[0], touch_move_pos[1]))
+          touch_center_cross = true;
+      }
+      if (touch_data & TOUCH_END) {
+        touch_end_pos[0] = (touch_data >> 12) & 0xFFF;
+        touch_end_pos[1] = (touch_data >> 0) & 0xFFF;
+
+        ta_end = touch_pos_to_area(touch_end_pos[0], touch_end_pos[1]);
       }
     }
 
-    // pull button status
-    ble_uart_poll();
+    // check if condition meet
+    if (touch_center_cross && ta_start == TOUCH_AREA_TL &&
+        ta_end == TOUCH_AREA_BR) {
+      boot_target = BOOT_TARGET_BOARDLOADER;
+      *stay_reason = STAY_REASON_MANUAL_OVERRIDE;
+      break;
+    }
 
-    // check if button long press
-    if (ble_power_button_state() == 2) {
-      if (swipe_detected) {
-        boot_target = BOOT_TARGET_BOARDLOADER;
-      } else {
-        boot_target = BOOT_TARGET_BOOTLOADER;
-      }
+    if (touch_center_cross && ta_start == TOUCH_AREA_TR &&
+        ta_end == TOUCH_AREA_BL) {
+      boot_target = BOOT_TARGET_BOOTLOADER;
       *stay_reason = STAY_REASON_MANUAL_OVERRIDE;
       break;
     }
@@ -484,8 +652,9 @@ static BOOT_TARGET decide_boot_target(STAY_REASON *stay_reason) {
     // delay
     hal_delay(1);
   }
-  ble_usart_irq_ctrl(false);
-  // display_bar(160, 352, 160, 4, COLOR_BLACK);// what is this for?
+
+  // clear poweron bar
+  display_bar(160, 352, 160, 4, COLOR_BLACK);
 
   // if manual override stay at this level no more checks
   if ((*stay_reason == STAY_REASON_MANUAL_OVERRIDE) &&
@@ -600,16 +769,12 @@ int main(void) {
 
   STAY_REASON stay_reason;
   BOOT_TARGET boot_target = decide_boot_target(&stay_reason);
-  if ((stay_reason < STAY_REASON_NONE) || (stay_reason > STAY_REASON_UNKNOWN))
-    stay_reason = STAY_REASON_UNKNOWN;
 
   if (boot_target == BOOT_TARGET_BOARDLOADER) {
     if (stay_reason == STAY_REASON_UPDATE_NEXT_TARGET) {
       try_bootloader_update(true, true);
     } else {
-      dispaly_boardloader_title();
-      display_printf("USB Mass Storage Mode\n");
-      display_printf(STAY_REASON_str[stay_reason]);
+      dispaly_boardloader_title("USB Mass Storage Mode\n", stay_reason);
 
       char serial[USB_SIZ_STRING_SERIAL];
       get_device_serial(serial, sizeof(serial));

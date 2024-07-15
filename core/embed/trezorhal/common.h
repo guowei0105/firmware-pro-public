@@ -35,9 +35,6 @@ typedef enum {
   STAY_REASON_UNKNOWN,
 } STAY_REASON;
 
-#define ENUM_STAY_REASON_ITEM(x) [x] = #x
-extern const char *STAY_REASON_str[];
-
 typedef enum {
   BOOT_TARGET_NORMAL = 0,
   BOOT_TARGET_BOARDLOADER = 0x64616F62,
