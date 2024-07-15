@@ -621,8 +621,6 @@ void display_print(const char *text, int textlen) {
     textlen = strlen(text);
   }
 
-#if PRODUCTION_MODEL == 'H'
-
   // bool is_start = true;
   // int spilt = 0, offset = 0, line = 0;
   static int width = 0;
@@ -632,9 +630,10 @@ void display_print(const char *text, int textlen) {
   for (int i = 0; i < textlen; i++) {
     switch (text[i]) {
       case '\r':
-        // redraw_needed = true;
+        // erase hight set to (DISPLAY_CHAR_HIGHT * 2) due to some font char
+        // hights are different, which may cause ghosting issue
         display_bar(0, DISPLAY_CHAR_HIGHT * (row), DISPLAY_RESX,
-                    DISPLAY_CHAR_HIGHT, display_print_bgcolor);
+                    DISPLAY_CHAR_HIGHT * 2, display_print_bgcolor);
         col = 0;
         width = 0;
         break;
@@ -685,72 +684,6 @@ void display_print(const char *text, int textlen) {
                    display_print_bgcolor);
     }
   }
-
-#else
-
-  // print characters to internal buffer (display_print_buf)
-  for (int i = 0; i < textlen; i++) {
-    switch (text[i]) {
-      case '\r':
-        break;
-      case '\n':
-        row++;
-        col = 0;
-        break;
-      default:
-        display_print_buf[row][col] = text[i];
-        col++;
-        break;
-    }
-
-    if (col >= DISPLAY_PRINT_COLS) {
-      col = 0;
-      row++;
-    }
-
-    if (row >= DISPLAY_PRINT_ROWS) {
-      display_bar(0, 0, DISPLAY_RESX, DISPLAY_RESY, display_print_bgcolor);
-      for (int j = 0; j < DISPLAY_PRINT_ROWS - 1; j++) {
-        memcpy(display_print_buf[j], display_print_buf[j + 1],
-               DISPLAY_PRINT_COLS);
-      }
-      memzero(display_print_buf[DISPLAY_PRINT_ROWS - 1], DISPLAY_PRINT_COLS);
-      row = DISPLAY_PRINT_ROWS - 1;
-    }
-  }
-
-  // render buffer to display
-  display_set_window(0, 0, DISPLAY_RESX - 1, DISPLAY_RESY - 1);
-  for (int i = 0; i < DISPLAY_RESX * DISPLAY_RESY; i++) {
-    int x = (i % DISPLAY_RESX);
-    int y = (i / DISPLAY_RESX);
-    const int j = y % DISPLAY_CHAR_HIGHT;
-    y /= DISPLAY_CHAR_HIGHT;
-    const int k = x % DISPLAY_CHAR_WIDTH;
-    x /= DISPLAY_CHAR_WIDTH;
-    char c = 0;
-    if (x < DISPLAY_PRINT_COLS && y < DISPLAY_PRINT_ROWS) {
-      c = display_print_buf[y][x] & 0x7F;
-      // char invert = display_print_buf[y][x] & 0x80;
-    } else {
-      c = ' ';
-    }
-    if (c < ' ') {
-      c = ' ';
-    }
-#if PRODUCTION_MODEL == 'H'
-    const uint8_t *g = Font_Bitmap_12x24 + (DISPLAY_FONT_SIZE * (c - ' '));
-#else
-    const uint8_t *g = Font_Bitmap + (DISPLAY_FONT_WIDTH * (c - ' '));
-#endif
-    if (k < DISPLAY_CHAR_X_RES &&
-        ((g[k + DISPLAY_CHAR_X_RES * (j / 8)]) & (1 << (j % 8)))) {
-      fb_write_pixel(i % DISPLAY_RESX, i / DISPLAY_RESX, display_print_fgcolor);
-    } else {
-      fb_write_pixel(i % DISPLAY_RESX, i / DISPLAY_RESX, display_print_bgcolor);
-    }
-  }
-#endif
 }
 
 #ifdef TREZOR_EMULATOR
