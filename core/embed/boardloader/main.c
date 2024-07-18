@@ -314,18 +314,16 @@ static secbool try_bootloader_update(bool do_update, bool auto_reboot) {
 
   // validate current bootloader
   image_header hdr;
+
+#if PRODUCTION
   secbool bootloader_valid = validate_bootloader(&hdr);
-
-  // if bootloader update is interrupted right after flash sector erase, header
-  // will be losted and bootloader upgrade will be possible
-  // this has been discussed and decided to not take further action
-
   // handle downgrade or invalid bootloader
   if (bootloader_valid == sectrue) {
     if (memcmp(&file_hdr.version, &hdr.version, 4) < 0) {
       return secfalse;
     }
   }
+#endif
 
   // update process
   secbool temp_state;
