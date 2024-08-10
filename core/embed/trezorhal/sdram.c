@@ -119,7 +119,7 @@ int sdram_init(void) {
   /* Common GPIO configuration */
   gpio_init_structure.Mode = GPIO_MODE_AF_PP;
   gpio_init_structure.Pull = GPIO_PULLUP;
-  gpio_init_structure.Speed = GPIO_SPEED_FREQ_VERY_HIGH;
+  gpio_init_structure.Speed = GPIO_SPEED_FREQ_MEDIUM;
   gpio_init_structure.Alternate = GPIO_AF12_FMC;
 
   /* GPIOD configuration */
@@ -145,7 +145,7 @@ int sdram_init(void) {
   /* GPIOG configuration */
   gpio_init_structure.Pin = GPIO_PIN_0 | GPIO_PIN_1 |
                             GPIO_PIN_2 /*| GPIO_PIN_3 */ | GPIO_PIN_4 |
-                            GPIO_PIN_5 | GPIO_PIN_8 | GPIO_PIN_15;
+                            GPIO_PIN_5 | GPIO_PIN_15;
   HAL_GPIO_Init(GPIOG, &gpio_init_structure);
 
   /* GPIOH configuration */
@@ -162,6 +162,11 @@ int sdram_init(void) {
                             GPIO_PIN_9 | GPIO_PIN_10;
 
   HAL_GPIO_Init(GPIOI, &gpio_init_structure);
+
+  gpio_init_structure.Speed = GPIO_SPEED_FREQ_VERY_HIGH;
+  gpio_init_structure.Pin = GPIO_PIN_8;
+
+  HAL_GPIO_Init(GPIOG, &gpio_init_structure);
 
   FMC_SDRAM_TimingTypeDef sdram_timing;
 
