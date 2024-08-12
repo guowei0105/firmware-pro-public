@@ -252,17 +252,26 @@ static void usb_switch(void) {
     return;
   }
 
-  if (ble_get_charge_type() == CHARGE_BY_USB) {
-    if (!usb_opened) {
+  if(ble_get_charge_type() != 0)
+  {
+    if((ble_get_charge_type() == CHARGE_BY_USB) && (!usb_opened))
+    {
       usb_start();
       usb_opened = true;
     }
-  } else {
-    if (usb_opened) {
+    else if (usb_opened)
+    {
       usb_stop();
       usb_opened = false;
     }
   }
+  else
+  {
+    // default enable usb if no power status obtained
+    usb_start();
+    usb_opened = true;
+  }
+
 }
 
 static void charge_switch(void) {
@@ -764,7 +773,6 @@ int main(void) {
   BOOT_TARGET boot_target =
       decide_boot_target(&vhdr, &hdr, &headers_valid, &headers_checked);
 
-  // boot target decided, clear screen
   display_clear();
 
   if (boot_target == BOOT_TARGET_BOOTLOADER) {
@@ -790,7 +798,7 @@ int main(void) {
   // check if firmware valid again to make sure
   ensure(validate_firmware_headers(&vhdr, &hdr), "invalid firmware header");
   ensure(validate_firmware_code(&vhdr, &hdr), "invalid firmware code");
-  
+
   // check bluetooth key
   device_verify_ble();
 
