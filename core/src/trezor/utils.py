@@ -149,8 +149,8 @@ def mark_pin_verified() -> None:
         _PIN_VERIFIED_SINCE_BOOT = True
 
 
-def turn_on_lcd_if_possible() -> bool:
-    resumed = lcd_resume()
+def turn_on_lcd_if_possible(timeouts_ms: int | None = None) -> bool:
+    resumed = lcd_resume(timeouts_ms)
     if resumed:
         from trezor import workflow, uart
 
@@ -158,7 +158,7 @@ def turn_on_lcd_if_possible() -> bool:
     return resumed
 
 
-def lcd_resume() -> bool:
+def lcd_resume(timeouts_ms: int | None = None) -> bool:
     from trezor.ui import display
     from storage import device
     from apps import base
@@ -169,12 +169,19 @@ def lcd_resume() -> bool:
     # if ChargingPromptScr.has_instance():
     #     ChargingPromptScr.get_instance().destroy()
     uart.ctrl_wireless_charge(False)
-    if display.backlight() != device.get_brightness():
+    if display.backlight() != device.get_brightness() or timeouts_ms:
         global AUTO_POWER_OFF
         display.backlight(device.get_brightness())
         AUTO_POWER_OFF = False
+        from trezor.lvglui.scrs import fingerprints
+
+        is_device_unlocked = (config.is_unlocked()) or (
+            fingerprints.is_available() and fingerprints.is_unlocked()
+        )
         base.reload_settings_from_storage(
-            timeout_ms=SHORT_AUTO_LOCK_TIME_MS if not config.is_unlocked() else None
+            timeout_ms=(SHORT_AUTO_LOCK_TIME_MS if not timeouts_ms else timeouts_ms)
+            if not is_device_unlocked
+            else None
         )
         return True
     return False
@@ -328,7 +335,9 @@ def unimport_end(mods: set[str], collect: bool = True) -> None:
     # static check that the size of sys.modules never grows above value of
     # MICROPY_LOADED_MODULES_DICT_SIZE, so that the sys.modules dict is never
     # reallocated at run-time
-    assert len(sys.modules) <= 160, "Please bump preallocated size in mpconfigport.h"
+    assert (
+        len(sys.modules) <= 180
+    ), f"Please bump preallocated size in mpconfigport.h by size {len(sys.modules) - 180}"
     for mod in sys.modules:  # pylint: disable=consider-using-dict-items
         if mod not in mods:
             # remove reference from sys.modules
@@ -580,6 +589,10 @@ class BufferReader:
         self.offset += 1
         return byte
 
+    def tell(self) -> int:
+        """Return the current offset."""
+        return self.offset
+
 
 def obj_eq(self: Any, __o: Any) -> bool:
     """
@@ -661,3 +674,18 @@ if __debug__:
 
     def dump_protobuf(msg: MessageType) -> str:
         return "\n".join(dump_protobuf_lines(msg))
+
+    def mem_trace(name: str | None = None, x=None, collect: bool = False) -> None:
+        # don't use f-string here, as it may allocate memory
+        print(
+            "Mem trace: ",
+            name,
+            "===",
+            x,
+            ", ... F: ",
+            gc.mem_free(),  # type: ignore["mem_free" is not a known member of module]
+            ", A: ",
+            gc.mem_alloc(),  # type: ignore["mem_alloc" is not a known member of module]
+        )
+        if collect:
+            gc.collect()

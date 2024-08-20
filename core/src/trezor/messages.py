@@ -714,6 +714,7 @@ if TYPE_CHECKING:
         coin_name: "str"
         script_type: "InputScriptType"
         no_script_type: "bool | None"
+        is_bip322_simple: "bool"
 
         def __init__(
             self,
@@ -723,6 +724,7 @@ if TYPE_CHECKING:
             coin_name: "str | None" = None,
             script_type: "InputScriptType | None" = None,
             no_script_type: "bool | None" = None,
+            is_bip322_simple: "bool | None" = None,
         ) -> None:
             pass
 
@@ -1142,6 +1144,36 @@ if TYPE_CHECKING:
 
         @classmethod
         def is_type_of(cls, msg: Any) -> TypeGuard["AuthorizeCoinJoin"]:
+            return isinstance(msg, cls)
+
+    class SignPsbt(protobuf.MessageType):
+        psbt: "bytes"
+        coin_name: "str"
+
+        def __init__(
+            self,
+            *,
+            psbt: "bytes",
+            coin_name: "str | None" = None,
+        ) -> None:
+            pass
+
+        @classmethod
+        def is_type_of(cls, msg: Any) -> TypeGuard["SignPsbt"]:
+            return isinstance(msg, cls)
+
+    class SignedPsbt(protobuf.MessageType):
+        psbt: "bytes"
+
+        def __init__(
+            self,
+            *,
+            psbt: "bytes",
+        ) -> None:
+            pass
+
+        @classmethod
+        def is_type_of(cls, msg: Any) -> TypeGuard["SignedPsbt"]:
             return isinstance(msg, cls)
 
     class HDNodePathType(protobuf.MessageType):
@@ -2029,6 +2061,7 @@ if TYPE_CHECKING:
         message: "bytes"
         derivation_type: "CardanoDerivationType"
         network_id: "int"
+        address_type: "CardanoAddressType | None"
 
         def __init__(
             self,
@@ -2037,6 +2070,7 @@ if TYPE_CHECKING:
             derivation_type: "CardanoDerivationType",
             network_id: "int",
             address_n: "list[int] | None" = None,
+            address_type: "CardanoAddressType | None" = None,
         ) -> None:
             pass
 

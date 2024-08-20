@@ -242,6 +242,7 @@ def get_public_node(
             "chain_code": result.node.chain_code.hex(),
             "public_key": result.node.public_key.hex(),
         },
+        "root_fingerprint": "%08x" % result.root_fingerprint,
         "xpub": result.xpub,
     }
 
@@ -381,6 +382,7 @@ def sign_tx(client: "TrezorClient", json_file: TextIO) -> None:
     is_flag=True,
     help="Generate Electrum-compatible signature",
 )
+@click.option("-g", "--generic", is_flag=True, help="Use Generic signing (bip-322 simple)")
 @click.argument("message")
 @with_client
 def sign_message(
@@ -390,13 +392,14 @@ def sign_message(
     message: str,
     script_type: Optional[messages.InputScriptType],
     electrum_compat: bool,
+    generic: bool,
 ) -> Dict[str, str]:
     """Sign message using address of given path."""
     address_n = tools.parse_path(address)
     if script_type is None:
         script_type = guess_script_type_from_path(address_n)
     res = btc.sign_message(
-        client, coin, address_n, message, script_type, electrum_compat
+        client, coin, address_n, message, script_type, electrum_compat, generic
     )
     return {
         "message": message,
@@ -422,3 +425,17 @@ def verify_message(
 #
 # deprecated interactive signing
 # ALL BELOW is legacy code and will be dropped
+
+@cli.command()
+@click.option("-c", "--coin", default=DEFAULT_COIN)
+@click.argument("psbt")
+@with_client
+def sign_taproot(
+    client: "TrezorClient", coin: str, psbt: str
+) -> Dict[str, str]:
+    """Sign taproot transaction."""
+    psbt_bytes = bytes.fromhex(psbt)
+    signed_psbt = btc.sign_taproot(client, coin, psbt_bytes)
+    return {
+        "psbt": signed_psbt.hex(),
+    }

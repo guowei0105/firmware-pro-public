@@ -1,3 +1,4 @@
+from apps.ur_registry.chains import MismatchError
 from apps.ur_registry.crypto_key_path import CryptoKeyPath
 from apps.ur_registry.registry_types import UUID
 from apps.ur_registry.ur_py.ur.cbor_lite import CBORDecoder, CBOREncoder
@@ -213,12 +214,17 @@ class EthSignRequest:
         # pyright: on
         expected_fingerprint = key_path.source_fingerprint
         if resp.root_fingerprint != expected_fingerprint:
-            raise Exception(
-                f"Fingerprint mismatch: {resp.root_fingerprint} != {expected_fingerprint}"
-            )
+            if __debug__:
+                print(
+                    f"Fingerprint mismatch: got {resp.root_fingerprint} expected {expected_fingerprint}"
+                )
+            else:
+                raise MismatchError(
+                    f"Fingerprint mismatch: got {resp.root_fingerprint} expected {expected_fingerprint}"
+                )
 
     @staticmethod
-    async def gen_transaction(ur):
+    async def gen_request(ur):
         req = EthSignRequest.from_cbor(ur.cbor)
         await req.common_check()
         if req.get_data_type() == RequestType_Transaction:
