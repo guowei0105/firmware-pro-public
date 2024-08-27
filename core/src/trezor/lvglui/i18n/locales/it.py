@@ -806,5 +806,7 @@ translations = [
     "Incompatibilità del portafoglio",
     "Il portafoglio selezionato nell'app non corrisponde al portafoglio hardware. Si prega di controllare e riprovare.",
     "Firma del messaggio non standard.",
+    "Invia token",
+    "Il seguente output di transazione contiene i dati del contratto:",
 ]
 # fmt: on

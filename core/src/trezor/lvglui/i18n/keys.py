@@ -1763,4 +1763,8 @@ CONTENT__WALLET_MISMATCH = 803
 CONTENT__WALLET_MISMATCH_DESC = 804
 # Non-standard message signature.
 CONTENT__NON_STANDARD_MESSAGE_SIGNATURE = 805
+# Send Tokens
+TITLE__SEND_TOKENS = 806
+# The following transaction output contains contract data:
+CONTENT__FOLLOWING_TRANSACTION_CONTAINS_CONTRACT = 807
 # fmt: on

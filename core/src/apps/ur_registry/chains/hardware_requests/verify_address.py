@@ -44,7 +44,6 @@ class VerifyAddressRequest:
         else:
             raise ValueError("Invalid chain")
         # assert address.address is not None, "Address should not be None"
-        # print(f"Address: {params["address"]}")
         # if address.address.lower() != params["address"].lower():
         #     if __debug__:
         #         print(f"Address mismatch: {address.address} != {params['address']}")

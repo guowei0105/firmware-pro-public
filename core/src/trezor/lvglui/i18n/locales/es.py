@@ -806,5 +806,7 @@ translations = [
     "Incompatibilidad de billetera",
     "Tu billetera seleccionada en la aplicación no coincide con la billetera de hardware. Por favor, verifica y vuelve a intentarlo.",
     "Firma de mensaje no estándar.",
+    "Enviar tokens",
+    "La siguiente salida de transacción contiene datos del contrato:",
 ]
 # fmt: on

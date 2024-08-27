@@ -806,5 +806,7 @@ translations = [
     "Unstimmigkeit der Geldbörse",
     "Ihre in der App ausgewählte Wallet stimmt nicht mit der Hardware-Wallet überein. Bitte überprüfen Sie dies und versuchen Sie es erneut.",
     "Nicht standardmäßige Nachrichtensignatur.",
+    "Token senden",
+    "Die folgende Transaktionsausgabe enthält Vertragsdaten:",
 ]
 # fmt: on

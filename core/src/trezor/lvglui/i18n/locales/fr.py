@@ -806,5 +806,7 @@ translations = [
     "Incompatibilité de portefeuille",
     "Votre portefeuille sélectionné dans l'application ne correspond pas au portefeuille matériel. Veuillez vérifier et réessayer.",
     "Signature de message non standard.",
+    "Envoyer des jetons",
+    "La sortie de transaction suivante contient des données de contrat :",
 ]
 # fmt: on
