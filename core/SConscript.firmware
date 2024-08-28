@@ -964,6 +964,12 @@ if FROZEN:
 
         SOURCE_PY.extend(Glob(SOURCE_PY_DIR + 'apps/tron/*.py'))
 
+        SOURCE_PY.extend(Glob(SOURCE_PY_DIR + 'apps/ton/*.py'))
+        SOURCE_PY.extend(Glob(SOURCE_PY_DIR + 'apps/ton/*/*.py'))
+        SOURCE_PY.extend(Glob(SOURCE_PY_DIR + 'apps/ton/*/*/*.py'))
+        SOURCE_PY.extend(Glob(SOURCE_PY_DIR + 'apps/ton/*/*/*/*.py'))
+        SOURCE_PY.extend(Glob(SOURCE_PY_DIR + 'apps/ton/*/*/*/*/*.py'))
+
         SOURCE_PY.extend(Glob(SOURCE_PY_DIR + 'apps/webauthn/*.py'))
 
         SOURCE_PY.extend(Glob(SOURCE_PY_DIR + 'apps/bitcoin/sign_tx/decred.py'))
@@ -994,6 +1000,8 @@ if FROZEN:
         SOURCE_PY.extend(Glob(SOURCE_PY_DIR + 'trezor/enums/Zcash*.py'))
         SOURCE_PY.extend(Glob(SOURCE_PY_DIR + 'apps/nostr/*.py'))
         SOURCE_PY.extend(Glob(SOURCE_PY_DIR + 'apps/lnurl/*.py'))
+        
+        SOURCE_PY.extend(Glob(SOURCE_PY_DIR + 'apps/scdo/*.py'))
 
         SOURCE_PY.extend(Glob(SOURCE_PY_DIR + 'apps/ur_registry/*.py'))
         SOURCE_PY.extend(Glob(SOURCE_PY_DIR + 'apps/ur_registry/*/*.py'))

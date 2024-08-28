@@ -381,6 +381,19 @@ if TYPE_CHECKING:
         NervosSignedTx = 11704
         NervosTxRequest = 11705
         NervosTxAck = 11706
+        TonGetAddress = 11901
+        TonAddress = 11902
+        TonSignMessage = 11903
+        TonSignedMessage = 11904
+        TonSignProof = 11905
+        TonSignedProof = 11906
+        ScdoGetAddress = 12001
+        ScdoAddress = 12002
+        ScdoSignTx = 12003
+        ScdoSignedTx = 12004
+        ScdoTxAck = 12005
+        ScdoSignMessage = 12006
+        ScdoSignedMessage = 12007
         DeviceBackToBoot = 903
         RebootToBoardloader = 904
         DeviceInfoSettings = 10001
@@ -694,6 +707,13 @@ if TYPE_CHECKING:
         Yay = 0
         Nay = 1
         Pass = 2
+
+    class TonWalletVersion(IntEnum):
+        V4R2 = 3
+
+    class TonWorkChain(IntEnum):
+        BASECHAIN = 0
+        MASTERCHAIN = 1
 
     class TronResourceCode(IntEnum):
         BANDWIDTH = 0
