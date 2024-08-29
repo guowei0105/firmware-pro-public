@@ -1,6 +1,7 @@
 #include "emmc_commands.h"
 #include "emmc_commands_macros.h"
 
+#include "fw_keys.h"
 #include "se_thd89.h"
 #include "thd89_boot.h"
 
@@ -533,14 +534,9 @@ static int check_file_contents(uint8_t iface_num, const uint8_t* buffer, uint32_
         if ( memcmp(p_data, "OKTV", 4) == 0 )
         {
             // check firmware header
-            extern const uint8_t BOOTLOADER_KEY_M;
-            extern const uint8_t BOOTLOADER_KEY_N;
-            extern const uint8_t* const BOOTLOADER_KEYS[];
-
             // check file header
             ExecuteCheck_MSGS_ADV(
-                load_vendor_header(p_data, BOOTLOADER_KEY_M, BOOTLOADER_KEY_N, BOOTLOADER_KEYS, &file_vhdr),
-                sectrue,
+                load_vendor_header(p_data, FW_KEY_M, FW_KEY_N, FW_KEYS, &file_vhdr), sectrue,
                 {
                     send_failure(
                         iface_num, FailureType_Failure_ProcessError, "Update file vender header invalid!"
@@ -562,8 +558,8 @@ static int check_file_contents(uint8_t iface_num, const uint8_t* buffer, uint32_
 
             // check file firmware hash
             ExecuteCheck_MSGS_ADV(
-                check_image_contents_ram(
-                    &file_hdr, p_data, file_vhdr.hdrlen + file_hdr.hdrlen, FIRMWARE_SECTORS_COUNT
+                check_image_contents_ADV(
+                    &file_vhdr, &file_hdr, p_data + file_vhdr.hdrlen + file_hdr.hdrlen, 0, file_hdr.codelen
                 ),
                 sectrue,
                 {
@@ -892,9 +888,6 @@ int process_msg_FirmwareUpdateEmmc(uint8_t iface_num, uint32_t msg_size, uint8_t
         {
             // MCU update
             // check firmware header
-            extern const uint8_t BOOTLOADER_KEY_M;
-            extern const uint8_t BOOTLOADER_KEY_N;
-            extern const uint8_t* const BOOTLOADER_KEYS[];
 
             vendor_header file_vhdr;
             image_header file_hdr;
@@ -902,8 +895,7 @@ int process_msg_FirmwareUpdateEmmc(uint8_t iface_num, uint32_t msg_size, uint8_t
 
             // check file header
             ExecuteCheck_MSGS_ADV(
-                load_vendor_header(p_data, BOOTLOADER_KEY_M, BOOTLOADER_KEY_N, BOOTLOADER_KEYS, &file_vhdr),
-                sectrue,
+                load_vendor_header(p_data, FW_KEY_M, FW_KEY_N, FW_KEYS, &file_vhdr), sectrue,
                 {
                     send_failure(
                         iface_num, FailureType_Failure_ProcessError, "Update file vender header invalid!"
@@ -924,9 +916,10 @@ int process_msg_FirmwareUpdateEmmc(uint8_t iface_num, uint32_t msg_size, uint8_t
             );
 
             // check file firmware hash
+
             ExecuteCheck_MSGS_ADV(
-                check_image_contents_ram(
-                    &file_hdr, p_data, file_vhdr.hdrlen + file_hdr.hdrlen, FIRMWARE_SECTORS_COUNT
+                check_image_contents_ADV(
+                    &file_vhdr, &file_hdr, p_data + file_vhdr.hdrlen + file_hdr.hdrlen, 0, file_hdr.codelen
                 ),
                 sectrue,
                 {
@@ -959,14 +952,13 @@ int process_msg_FirmwareUpdateEmmc(uint8_t iface_num, uint32_t msg_size, uint8_t
 
                 // vhdr
                 if ( load_vendor_header(
-                         (const uint8_t*)FIRMWARE_START, BOOTLOADER_KEY_M, BOOTLOADER_KEY_N, BOOTLOADER_KEYS,
-                         &temp_vhdr
+                         (const uint8_t*)FIRMWARE_START, FW_KEY_M, FW_KEY_N, FW_KEYS, &temp_vhdr
                      ) == sectrue )
                 {
                     memcpy(&current_vhdr, &temp_vhdr, sizeof(current_vhdr));
                 }
-                // else if ( load_vendor_header(firmware_headers_backup, BOOTLOADER_KEY_M, BOOTLOADER_KEY_N,
-                // BOOTLOADER_KEYS, &temp_vhdr) == sectrue )
+                // else if ( load_vendor_header(firmware_headers_backup, FW_KEY_M, FW_KEY_N,
+                // FW_KEYS, &temp_vhdr) == sectrue )
                 // {
                 //     memcpy(&current_vhdr, &temp_vhdr, sizeof(current_vhdr));
                 // }
@@ -1073,112 +1065,35 @@ int process_msg_FirmwareUpdateEmmc(uint8_t iface_num, uint32_t msg_size, uint8_t
             if ( sectrue == wipe_required )
             {
                 se_reset_storage();
-
-                // erease with retry, max 10 retry allowed, 10ms delay in between
-                ExecuteCheck_MSGS_ADV_RETRY_DELAY(
-                    flash_erase_sectors(STORAGE_SECTORS, STORAGE_SECTORS_COUNT, NULL), sectrue,
-                    {
-                        send_failure(
-                            iface_num, FailureType_Failure_ProcessError, "Flash storage area erease failed!"
-                        );
-                        return -1;
-                    },
-                    10, 10
-                );
             }
+
+            char err_msg[64];
 
             // write firmware
-
-            size_t processed_bytes = 0;
-            size_t flash_sectors_index = 0;
-            while ( processed_bytes < firmware_file_size )
-            {
-
-                // wipe firmware area
-                // erease with retry, max 10 retry allowed, 10ms delay in between
-                ExecuteCheck_MSGS_ADV_RETRY_DELAY(
-                    flash_erase(FIRMWARE_SECTORS[flash_sectors_index]), sectrue,
-                    {
-                        send_failure(
-                            iface_num, FailureType_Failure_ProcessError, "Flash firmware area erease failed!"
-                        );
-                    },
-                    10, 10
-                );
-                // update progress (erase)
-                ui_screen_install_progress_upload(
-                    (250 * flash_sectors_index / (firmware_file_size / flash_sector_size(flash_sectors_index))
-                    ) +
-                    (750 * processed_bytes / firmware_file_size)
-                );
-
-                // unlock
-                ExecuteCheck_MSGS_ADV(flash_unlock_write(), sectrue, {
-                    send_failure(iface_num, FailureType_Failure_ProcessError, "Flash unlock failed!");
-                    return -1;
-                });
-
-                for ( size_t sector_offset = 0;
-                      sector_offset < flash_sector_size(FIRMWARE_SECTORS[flash_sectors_index]);
-                      sector_offset += 32 )
-                {
-                    // write with retry, max 10 retry allowed, 10ms delay in between
-                    ExecuteCheck_MSGS_ADV_RETRY_DELAY(
-                        flash_write_words(
-                            FIRMWARE_SECTORS[flash_sectors_index], sector_offset,
-                            (uint32_t*)(p_data + processed_bytes)
-                        ),
-                        sectrue,
-                        {
-                            send_failure(iface_num, FailureType_Failure_ProcessError, "Flash write failed!");
-                            return -1;
-                        },
-                        10, 10
-                    );
-
-                    processed_bytes += ((firmware_file_size - processed_bytes) > 32)
-                                         ? 32 // since we could only write 32 byte a time
-                                         : (firmware_file_size - processed_bytes);
-                }
-
-                // lock
-                ExecuteCheck_MSGS_ADV(flash_lock_write(), sectrue, {
-                    send_failure(iface_num, FailureType_Failure_ProcessError, "Flash unlock failed!");
-                    return -1;
-                });
-
-                // update progress (write)
-                ui_screen_install_progress_upload(
-                    (250 * flash_sectors_index / (firmware_file_size / flash_sector_size(flash_sectors_index))
-                    ) +
-                    (750 * processed_bytes / firmware_file_size)
-                );
-
-                flash_sectors_index++;
-            }
-
-            // wipe unused sectors
-            while ( flash_sectors_index < FIRMWARE_SECTORS_COUNT )
-            {
-                flash_erase(FIRMWARE_SECTORS[flash_sectors_index]);
-                flash_sectors_index++;
-            }
-
-            // verify flash firmware hash
             ExecuteCheck_MSGS_ADV(
-                check_image_contents(
-                    &file_hdr, IMAGE_HEADER_SIZE + file_vhdr.hdrlen, FIRMWARE_SECTORS, FIRMWARE_SECTORS_COUNT
+                install_firmware(
+                    p_data, firmware_file_size, err_msg, sizeof(err_msg), NULL,
+                    ui_screen_install_progress_upload
                 ),
                 sectrue,
                 {
-                    send_failure(iface_num, FailureType_Failure_ProcessError, "New firmware hash invalid!");
+                    send_failure(iface_num, FailureType_Failure_ProcessError, err_msg);
                     // wipe invalid firmware, don't care the result as we cannot control, but we have to try
                     EMMC_WRAPPER_FORCE_IGNORE(
-                        flash_erase_sectors(FIRMWARE_SECTORS, FIRMWARE_SECTORS_COUNT, NULL)
+                        flash_erase_sectors(FIRMWARE_SECTORS, FIRMWARE_INNER_SECTORS_COUNT, NULL)
                     );
                     return -1;
                 }
             );
+
+            ExecuteCheck_MSGS_ADV(verify_firmware(err_msg, sizeof(err_msg)), sectrue, {
+                send_failure(iface_num, FailureType_Failure_ProcessError, "New firmware hash invalid!");
+                // wipe invalid firmware, don't care the result as we cannot control, but we have to try
+                EMMC_WRAPPER_FORCE_IGNORE(
+                    flash_erase_sectors(FIRMWARE_SECTORS, FIRMWARE_INNER_SECTORS_COUNT, NULL)
+                );
+                return -1;
+            });
 
             // backup new firmware header (not used since no where to stroe it)
             // As the firmware in flash has is the the same as the one from file, and it has been verified, we

@@ -20,17 +20,19 @@
 #include <string.h>
 #include <sys/types.h>
 
+#include "adc.h"
 #include "common.h"
 #include "compiler_traits.h"
 #include "device.h"
 #include "display.h"
 #include "flash.h"
+#include "fw_keys.h"
+#include "hardware_version.h"
 #include "image.h"
 #include "lowlevel.h"
 #include "mini_printf.h"
 #include "mipi_lcd.h"
 #include "mpu.h"
-#include "nand_flash.h"
 #include "qspi_flash.h"
 #include "random_delays.h"
 #include "se_thd89.h"
@@ -38,14 +40,9 @@
 #include "systick.h"
 #include "thd89.h"
 #include "thd89_boot.h"
-#ifdef TREZOR_MODEL_T
 #include "touch.h"
-#endif
-#if defined TREZOR_MODEL_R
-#include "button.h"
-#include "rgb_led.h"
-#endif
 #include "usb.h"
+#include "usbd_desc.h"
 #include "version.h"
 
 #include "ble.h"
@@ -55,7 +52,6 @@
 #include "jpeg_dma.h"
 #include "messages.h"
 #include "motor.h"
-#include "mpu.h"
 #include "spi.h"
 #include "spi_legacy.h"
 #include "systick.h"
@@ -69,30 +65,6 @@
 
 #include "camera.h"
 #include "emmc_wrapper.h"
-
-#if PRODUCTION
-const uint8_t BOOTLOADER_KEY_M = 4;
-const uint8_t BOOTLOADER_KEY_N = 7;
-#else
-const uint8_t BOOTLOADER_KEY_M = 2;
-const uint8_t BOOTLOADER_KEY_N = 3;
-#endif
-
-const uint8_t * const BOOTLOADER_KEYS[] = {
-#if PRODUCTION
-    (const uint8_t *)"\x15\x4b\x8a\xb2\x61\xcc\x88\x79\x48\x3f\x68\x9a\x2d\x41\x24\x3a\xe7\xdb\xc4\x02\x16\x72\xbb\xd2\x5c\x33\x8a\xe8\x4d\x93\x11\x54",
-    (const uint8_t *)"\xa9\xe6\x5e\x07\xfe\x6d\x39\xa8\xa8\x4e\x11\xa9\x96\xa0\x28\x3f\x88\x1e\x17\x5c\xba\x60\x2e\xb5\xac\x44\x2f\xb7\x5b\x39\xe8\xe0",
-    (const uint8_t *)"\x6c\x88\x05\xab\xb2\xdf\x9d\x36\x79\xf1\xd2\x8a\x40\xcd\x99\x03\x99\xb9\x9f\xc3\xee\x4e\x06\x57\xd8\x1d\x38\x1e\xa1\x48\x8a\x12",
-    (const uint8_t *)"\x3e\xd7\x97\x79\x06\x4d\x56\x57\x1b\x29\xbc\xaa\x73\x4c\xbb\x6d\xb6\x1d\x2e\x62\x65\x66\x62\x8e\xcf\x4c\x89\xe1\xdb\x45\xea\xec",
-    (const uint8_t *)"\x54\xa4\x06\x33\xbf\xd9\xe6\x0b\x8a\x39\x12\x65\xb2\xe0\x06\x37\x4a\xbe\x63\x1d\x1e\x11\x07\x33\x2b\xca\x56\xbf\x9f\x8c\x5c\x99",
-    (const uint8_t *)"\x4b\x71\x13\x4f\x18\xe0\x07\x87\xc5\x83\xd4\x07\x42\xcc\x18\x8e\x17\xfc\x85\xad\xe4\xcb\x47\x2d\xae\x5e\xf8\xe0\x69\xf0\xfe\xc5",
-    (const uint8_t *)"\x2e\xcf\x80\xc8\x2b\x44\x98\x48\xc0\x00\x33\x50\x92\x13\x95\x51\xbf\xe4\x7b\x3c\x73\x17\xb4\x99\x50\xf6\x5e\x1d\x82\x43\x20\x24",
-#else
-    (const uint8_t *)"\x57\x11\x4f\x0a\xa6\x69\xd2\xf8\x37\xe0\x40\xab\x9b\xb5\x1c\x00\x99\x12\x09\xf8\x4b\xfd\x7b\xf0\xf8\x93\x67\x62\x46\xfb\xa2\x4a",
-    (const uint8_t *)"\xdc\xae\x8e\x37\xdf\x5c\x24\x60\x27\xc0\x3a\xa9\x51\xbd\x6e\xc6\xca\xa7\xad\x32\xc1\x66\xb1\xf5\x48\xa4\xef\xcd\x88\xca\x3c\xa5",
-    (const uint8_t *)"\x77\x29\x12\xab\x61\xd1\xdc\x4f\x91\x33\x32\x5e\x57\xe1\x46\xab\x9f\xac\x17\xa4\x57\x2c\x6f\xcd\xf3\x55\xf8\x00\x36\x10\x00\x04",
-#endif
-};
 
 #define USB_IFACE_NUM 0
 
@@ -192,7 +164,7 @@ void BusFault_Handler(void) {
                        "Firmware reinstall may required",
                        "If the issue persists, contact support.");
       } else {
-        error_shutdown("Internal error", "Cleanup failed",
+        error_shutdown("Internal flash ECC error", "Cleanup failed",
                        "Reboot to try again",
                        "If the issue persists, contact support.");
       }
@@ -207,6 +179,42 @@ void UsageFault_Handler(void) {
   error_shutdown("Internal error", "(UF)", NULL, NULL);
 }
 
+static secbool get_device_serial(char* serial, size_t len) {
+  // init
+  uint8_t otp_serial[FLASH_OTP_BLOCK_SIZE] = {0};
+  memzero(otp_serial, sizeof(otp_serial));
+  memzero(serial, len);
+
+  // get OTP serial
+  if (sectrue != flash_otp_is_locked(FLASH_OTP_DEVICE_SERIAL)) return secfalse;
+
+  if (sectrue != flash_otp_read(FLASH_OTP_DEVICE_SERIAL, 0, otp_serial,
+                                sizeof(otp_serial))) {
+    return secfalse;
+  }
+
+  // make sure last element is '\0'
+  otp_serial[FLASH_OTP_BLOCK_SIZE - 1] = '\0';
+
+  // check if all is ascii
+  for (uint32_t i = 0; i < sizeof(otp_serial); i++) {
+    if (otp_serial[i] == '\0') {
+      break;
+    }
+    if (otp_serial[i] < ' ' || otp_serial[i] > '~') {
+      return secfalse;
+    }
+  }
+
+  // copy to output buffer
+  memcpy(serial, otp_serial, MIN(len, sizeof(otp_serial)));
+
+  // cutoff by strlen
+  serial[strlen(serial)] = '\0';
+
+  return sectrue;
+}
+
 static void usb_init_all(secbool usb21_landing) {
   usb_dev_info_t dev_info = {
       .device_class = 0x00,
@@ -215,13 +223,19 @@ static void usb_init_all(secbool usb21_landing) {
       .vendor_id = 0x1209,
       .product_id = 0x4F4A,
       .release_num = 0x0200,
-      .manufacturer = "OneKey Ltd.",
+      .manufacturer = "OneKey Limited",
       .product = "OneKey Pro",
       .serial_number = "000000000000000000000000",
       .interface = "Bootloader Interface",
       .usb21_enabled = sectrue,
       .usb21_landing = usb21_landing,
   };
+
+  static char serial[USB_SIZ_STRING_SERIAL];
+
+  if (sectrue == get_device_serial(serial, sizeof(serial))) {
+    dev_info.serial_number = serial;
+  }
 
   static uint8_t rx_buffer[USB_PACKET_SIZE];
 
@@ -258,7 +272,6 @@ static void usb_switch(void) {
         usb_opened = true;
       }
     }
-
   } else {
     counter0 = 0;
     counter1++;
@@ -550,8 +563,7 @@ secbool bootloader_usb_loop_factory(const vendor_header* const vhdr,
 
 secbool load_vendor_header_keys(const uint8_t* const data,
                                 vendor_header* const vhdr) {
-  return load_vendor_header(data, BOOTLOADER_KEY_M, BOOTLOADER_KEY_N,
-                            BOOTLOADER_KEYS, vhdr);
+  return load_vendor_header(data, FW_KEY_M, FW_KEY_N, FW_KEYS, vhdr);
 }
 
 static secbool check_vendor_header_lock(const vendor_header* const vhdr) {
@@ -624,20 +636,10 @@ static secbool validate_firmware_headers(vendor_header* const vhdr,
   return result;
 }
 
-static secbool validate_firmware_code(vendor_header* const vhdr,
-                                      image_header* const hdr) {
-  set_handle_flash_ecc_error(sectrue);
-  secbool result =
-      check_image_contents(hdr, IMAGE_HEADER_SIZE + vhdr->hdrlen,
-                           FIRMWARE_SECTORS, FIRMWARE_SECTORS_COUNT);
-  set_handle_flash_ecc_error(secfalse);
-  return result;
-}
-
 static BOOT_TARGET decide_boot_target(vendor_header* const vhdr,
                                       image_header* const hdr,
-                                      secbool* headers_validate_result,
-                                      secbool* headers_checked) {
+                                      secbool* headers_valid,
+                                      secbool* firmware_valid) {
   // get boot target flag
   BOOT_TARGET boot_target = *BOOT_TARGET_FLAG_ADDR;  // cache flag
   *BOOT_TARGET_FLAG_ADDR = BOOT_TARGET_NORMAL;       // consume(reset) flag
@@ -658,21 +660,19 @@ static BOOT_TARGET decide_boot_target(vendor_header* const vhdr,
   }
 
   // check firmware
-  if (sectrue == validate_firmware_headers(vhdr, hdr)) {
-    if (sectrue == validate_firmware_code(vhdr, hdr)) {
-      *headers_validate_result = sectrue;
-      *headers_checked = sectrue;
-    } else {
-      boot_target = BOOT_TARGET_BOOTLOADER;
-      *headers_checked = sectrue;
-      return boot_target;
-    }
-  } else {
-    *headers_validate_result = secfalse;
-    *headers_checked = sectrue;
+  set_handle_flash_ecc_error(sectrue);
+  *headers_valid = validate_firmware_headers(vhdr, hdr);
+  char err_msg[64];
+  *firmware_valid = verify_firmware(err_msg, sizeof(err_msg));
+  set_handle_flash_ecc_error(secfalse);
+
+  if (*headers_valid != sectrue || *firmware_valid != sectrue) {
     boot_target = BOOT_TARGET_BOOTLOADER;
     return boot_target;
   }
+
+  // all check passed, manual set, since default ram value will be random
+  boot_target = BOOT_TARGET_NORMAL;
 
   return boot_target;
 }
@@ -681,11 +681,14 @@ int main(void) {
   SystemCoreClockUpdate();
   dwt_init();
   mpu_config_bootloader();
+
   // user interface
-  lcd_para_init(DISPLAY_RESX, DISPLAY_RESY, LCD_PIXEL_FORMAT_RGB565);
-  // lcd_init(DISPLAY_RESX, DISPLAY_RESY, LCD_PIXEL_FORMAT_RGB565);
+  // lcd_para_init(DISPLAY_RESX, DISPLAY_RESY, LCD_PIXEL_FORMAT_RGB565);
+  lcd_init(DISPLAY_RESX, DISPLAY_RESY, LCD_PIXEL_FORMAT_RGB565);
   lcd_pwm_init();
   touch_init();
+
+  adc_init();
 
   // keep the screen but cover the boot bar
   // display_clear();
@@ -695,11 +698,13 @@ int main(void) {
   bus_fault_enable();  // it's here since requires user interface
 
   // storages
-  qspi_flash_init();
-  qspi_flash_config();
-  qspi_flash_memory_mapped();
   ensure_emmcfs(emmc_fs_init(), "emmc_fs_init");
   ensure_emmcfs(emmc_fs_mount(true, false), "emmc_fs_mount");
+    if (get_hw_ver() < HW_VER_3P0A) {
+    qspi_flash_init();
+    qspi_flash_config();
+    qspi_flash_memory_mapped();
+  }
 
   // bt/pm
   ble_usart_init();
@@ -735,9 +740,9 @@ int main(void) {
 
 #if !PRODUCTION
 
-  if (!device_serial_set()) {
-    write_dev_dummy_serial();
-  }
+  // if (!device_serial_set()) {
+  //   write_dev_dummy_serial();
+  // }
   UNUSED(write_dev_dummy_serial);
 
   // if (!se_has_cerrificate()) {
@@ -766,21 +771,15 @@ int main(void) {
 
   vendor_header vhdr;
   image_header hdr;
-  secbool headers_valid = secfalse, headers_checked = secfalse;
+  secbool headers_valid = secfalse;
+  secbool firmware_valid = secfalse;
 
   BOOT_TARGET boot_target =
-      decide_boot_target(&vhdr, &hdr, &headers_valid, &headers_checked);
-
-  display_clear();
+      decide_boot_target(&vhdr, &hdr, &headers_valid, &firmware_valid);
 
   if (boot_target == BOOT_TARGET_BOOTLOADER) {
-    if (headers_checked == secfalse) {
-      if (sectrue == validate_firmware_headers(&vhdr, &hdr)) {
-        if (sectrue == validate_firmware_code(&vhdr, &hdr)) {
-          headers_valid = sectrue;
-        }
-      }
-    }
+    display_clear();
+
     if (sectrue == headers_valid) {
       ui_bootloader_first(&hdr);
       if (bootloader_usb_loop(&vhdr, &hdr) != sectrue) {
@@ -792,47 +791,49 @@ int main(void) {
         return 1;
       }
     }
-  }
-  // check if firmware valid again to make sure
-  ensure(validate_firmware_headers(&vhdr, &hdr), "invalid firmware header");
-  ensure(validate_firmware_code(&vhdr, &hdr), "invalid firmware code");
+  } else if (boot_target == BOOT_TARGET_NORMAL) {
+    // check and load firmware (redundant, no need, since decide_boot_target
+    // already done this)
+    // char err_msg[64];
+    // ensure(verify_firmware(err_msg, sizeof(err_msg)), err_msg);
 
-  // check bluetooth key
-  device_verify_ble();
+    // check bluetooth key
+    device_verify_ble();
 
-  // if all VTRUST flags are unset = ultimate trust => skip the procedure
-  if ((vhdr.vtrust & VTRUST_ALL) != VTRUST_ALL) {
-    // ui_fadeout();  // no fadeout - we start from black screen
-    ui_screen_boot(&vhdr, &hdr);
-    ui_fadein();
+    // if all VTRUST flags are unset = ultimate trust => skip the procedure
+    if ((vhdr.vtrust & VTRUST_ALL) != VTRUST_ALL) {
+      // ui_fadeout();  // no fadeout - we start from black screen
+      ui_screen_boot(&vhdr, &hdr);
+      ui_fadein();
 
-    int delay = (vhdr.vtrust & VTRUST_WAIT) ^ VTRUST_WAIT;
-    if (delay > 1) {
-      while (delay > 0) {
-        ui_screen_boot_wait(delay);
+      int delay = (vhdr.vtrust & VTRUST_WAIT) ^ VTRUST_WAIT;
+      if (delay > 1) {
+        while (delay > 0) {
+          ui_screen_boot_wait(delay);
+          hal_delay(1000);
+          delay--;
+        }
+      } else if (delay == 1) {
         hal_delay(1000);
-        delay--;
       }
-    } else if (delay == 1) {
-      hal_delay(1000);
-    }
 
-    if ((vhdr.vtrust & VTRUST_CLICK) == 0) {
-      ui_screen_boot_click();
-      while (touch_read() == 0)
-        ;
-    }
+      if ((vhdr.vtrust & VTRUST_CLICK) == 0) {
+        ui_screen_boot_click();
+        while (touch_read() == 0)
+          ;
+      }
 
-    display_clear();
+      display_clear();
+
+      bus_fault_disable();
+
+      mpu_config_off();
+
+      jump_to(FIRMWARE_START + vhdr.hdrlen + IMAGE_HEADER_SIZE);
+    }
   }
 
-  // jump_to_unprivileged(FIRMWARE_START + vhdr.hdrlen + IMAGE_HEADER_SIZE);
-
-  bus_fault_disable();
-
-  mpu_config_off();
-
-  jump_to(FIRMWARE_START + vhdr.hdrlen + IMAGE_HEADER_SIZE);
-
-  return 0;
+  error_shutdown("Internal error", "Boot target invalid", "Tap to restart.",
+                 "If the issue persists, contact support.");
+  return -1;
 }
