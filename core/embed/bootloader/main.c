@@ -679,10 +679,13 @@ static BOOT_TARGET decide_boot_target(vendor_header* const vhdr,
 
 int main(void) {
   SystemCoreClockUpdate();
-  sdram_reinit();
   dwt_init();
   mpu_config_bootloader();
 
+  lcd_ltdc_dsi_disable();
+  sdram_reinit();
+  HAL_Delay(50);
+  lcd_ltdc_dsi_enable();
   // user interface
   lcd_para_init(DISPLAY_RESX, DISPLAY_RESY, LCD_PIXEL_FORMAT_RGB565);
   touch_init();
@@ -821,15 +824,15 @@ int main(void) {
         while (touch_read() == 0)
           ;
       }
-
-      display_clear();
-
-      bus_fault_disable();
-
-      mpu_config_off();
-
-      jump_to(FIRMWARE_START + vhdr.hdrlen + IMAGE_HEADER_SIZE);
     }
+
+    display_clear();
+
+    bus_fault_disable();
+
+    mpu_config_off();
+
+    jump_to(FIRMWARE_START + vhdr.hdrlen + IMAGE_HEADER_SIZE);
   }
 
   error_shutdown("Internal error", "Boot target invalid", "Tap to restart.",
