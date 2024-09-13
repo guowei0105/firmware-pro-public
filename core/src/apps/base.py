@@ -474,6 +474,15 @@ def lock_device() -> None:
         workflow.close_others()
 
 
+def device_is_unlocked():
+    from trezor.lvglui.scrs import fingerprints
+
+    if fingerprints.is_available():
+        return config.is_unlocked() and fingerprints.is_unlocked()
+    else:
+        return config.is_unlocked()
+
+
 def lock_device_if_unlocked() -> None:
     if config.is_unlocked():
         lock_device()
@@ -493,6 +502,16 @@ def screen_off_if_possible() -> None:
         if config.is_unlocked():
             ui.display.backlight(ui.style.BACKLIGHT_LOW)
         workflow.idle_timer.set(3 * 1000, lock_device_if_unlocked)
+
+
+async def screen_off_delay():
+    if not ui.display.backlight():
+        return
+    from trezor import uart
+
+    uart.flashled_close()
+    ui.display.backlight(ui.style.BACKLIGHT_LOW)
+    workflow.idle_timer.set(3 * 1000, lock_device_if_unlocked)
 
 
 def shutdown_device() -> None:
@@ -584,9 +603,9 @@ def get_pinlocked_handler(
 
 # this function is also called when handling ApplySettings
 def reload_settings_from_storage(timeout_ms: int | None = None) -> None:
+    workflow.idle_timer.remove(lock_device_if_unlocked)
     if not storage.device.is_initialized():
         return
-    workflow.idle_timer.remove(lock_device_if_unlocked)
     workflow.idle_timer.set(
         timeout_ms
         if timeout_ms is not None

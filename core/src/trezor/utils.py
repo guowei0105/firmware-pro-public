@@ -154,9 +154,9 @@ def mark_pin_verified() -> None:
 def turn_on_lcd_if_possible(timeouts_ms: int | None = None) -> bool:
     resumed = lcd_resume(timeouts_ms)
     if resumed:
-        from trezor import workflow, uart
+        from trezor import loop, uart
 
-        workflow.spawn(uart.handle_fingerprint())
+        loop.schedule(uart.handle_fingerprint())
     return resumed
 
 
@@ -207,13 +207,6 @@ async def turn_off_lcd():
     await wire.signal_ack()
     if device.is_initialized():
         loop.clear()
-
-
-async def turn_off_lcd_delay():
-    from trezor import loop
-
-    await loop.sleep(3000)
-    await turn_off_lcd()
 
 
 def play_dead():

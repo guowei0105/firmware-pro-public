@@ -684,10 +684,8 @@ int main(void) {
 
   lcd_ltdc_dsi_disable();
   sdram_reinit();
-  HAL_Delay(50);
-  lcd_ltdc_dsi_enable();
-  // user interface
-  lcd_para_init(DISPLAY_RESX, DISPLAY_RESY, LCD_PIXEL_FORMAT_RGB565);
+  lcd_init(DISPLAY_RESX, DISPLAY_RESY, LCD_PIXEL_FORMAT_RGB565);
+  lcd_pwm_init();
   touch_init();
 
   adc_init();
@@ -780,6 +778,7 @@ int main(void) {
       decide_boot_target(&vhdr, &hdr, &headers_valid, &firmware_valid);
 
   if (boot_target == BOOT_TARGET_BOOTLOADER) {
+    headers_valid = validate_firmware_headers(&vhdr, &hdr);
     display_clear();
 
     if (sectrue == headers_valid) {
