@@ -25,8 +25,8 @@
 2. Pulling the latest code via the git command line tool,  setting up the development environment
 
 ```
-  git clone --recurse-submodules https://github.com/OneKeyHQ/onekey-firmware.git
-  cd onekey-firmware
+  git clone --recurse-submodules https://github.com/OneKeyHQ/firmware-pro.git
+  cd firmware-pro
   nix-shell
   poetry install
 ```
