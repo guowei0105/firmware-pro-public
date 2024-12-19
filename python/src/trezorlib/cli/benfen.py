@@ -62,10 +62,11 @@ def sign_raw_tx(client: "TrezorClient", address: str, message: str, coin_type: s
         decoded_message,
         decoded_coin_type
     )
-    return {
+    result = {
         "public_key": f"0x{resp.public_key.hex()}",
         "signature": f"0x{resp.signature.hex()}",
     }
+    return result
 
 
 
