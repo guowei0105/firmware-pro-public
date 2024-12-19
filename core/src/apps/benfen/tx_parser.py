@@ -273,7 +273,7 @@ class BCSParser:
         return commands
 
 
-def parse_transaction_inputs(parser) -> list[ParsedInput] | None:
+def parse_transaction_inputs(parser):
     input_count = parser.read_u8()
 
     inputs = []
@@ -312,7 +312,7 @@ def parse_transaction_inputs(parser) -> list[ParsedInput] | None:
     return inputs
 
 
-def parse_gas_data(parser) -> dict | None:
+def parse_gas_data(parser):
     payment_count = parser.read_u8()
     payments = []
     for _ in range(payment_count):
@@ -330,7 +330,7 @@ def parse_gas_data(parser) -> dict | None:
     return {"payment": payments, "owner": owner, "price": price, "budget": budget}
 
 
-def parse_transaction_expiration(parser) -> dict | None:
+def parse_transaction_expiration(parser):
     expiration_type = parser.read_u8()
     if expiration_type == 0:
         return {"type": "None", "value": None}
@@ -341,7 +341,7 @@ def parse_transaction_expiration(parser) -> dict | None:
         return None
 
 
-def parse_transaction(hex_data) -> dict | None:
+def parse_transaction(hex_data):
     try:
         data = binascii.unhexlify(hex_data)
         parser = BCSParser(data)
@@ -388,7 +388,7 @@ def parse_transaction(hex_data) -> dict | None:
 
 
 class TransactionParser:
-    def parse_tx(self, tx_hex) -> dict | None:
+    def parse_tx(self, tx_hex):
         try:
             if isinstance(tx_hex, bytes):
                 tx_hex = binascii.hexlify(tx_hex).decode()
@@ -413,7 +413,7 @@ class TransactionParser:
                 except Exception:
                     return None
 
-            return {
+            final_result = {
                 "V1": {
                     "TransactionKind": {
                         "ProgrammableTransaction": {
@@ -426,6 +426,7 @@ class TransactionParser:
                     "Expiration": result["expiration"],
                 }
             }
+            return final_result
 
         except Exception:
             return None
