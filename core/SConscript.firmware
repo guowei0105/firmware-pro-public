@@ -967,6 +967,7 @@ if FROZEN:
         SOURCE_PY.extend(Glob(SOURCE_PY_DIR + 'apps/scdo/*.py'))
 
         SOURCE_PY.extend(Glob(SOURCE_PY_DIR + 'apps/alephium/*.py'))
+        SOURCE_PY.extend(Glob(SOURCE_PY_DIR + 'apps/benfen/*.py'))
 
         SOURCE_PY.extend(Glob(SOURCE_PY_DIR + 'apps/ur_registry/*.py'))
         SOURCE_PY.extend(Glob(SOURCE_PY_DIR + 'apps/ur_registry/*/*.py'))
