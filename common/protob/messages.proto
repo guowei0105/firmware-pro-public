@@ -241,7 +241,6 @@ enum MessageType {
     MessageType_EthereumTypedDataValueAckOneKey = 20115 [(wire_in) = true];
     MessageType_EthereumTypedDataSignatureOneKey = 20116 [(wire_out) = true];
     MessageType_EthereumSignTypedHashOneKey = 20117 [(wire_in) = true];
-    MessageType_EthereumSignMessageEIP712 = 10200 [(wire_in) = true];
 
     // NEM
     MessageType_NEMGetAddress = 67 [(wire_in) = true];
@@ -449,6 +448,8 @@ enum MessageType {
     MessageType_SolanaAddress = 10101 [(wire_out) = true];
     MessageType_SolanaSignTx = 10102 [(wire_in) = true];
     MessageType_SolanaSignedTx = 10103 [(wire_out) = true];
+    MessageType_SolanaSignMessage = 10104 [(wire_in) = true];
+    MessageType_SolanaSignedMessage = 10105 [(wire_out) = true];
 
     // Cosmos
     MessageType_CosmosGetAddress = 10800 [(wire_in) = true];
@@ -532,7 +533,7 @@ enum MessageType {
     MessageType_TonSignedMessage = 11904 [(wire_out) = true];
     MessageType_TonSignProof = 11905 [(wire_in) = true];
     MessageType_TonSignedProof = 11906 [(wire_out) = true];
-    
+
     // scdo
     MessageType_ScdoGetAddress = 12001 [(wire_in) = true];
     MessageType_ScdoAddress = 12002 [(wire_out) = true];
@@ -564,7 +565,7 @@ enum MessageType {
     MessageType_BenfenTxRequest = 12207 [(wire_out) = true];
     MessageType_BenfenTxAck = 12208 [(wire_in) = true];
 
-    
+
     //onekey
     MessageType_DeviceBackToBoot = 903 [(wire_in) = true];
     MessageType_RebootToBoardloader = 904 [(wire_in) = true];

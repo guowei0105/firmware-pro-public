@@ -58,6 +58,8 @@ if TYPE_CHECKING:
     from trezor.enums import ResourceType  # noqa: F401
     from trezor.enums import SafetyCheckLevel  # noqa: F401
     from trezor.enums import SdProtectOperationType  # noqa: F401
+    from trezor.enums import SolanaMessageFormat  # noqa: F401
+    from trezor.enums import SolanaMessageVersion  # noqa: F401
     from trezor.enums import StellarAssetType  # noqa: F401
     from trezor.enums import StellarMemoType  # noqa: F401
     from trezor.enums import StellarSignerType  # noqa: F401
@@ -5396,24 +5398,6 @@ if TYPE_CHECKING:
         def is_type_of(cls, msg: Any) -> TypeGuard["EthereumTypedDataSignatureOneKey"]:
             return isinstance(msg, cls)
 
-    class EthereumSignMessageEIP712(protobuf.MessageType):
-        address_n: "list[int]"
-        domain_hash: "bytes | None"
-        message_hash: "bytes | None"
-
-        def __init__(
-            self,
-            *,
-            address_n: "list[int] | None" = None,
-            domain_hash: "bytes | None" = None,
-            message_hash: "bytes | None" = None,
-        ) -> None:
-            pass
-
-        @classmethod
-        def is_type_of(cls, msg: Any) -> TypeGuard["EthereumSignMessageEIP712"]:
-            return isinstance(msg, cls)
-
     class EthereumAccessListOneKey(protobuf.MessageType):
         address: "str"
         storage_keys: "list[bytes]"
@@ -7834,6 +7818,44 @@ if TYPE_CHECKING:
 
         @classmethod
         def is_type_of(cls, msg: Any) -> TypeGuard["SolanaSignedTx"]:
+            return isinstance(msg, cls)
+
+    class SolanaSignMessage(protobuf.MessageType):
+        address_n: "list[int]"
+        message: "bytes"
+        message_version: "SolanaMessageVersion"
+        message_format: "SolanaMessageFormat"
+        application_domain: "bytes | None"
+
+        def __init__(
+            self,
+            *,
+            message: "bytes",
+            address_n: "list[int] | None" = None,
+            message_version: "SolanaMessageVersion | None" = None,
+            message_format: "SolanaMessageFormat | None" = None,
+            application_domain: "bytes | None" = None,
+        ) -> None:
+            pass
+
+        @classmethod
+        def is_type_of(cls, msg: Any) -> TypeGuard["SolanaSignMessage"]:
+            return isinstance(msg, cls)
+
+    class SolanaSignedMessage(protobuf.MessageType):
+        signature: "bytes"
+        public_key: "bytes"
+
+        def __init__(
+            self,
+            *,
+            signature: "bytes",
+            public_key: "bytes",
+        ) -> None:
+            pass
+
+        @classmethod
+        def is_type_of(cls, msg: Any) -> TypeGuard["SolanaSignedMessage"]:
             return isinstance(msg, cls)
 
     class StarcoinGetAddress(protobuf.MessageType):

@@ -148,7 +148,6 @@ if not utils.BITCOIN_ONLY:
     EthereumTypedDataValueAckOneKey = 20115
     EthereumTypedDataSignatureOneKey = 20116
     EthereumSignTypedHashOneKey = 20117
-    EthereumSignMessageEIP712 = 10200
     NEMGetAddress = 67
     NEMAddress = 68
     NEMSignTx = 69
@@ -307,6 +306,8 @@ if not utils.BITCOIN_ONLY:
     SolanaAddress = 10101
     SolanaSignTx = 10102
     SolanaSignedTx = 10103
+    SolanaSignMessage = 10104
+    SolanaSignedMessage = 10105
     CosmosGetAddress = 10800
     CosmosAddress = 10801
     CosmosSignTx = 10802

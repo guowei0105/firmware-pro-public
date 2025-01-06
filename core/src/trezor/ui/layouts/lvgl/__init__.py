@@ -56,6 +56,7 @@ __all__ = (
     "confirm_sol_create_ata",
     "confirm_sol_token_transfer",
     "confirm_sol_memo",
+    "confirm_sol_message",
     "confirm_data",
     "confirm_final",
     "confirm_password_input",
@@ -516,7 +517,7 @@ def show_warning(
         header=header,
         subheader=subheader,
         content=content,
-        button_confirm=_(i18n_keys.BUTTON__TRY_AGAIN),
+        button_confirm=button if button else _(i18n_keys.BUTTON__TRY_AGAIN),
         button_cancel=None,
         icon=icon,
         icon_color=icon_color,
@@ -1335,6 +1336,26 @@ async def confirm_sol_memo(
     screen = BlobDisPlay(title, description, memo, None)
     await raise_if_cancelled(
         interact(ctx, screen, "sol_memo", ButtonRequestType.ProtectCall)
+    )
+
+
+async def confirm_sol_message(
+    ctx: wire.GenericContext, address: str, app_domain_fd: str | None, message: str
+) -> None:
+    from trezor.lvglui.scrs.template import Message
+
+    screen = Message(
+        _(i18n_keys.TITLE__SIGN_STR_MESSAGE).format("SOL"),
+        address,
+        message,
+        ctx.primary_color,
+        ctx.icon_path,
+        False,
+        item_other=app_domain_fd,
+        item_other_title="Application Domain:" if app_domain_fd else None,
+    )
+    await raise_if_cancelled(
+        interact(ctx, screen, "confirm_sol_message", ButtonRequestType.ProtectCall)
     )
 
 
@@ -2279,7 +2300,6 @@ async def confirm_nostrmessage(
                 ctx.primary_color,
                 ctx.icon_path,
                 encrypt,
-                None,
             ),
             br_type,
             ButtonRequestType.Other,
@@ -2306,8 +2326,7 @@ async def confirm_lnurl_auth(
                 ctx.primary_color,
                 ctx.icon_path,
                 True,
-                None,
-                _(i18n_keys.LIST_KEY__DOMAIN__COLON),
+                item_addr_title=_(i18n_keys.LIST_KEY__DOMAIN__COLON),
             ),
             br_type,
             ButtonRequestType.Other,
