@@ -47,8 +47,6 @@
 #include STM32_HAL_H
 
 // helper macros
-#define FORCE_IGNORE_RETURN(x) \
-  { __typeof__(x) __attribute__((unused)) d = (x); }
 #define _TO_STR(x) #x
 #define TO_STR(x) _TO_STR(x)
 
@@ -278,6 +276,9 @@ static secbool try_bootloader_update(bool do_update, bool auto_reboot) {
                                           boardloader_buf + file_hdr.hdrlen, 0,
                                           file_hdr.codelen))
     return secfalse;
+
+  // check header stated size matchs file size
+  if ((file_hdr.hdrlen + file_hdr.codelen) != file_info.size) return secfalse;
 
   // if not actually doing the update, return as update file validate result
   if (!do_update) return sectrue;
@@ -737,9 +738,10 @@ int main(void) {
   mpu_config_boardloader();
 
   // user interface
-  lcd_init(DISPLAY_RESX, DISPLAY_RESY, LCD_PIXEL_FORMAT_RGB565);
+  lcd_init();
   display_clear();
   lcd_pwm_init();
+  display_backlight(128);
   touch_init();
 
   // fault handler
