@@ -4355,7 +4355,7 @@ class SecurityScreen(AnimScreen):
                 #         )
                 #     )
             elif target == self.device_auth:
-                DeviceAuthScreen()
+                DeviceAuthScreen(self)
             elif target == self.safety_check:
                 SafetyCheckSetting(self)
             else:
@@ -4364,14 +4364,27 @@ class SecurityScreen(AnimScreen):
         # pyright: on
 
 
-class DeviceAuthScreen(FullSizeWindow):
-    def __init__(self) -> None:
+class DeviceAuthScreen(AnimScreen):
+    def collect_animation_targets(self) -> list:
+        targets = []
+        if hasattr(self, "container") and self.container:
+            targets.append(self.container)
+        if hasattr(self, "btn") and self.btn:
+            targets.append(self.btn)
+        return targets
+
+    def __init__(self, prev_scr=None) -> None:
         if not hasattr(self, "_init"):
             self._init = True
         else:
             return
         from binascii import hexlify
 
+        super().__init__(
+            prev_scr,
+            title=_(i18n_keys.TITLE__SECURITY_CHECK),
+            nav_back=True,
+        )
         firmware_version = device.get_firmware_version()
         firmware_build_id = utils.BUILD_ID[-7:].decode()
         firmware_hash_str = hexlify(utils.onekey_firmware_hash()).decode()[:7]
@@ -4386,14 +4399,6 @@ class DeviceAuthScreen(FullSizeWindow):
         boot_build_id = utils.boot_build_id()
         boot_hash_str = hexlify(utils.boot_hash()).decode()[:7]
         boot_version_str = f"{boot_version} ({boot_build_id}-{boot_hash_str})"
-
-        super().__init__(
-            title=_(i18n_keys.TITLE__SECURITY_CHECK),
-            subtitle=None,
-            confirm_text=_(i18n_keys.ACTION_VERIFY_NOW),
-        )
-        self.add_nav_back()
-        self.content_area.set_style_max_height(574, 0)
         self.container = ContainerFlexCol(self.content_area, self.title, padding_row=0)
         self.container.add_dummy()
 
@@ -4421,36 +4426,33 @@ class DeviceAuthScreen(FullSizeWindow):
             url=f"https://github.com/OneKeyHQ/firmware-pro/releases/tag/bootloader-v{boot_version}",
         )
         self.container.add_dummy()
-        self.add_event_cb(self.on_nav_back, lv.EVENT.GESTURE, None)
+        self.btn = NormalButton(self, _(i18n_keys.ACTION_VERIFY_NOW))
+        self.btn.enable(lv_colors.ONEKEY_GREEN, text_color=lv_colors.BLACK)
+        self.load_screen(self)
+        gc.collect()
 
-    def on_nav_back(self, event_obj):
-        code = event_obj.code
-        if code == lv.EVENT.GESTURE:
-            _dir = lv.indev_get_act().get_gesture_dir()
-            if _dir == lv.DIR.RIGHT:
-                lv.event_send(self.nav_back.nav_btn, lv.EVENT.CLICKED, None)
-
-    def eventhandler(self, event_obj):
-        code = event_obj.code
-        target = event_obj.get_target()
-        if code == lv.EVENT.CLICKED:
-            if utils.lcd_resume():
-                return
-            if target == self.nav_back.nav_btn:
-                self.destroy(50)
-            elif target == self.btn_yes:
-                DeviceAuthTutorial()
+    def on_click(self, btn):
+        if utils.lcd_resume():
+            return
+        if btn == self.btn:
+            DeviceAuthTutorial(self)
 
 
-class DeviceAuthTutorial(FullSizeWindow):
-    def __init__(self) -> None:
+class DeviceAuthTutorial(AnimScreen):
+    def collect_animation_targets(self) -> list:
+        targets = []
+        if hasattr(self, "container") and self.container:
+            targets.append(self.container)
+        if hasattr(self, "warning_banner") and self.warning_banner:
+            targets.append(self.warning_banner)
+        return targets
+
+    def __init__(self, prev_scr=None) -> None:
         super().__init__(
+            prev_scr,
             title=_(i18n_keys.TITLE__VEIRIFY_DEVICE),
-            subtitle=None,
-            anim_dir=0,
+            nav_back=True,
         )
-        self.add_nav_back()
-        self.content_area.set_style_max_height(684, 0)
         from trezor.lvglui.scrs.components.listitem import CardHeader, DisplayItem
 
         self.container = ContainerFlexCol(self.content_area, self.title, pos=(0, 40))
@@ -4495,23 +4497,8 @@ class DeviceAuthTutorial(FullSizeWindow):
         )
         self.warning_banner.set_style_text_color(lv_colors.LIGHT_GRAY, 0)
         self.warning_banner.align_to(self.container, lv.ALIGN.OUT_BOTTOM_MID, 0, 8)
-        self.add_event_cb(self.on_nav_back, lv.EVENT.GESTURE, None)
-
-    def on_nav_back(self, event_obj):
-        code = event_obj.code
-        if code == lv.EVENT.GESTURE:
-            _dir = lv.indev_get_act().get_gesture_dir()
-            if _dir == lv.DIR.RIGHT:
-                lv.event_send(self.nav_back.nav_btn, lv.EVENT.CLICKED, None)
-
-    def eventhandler(self, event_obj):
-        code = event_obj.code
-        target = event_obj.get_target()
-        if code == lv.EVENT.CLICKED:
-            if utils.lcd_resume():
-                return
-            if target == self.nav_back.nav_btn:
-                self.destroy(50)
+        self.load_screen(self)
+        gc.collect()
 
 
 class UsbLockSetting(AnimScreen):
