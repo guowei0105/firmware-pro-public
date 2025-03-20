@@ -1,4 +1,4 @@
-from apps.ur_registry.registry_types import UUID
+from apps.ur_registry.registry_types import ETH_SIGNATURE, UUID
 from apps.ur_registry.ur_py.ur.cbor_lite import CBORDecoder, CBOREncoder
 from apps.ur_registry.ur_py.ur.ur import UR
 
@@ -15,11 +15,11 @@ class EthSignature:
 
     @staticmethod
     def get_registry_type():
-        return "eth-signature"
+        return ETH_SIGNATURE.get_registry_type()
 
     @staticmethod
     def get_tag():
-        return 402
+        return ETH_SIGNATURE.get_tag()
 
     @staticmethod
     def new(request_id, signature, origin):

@@ -7,6 +7,7 @@ NETWORK = 2
 # CoinType
 Bitcoin = 0
 Ethereum = 60
+Solana = 501
 
 # Network
 MainNet = 0
@@ -37,6 +38,8 @@ class CryptoCoinInfo:
             self.coin_type = Bitcoin
         elif coin_type == 60:
             self.coin_type = Ethereum
+        elif coin_type == 501:
+            self.coin_type = Solana
         else:
             self.coin_type = Bitcoin
 

@@ -725,6 +725,20 @@ apps.near.sign_tx
 import apps.near.sign_tx
 apps.near.transaction
 import apps.near.transaction
+apps.neo
+import apps.neo
+apps.neo.get_address
+import apps.neo.get_address
+apps.neo.helpers
+import apps.neo.helpers
+apps.neo.layout
+import apps.neo.layout
+apps.neo.sign_tx
+import apps.neo.sign_tx
+apps.neo.tokens
+import apps.neo.tokens
+apps.neo.transaction
+import apps.neo.transaction
 apps.nervos
 import apps.nervos
 apps.nervos.get_address
@@ -967,6 +981,20 @@ apps.ur_registry.chains.hardware_requests.hardware_call
 import apps.ur_registry.chains.hardware_requests.hardware_call
 apps.ur_registry.chains.hardware_requests.verify_address
 import apps.ur_registry.chains.hardware_requests.verify_address
+apps.ur_registry.chains.requests_handler
+import apps.ur_registry.chains.requests_handler
+apps.ur_registry.chains.solana
+import apps.ur_registry.chains.solana
+apps.ur_registry.chains.solana.sol_offchain_message
+import apps.ur_registry.chains.solana.sol_offchain_message
+apps.ur_registry.chains.solana.sol_sign_request
+import apps.ur_registry.chains.solana.sol_sign_request
+apps.ur_registry.chains.solana.sol_signature
+import apps.ur_registry.chains.solana.sol_signature
+apps.ur_registry.chains.solana.sol_transaction
+import apps.ur_registry.chains.solana.sol_transaction
+apps.ur_registry.chains.solana.sol_unsafe_message
+import apps.ur_registry.chains.solana.sol_unsafe_message
 apps.ur_registry.crypto_coin_info
 import apps.ur_registry.crypto_coin_info
 apps.ur_registry.crypto_hd_key
@@ -1053,6 +1081,8 @@ if not utils.BITCOIN_ONLY:
     import trezor.enums.EthereumDataTypeOneKey
     trezor.enums.EthereumDefinitionType
     import trezor.enums.EthereumDefinitionType
+    trezor.enums.EthereumGnosisSafeTxOperation
+    import trezor.enums.EthereumGnosisSafeTxOperation
     trezor.enums.MoneroNetworkType
     import trezor.enums.MoneroNetworkType
     trezor.enums.NEMImportanceTransferMode
@@ -1199,6 +1229,8 @@ if not utils.BITCOIN_ONLY:
     import apps.ethereum.onekey.keychain
     apps.ethereum.onekey.sign_message
     import apps.ethereum.onekey.sign_message
+    apps.ethereum.onekey.sign_safe_tx
+    import apps.ethereum.onekey.sign_safe_tx
     apps.ethereum.onekey.sign_tx
     import apps.ethereum.onekey.sign_tx
     apps.ethereum.onekey.sign_tx_eip1559

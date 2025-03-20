@@ -83,6 +83,9 @@ __all__ = (
     "confirm_ton_connect",
     "confirm_ton_signverify",
     "confirm_unknown_token_transfer",
+    "confirm_neo_token_transfer",
+    "confirm_neo_vote",
+    "confirm_safe_tx",
 )
 
 
@@ -1367,7 +1370,61 @@ async def confirm_sol_message(
     )
 
 
-async def confirm_final(ctx: wire.Context, chain_name: str) -> None:
+async def confirm_neo_token_transfer(
+    ctx: wire.GenericContext,
+    from_addr: str,
+    to_addr: str,
+    fee: str,
+    amount: str,
+    network_magic: int | None,
+) -> None:
+    from trezor.strings import strip_amount
+
+    striped_amount, striped = strip_amount(amount)
+    title = _(i18n_keys.TITLE__SEND_MULTILINE).format(striped_amount)
+    from trezor.lvglui.scrs.template import NeoTokenTransfer
+
+    screen = NeoTokenTransfer(
+        title,
+        from_addr=from_addr,
+        to_addr=to_addr,
+        fee=fee,
+        amount=amount,
+        primary_color=ctx.primary_color,
+        icon_path=ctx.icon_path,
+        striped=striped,
+        network_magic=network_magic,
+    )
+    await raise_if_cancelled(
+        interact(ctx, screen, "neo_token_transfer", ButtonRequestType.ProtectCall)
+    )
+
+
+async def confirm_neo_vote(
+    ctx: wire.GenericContext,
+    from_address: str,
+    vote_to: str,
+    is_remove_vote: bool,
+    network_magic: int | None = None,
+) -> None:
+    from trezor.lvglui.scrs.template import NeoVote
+
+    screen = NeoVote(
+        from_address,
+        vote_to,
+        is_remove_vote,
+        primary_color=ctx.primary_color,
+        icon_path=ctx.icon_path,
+        network_magic=network_magic,
+    )
+    await raise_if_cancelled(
+        interact(ctx, screen, "neo_vote", ButtonRequestType.ProtectCall)
+    )
+
+
+async def confirm_final(
+    ctx: wire.Context, chain_name: str, hold_level: int = 0
+) -> None:
     from trezor.ui.layouts.lvgl import confirm_action
 
     await confirm_action(
@@ -1381,6 +1438,7 @@ async def confirm_final(ctx: wire.Context, chain_name: str) -> None:
         hold=True,
         anim_dir=0,
         icon=ctx.icon_path,
+        hold_level=hold_level,
     )
     await show_popup(
         _(i18n_keys.TITLE__TRANSACTION_SIGNED),
@@ -2366,3 +2424,41 @@ async def confirm_near_transfer(
         await raise_if_cancelled(
             interact(ctx, screen, "near_transfer", ButtonRequestType.ProtectCall)
         )
+
+
+async def confirm_safe_tx(
+    ctx: wire.GenericContext,
+    from_address: str,
+    to_addr: str,
+    value: str,
+    call_data: bytes | None,
+    operation: int,
+    safe_tx_gas: int,
+    base_gas: int,
+    gas_price: str,
+    gas_token: str,
+    refund_receiver: str,
+    nonce: int,
+    verifying_contract: str,
+) -> None:
+    from trezor.lvglui.scrs.template import GnosisSafeTxDetails
+
+    screen = GnosisSafeTxDetails(
+        from_address,
+        to_addr,
+        value,
+        call_data,
+        operation,
+        safe_tx_gas,
+        base_gas,
+        gas_price,
+        gas_token,
+        refund_receiver,
+        nonce,
+        verifying_contract,
+        ctx.icon_path,
+        ctx.primary_color,
+    )
+    await raise_if_cancelled(
+        interact(ctx, screen, "confirm_safe_tx", ButtonRequestType.ProtectCall)
+    )

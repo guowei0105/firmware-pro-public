@@ -174,6 +174,8 @@ class MessageType(IntEnum):
     EthereumTypedDataValueAckOneKey = 20115
     EthereumTypedDataSignatureOneKey = 20116
     EthereumSignTypedHashOneKey = 20117
+    EthereumGnosisSafeTxRequest = 20118
+    EthereumGnosisSafeSignature = 20119
     NEMGetAddress = 67
     NEMAddress = 68
     NEMSignTx = 69
@@ -420,6 +422,10 @@ class MessageType(IntEnum):
     BenfenMessageSignature = 12206
     BenfenTxRequest = 12207
     BenfenTxAck = 12208
+    NeoGetAddress = 12301
+    NeoAddress = 12302
+    NeoSignTx = 12303
+    NeoSignedTx = 12304
     DeviceBackToBoot = 903
     RebootToBoardloader = 904
     DeviceInfoSettings = 10001
@@ -714,6 +720,11 @@ class DebugButton(IntEnum):
 class EthereumDefinitionType(IntEnum):
     NETWORK = 0
     TOKEN = 1
+
+
+class EthereumGnosisSafeTxOperation(IntEnum):
+    CALL = 0
+    DELEGATE_CALL = 1
 
 
 class EthereumDataTypeOneKey(IntEnum):
@@ -6698,6 +6709,70 @@ class EthereumTypedDataValueAckOneKey(protobuf.MessageType):
         self.value = value
 
 
+class EthereumGnosisSafeTxRequest(protobuf.MessageType):
+    MESSAGE_WIRE_TYPE = 20118
+    FIELDS = {
+        1: protobuf.Field("address_n", "uint32", repeated=True, required=False),
+        2: protobuf.Field("to", "string", repeated=False, required=True),
+        3: protobuf.Field("value", "bytes", repeated=False, required=True),
+        4: protobuf.Field("data", "bytes", repeated=False, required=False),
+        5: protobuf.Field("operation", "EthereumGnosisSafeTxOperation", repeated=False, required=True),
+        6: protobuf.Field("safeTxGas", "bytes", repeated=False, required=True),
+        7: protobuf.Field("baseGas", "bytes", repeated=False, required=True),
+        8: protobuf.Field("gasPrice", "bytes", repeated=False, required=True),
+        9: protobuf.Field("gasToken", "string", repeated=False, required=True),
+        10: protobuf.Field("refundReceiver", "string", repeated=False, required=True),
+        11: protobuf.Field("nonce", "bytes", repeated=False, required=True),
+        12: protobuf.Field("chain_id", "uint64", repeated=False, required=True),
+        13: protobuf.Field("verifyingContract", "string", repeated=False, required=True),
+    }
+
+    def __init__(
+        self,
+        *,
+        to: "str",
+        value: "bytes",
+        operation: "EthereumGnosisSafeTxOperation",
+        safeTxGas: "bytes",
+        baseGas: "bytes",
+        gasPrice: "bytes",
+        gasToken: "str",
+        refundReceiver: "str",
+        nonce: "bytes",
+        chain_id: "int",
+        verifyingContract: "str",
+        address_n: Optional[Sequence["int"]] = None,
+        data: Optional["bytes"] = None,
+    ) -> None:
+        self.address_n: Sequence["int"] = address_n if address_n is not None else []
+        self.to = to
+        self.value = value
+        self.operation = operation
+        self.safeTxGas = safeTxGas
+        self.baseGas = baseGas
+        self.gasPrice = gasPrice
+        self.gasToken = gasToken
+        self.refundReceiver = refundReceiver
+        self.nonce = nonce
+        self.chain_id = chain_id
+        self.verifyingContract = verifyingContract
+        self.data = data
+
+
+class EthereumGnosisSafeSignature(protobuf.MessageType):
+    MESSAGE_WIRE_TYPE = 20119
+    FIELDS = {
+        1: protobuf.Field("signature", "bytes", repeated=False, required=True),
+    }
+
+    def __init__(
+        self,
+        *,
+        signature: "bytes",
+    ) -> None:
+        self.signature = signature
+
+
 class EthereumStructMemberOneKey(protobuf.MessageType):
     MESSAGE_WIRE_TYPE = None
     FIELDS = {
@@ -9085,6 +9160,77 @@ class NEMCosignatoryModification(protobuf.MessageType):
     ) -> None:
         self.type = type
         self.public_key = public_key
+
+
+class NeoGetAddress(protobuf.MessageType):
+    MESSAGE_WIRE_TYPE = 12301
+    FIELDS = {
+        1: protobuf.Field("address_n", "uint32", repeated=True, required=False),
+        2: protobuf.Field("show_display", "bool", repeated=False, required=False),
+    }
+
+    def __init__(
+        self,
+        *,
+        address_n: Optional[Sequence["int"]] = None,
+        show_display: Optional["bool"] = None,
+    ) -> None:
+        self.address_n: Sequence["int"] = address_n if address_n is not None else []
+        self.show_display = show_display
+
+
+class NeoAddress(protobuf.MessageType):
+    MESSAGE_WIRE_TYPE = 12302
+    FIELDS = {
+        1: protobuf.Field("address", "string", repeated=False, required=False),
+        2: protobuf.Field("public_key", "bytes", repeated=False, required=False),
+    }
+
+    def __init__(
+        self,
+        *,
+        address: Optional["str"] = None,
+        public_key: Optional["bytes"] = None,
+    ) -> None:
+        self.address = address
+        self.public_key = public_key
+
+
+class NeoSignTx(protobuf.MessageType):
+    MESSAGE_WIRE_TYPE = 12303
+    FIELDS = {
+        1: protobuf.Field("address_n", "uint32", repeated=True, required=False),
+        2: protobuf.Field("raw_tx", "bytes", repeated=False, required=True),
+        3: protobuf.Field("network_magic", "uint32", repeated=False, required=False),
+    }
+
+    def __init__(
+        self,
+        *,
+        raw_tx: "bytes",
+        address_n: Optional[Sequence["int"]] = None,
+        network_magic: Optional["int"] = 860833102,
+    ) -> None:
+        self.address_n: Sequence["int"] = address_n if address_n is not None else []
+        self.raw_tx = raw_tx
+        self.network_magic = network_magic
+
+
+class NeoSignedTx(protobuf.MessageType):
+    MESSAGE_WIRE_TYPE = 12304
+    FIELDS = {
+        1: protobuf.Field("public_key", "bytes", repeated=False, required=True),
+        2: protobuf.Field("signature", "bytes", repeated=False, required=True),
+    }
+
+    def __init__(
+        self,
+        *,
+        public_key: "bytes",
+        signature: "bytes",
+    ) -> None:
+        self.public_key = public_key
+        self.signature = signature
 
 
 class NervosGetAddress(protobuf.MessageType):

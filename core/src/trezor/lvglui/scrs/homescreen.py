@@ -598,12 +598,21 @@ class MainScreen(Screen):
             self.passkey_desc.set_text(_(i18n_keys.FIDO_FIDO_KEYS_LABEL))
 
 
-class PasskeysManager(Screen):
+class PasskeysManager(AnimScreen):
     def __init__(self, prev_scr=None):
         if not hasattr(self, "_init"):
             self._init = True
         else:
             if not self.is_visible():
+                if hasattr(self, "banner") and self.banner:
+                    self.banner.delete()
+                    del self.banner
+                if hasattr(self, "learn_more") and self.learn_more:
+                    self.learn_more.delete()
+                    del self.learn_more
+                if hasattr(self, "empty_tips") and self.empty_tips:
+                    self.empty_tips.delete()
+                    del self.empty_tips
                 if hasattr(self, "container") and self.container:
                     self.container.delete()
                     del self.container
@@ -611,11 +620,14 @@ class PasskeysManager(Screen):
                 lv.scr_load(self)
             return
         super().__init__(
-            prev_scr=prev_scr, title=_(i18n_keys.FIDO_FIDO_KEYS_LABEL), nav_back=True
+            prev_scr=prev_scr,
+            title=_(i18n_keys.FIDO_FIDO_KEYS_LABEL),
+            nav_back=True,
+            rti_path="A:/res/go2settings.png",
         )
 
         self.fresh_show()
-        self.add_event_cb(self.on_click, lv.EVENT.CLICKED, None)
+        self.add_event_cb(self.on_click_event, lv.EVENT.CLICKED, None)
         # self.add_event_cb(self.on_scroll, lv.EVENT.SCROLL_BEGIN, None)
 
     async def list_credential(self):
@@ -663,6 +675,14 @@ class PasskeysManager(Screen):
             self.credentials = get_registered_credentials()
             self.listed_credentials = []
 
+        fido_enabled = device.is_fido_enabled()
+        if not hasattr(self, "banner") and not fido_enabled:
+            self.banner = Banner(
+                self.content_area,
+                LEVEL.HIGHLIGHT,
+                _(i18n_keys.FIDO_DISABLED_INFO_TEXT),
+            )
+            self.banner.align(lv.ALIGN.TOP_MID, 0, 116)
         if self.count == 0:
             self.empty_tips = lv.label(self.content_area)
             self.empty_tips.set_text(_(i18n_keys.FIDO_LIST_EMPTY_TEXT))
@@ -674,11 +694,15 @@ class PasskeysManager(Screen):
                 0,
             )
             self.empty_tips.align(lv.ALIGN.TOP_MID, 0, 432)
-            self.learn_more = NormalButton(self, text=_(i18n_keys.ACTION__LEARN_MORE))
+            if fido_enabled:
+                self.learn_more = NormalButton(
+                    self, text=_(i18n_keys.ACTION__LEARN_MORE)
+                )
         else:
             if not hasattr(self, "container"):
+                algin_base = self.title if fido_enabled else self.banner
                 self.container = ContainerFlexCol(
-                    self.content_area, self.title, padding_row=2
+                    self.content_area, algin_base, padding_row=2
                 )
                 workflow.spawn(self.list_credential())
 
@@ -704,7 +728,7 @@ class PasskeysManager(Screen):
         self.fresh_show()
         self.auto_adjust_scroll(item_height)
 
-    def on_click(self, event_obj):
+    def on_click_event(self, event_obj):
         code = event_obj.code
         target = event_obj.get_target()
         if code == lv.EVENT.CLICKED:
@@ -724,6 +748,8 @@ class PasskeysManager(Screen):
                                 on_remove=lambda index=i: self.on_remove(index),
                             )
                         )
+            elif hasattr(self, "rti_btn") and target == self.rti_btn:
+                FidoKeysSetting(self)
 
     # def on_scroll(self, event_obj):
     #     code = event_obj.code
@@ -760,6 +786,8 @@ class ShowAddress(AnimScreen):
                 self.init_ui()
 
         else:
+            if not self.is_visible():
+                self._load_scr(self)
             # self.container.delete()
             # self.init_ui()
             gc.collect()
@@ -1314,8 +1342,10 @@ class NftGallery(Screen):
             }
             super().__init__(**kwargs)
         else:
-            self.overview.delete()
-            self.container.delete()
+            if hasattr(self, "overview") and self.overview:
+                self.overview.delete()
+            if hasattr(self, "container") and self.container:
+                self.container.delete()
 
         nft_counts = 0
         file_name_list = []
@@ -1571,6 +1601,8 @@ class SettingsScreen(AnimScreen):
         else:
             self.from_appdrawer = False
             self.refresh_text()
+            if not self.is_visible():
+                self._load_scr(self)
             return
         # if __debug__:
         #     self.add_style(StyleWrapper().bg_color(lv_colors.ONEKEY_GREEN_1), 0)
@@ -1590,11 +1622,11 @@ class SettingsScreen(AnimScreen):
             _(i18n_keys.ITEM__AIR_GAP_MODE),
             left_img_src="A:/res/connect.png",
         )
-        self.home_scr = ListItemBtn(
-            self.container,
-            _(i18n_keys.ITEM__HOMESCREEN),
-            left_img_src="A:/res/homescreen.png",
-        )
+        # self.home_scr = ListItemBtn(
+        #     self.container,
+        #     _(i18n_keys.ITEM__HOMESCREEN),
+        #     left_img_src="A:/res/homescreen.png",
+        # )
         self.security = ListItemBtn(
             self.container,
             _(i18n_keys.ITEM__SECURITY),
@@ -1602,6 +1634,11 @@ class SettingsScreen(AnimScreen):
         )
         self.wallet = ListItemBtn(
             self.container, _(i18n_keys.ITEM__WALLET), left_img_src="A:/res/wallet.png"
+        )
+        self.fido_keys = ListItemBtn(
+            self.container,
+            _(i18n_keys.FIDO_FIDO_KEYS_LABEL),
+            left_img_src="A:/res/fido-keys.png",
         )
         self.about = ListItemBtn(
             self.container,
@@ -1616,9 +1653,10 @@ class SettingsScreen(AnimScreen):
         self.general.label_left.set_text(_(i18n_keys.ITEM__GENERAL))
         # self.connect.label_left.set_text(_(i18n_keys.ITEM__CONNECT))
         self.air_gap.label_left.set_text(_(i18n_keys.ITEM__AIR_GAP_MODE))
-        self.home_scr.label_left.set_text(_(i18n_keys.ITEM__HOMESCREEN))
+        # self.home_scr.label_left.set_text(_(i18n_keys.ITEM__HOMESCREEN))
         self.security.label_left.set_text(_(i18n_keys.ITEM__SECURITY))
         self.wallet.label_left.set_text(_(i18n_keys.ITEM__WALLET))
+        self.fido_keys.label_left.set_text(_(i18n_keys.FIDO_FIDO_KEYS_LABEL))
         self.about.label_left.set_text(_(i18n_keys.ITEM__ABOUT_DEVICE))
 
     def on_click(self, event_obj):
@@ -1631,8 +1669,8 @@ class SettingsScreen(AnimScreen):
                 GeneralScreen(self)
             # elif target == self.connect:
             #     ConnectSetting(self)
-            elif target == self.home_scr:
-                HomeScreenSetting(self)
+            # elif target == self.home_scr:
+            #     HomeScreenSetting(self)
             elif target == self.security:
                 SecurityScreen(self)
             elif target == self.wallet:
@@ -1643,6 +1681,8 @@ class SettingsScreen(AnimScreen):
             #     Go2UpdateMode(self)
             elif target == self.air_gap:
                 AirGapSetting(self)
+            elif target == self.fido_keys:
+                FidoKeysSetting(self)
 
     def _load_scr(self, scr: "Screen", back: bool = False) -> None:
         if self.from_appdrawer:
@@ -1664,6 +1704,8 @@ class ConnectWalletWays(Screen):
             }
             super().__init__(**kwargs)
         else:
+            if not self.is_visible():
+                self._load_scr(self)
             return
         airgap_enabled = device.is_airgap_mode()
         if airgap_enabled:
@@ -1762,7 +1804,7 @@ class ConnectWalletGuide(Screen):
         self.okx = ListItemBtn(
             self.container,
             _(i18n_keys.ITEM__OKX_WALLET),
-            "BTC·ETH·TRON·SOL·NEAR ...",
+            _(i18n_keys.CONTENT__BTC_AND_EVM_COMPATIBLE_NETWORKS),
             left_img_src="A:/res/okx-logo-48.png",
         )
         self.okx.text_layout_vertical(pad_top=17, pad_ver=20)
@@ -1897,7 +1939,7 @@ class WalletList(Screen):
         self.onekey = ListItemBtn(
             self.container,
             _(i18n_keys.ITEM__ONEKEY_WALLET),
-            _(i18n_keys.CONTENT__BTC_AND_EVM_COMPATIBLE_NETWORKS),
+            _(i18n_keys.CONTENT__BTC_SOL_ETH_N_EVM_NETWORKS),
             left_img_src="A:/res/ok-logo-48.png",
         )
         self.onekey.text_layout_vertical()
@@ -2005,6 +2047,8 @@ class BackupWallet(Screen):
             }
             super().__init__(**kwargs)
         else:
+            if not self.is_visible():
+                self._load_scr(self)
             return
 
         self.container = ContainerFlexCol(
@@ -2207,6 +2251,8 @@ class ScanScreen(Screen):
             }
             super().__init__(**kwargs)
         else:
+            if not self.is_visible():
+                self._load_scr(self)
             return
 
         self.nav_back.align(lv.ALIGN.TOP_RIGHT, 0, 44)
@@ -2800,7 +2846,10 @@ class GeneralScreen(AnimScreen):
             self.refresh_text()
             return
         super().__init__(
-            prev_scr=prev_scr, title=_(i18n_keys.TITLE__GENERAL), nav_back=True
+            prev_scr=prev_scr,
+            title=_(i18n_keys.TITLE__GENERAL),
+            nav_back=True,
+            rti_path="A:/res/poweroff-white.png",
         )
 
         self.container = ContainerFlexCol(self.content_area, self.title, padding_row=2)
@@ -2813,59 +2862,60 @@ class GeneralScreen(AnimScreen):
             _(i18n_keys.ITEM__BRIGHTNESS),
             brightness2_percent_str(device.get_brightness()),
         )
+        self.home_scr = ListItemBtn(self.container, _(i18n_keys.ITEM__HOMESCREEN))
         self.animation = ListItemBtn(self.container, _(i18n_keys.ITEM__ANIMATIONS))
         self.tap_awake = ListItemBtn(self.container, _(i18n_keys.ITEM__LOCK_SCREEN))
         self.autolock_and_shutdown = ListItemBtn(
             self.container,
             _(i18n_keys.ITEM__AUTO_LOCK_AND_SHUTDOWN),
         )
-        self.power = ListItemBtn(
-            self.content_area,
-            _(i18n_keys.ITEM__POWER_OFF),
-            left_img_src="A:/res/poweroff.png",
-            has_next=False,
-        )
-        self.power.label_left.set_style_text_color(lv_colors.ONEKEY_RED_1, 0)
-        self.power.align_to(self.container, lv.ALIGN.OUT_BOTTOM_MID, 0, 12)
-        self.power.set_style_radius(40, 0)
-        self.container.add_event_cb(self.on_click, lv.EVENT.CLICKED, None)
-        self.content_area.add_event_cb(self.on_click, lv.EVENT.CLICKED, None)
+        # self.power = ListItemBtn(
+        #     self.content_area,
+        #     _(i18n_keys.ITEM__POWER_OFF),
+        #     left_img_src="A:/res/poweroff.png",
+        #     has_next=False,
+        # )
+        # self.power.label_left.set_style_text_color(lv_colors.ONEKEY_RED_1, 0)
+        # self.power.align_to(self.container, lv.ALIGN.OUT_BOTTOM_MID, 0, 12)
+        # self.power.set_style_radius(40, 0)
+        # self.container.add_event_cb(self.on_click, lv.EVENT.CLICKED, None)
+        self.content_area.add_event_cb(self.on_click_event, lv.EVENT.CLICKED, None)
         self.load_screen(self)
-        gc.collect()
 
     def refresh_text(self):
         self.title.set_text(_(i18n_keys.TITLE__GENERAL))
         self.language.label_left.set_text(_(i18n_keys.ITEM__LANGUAGE))
         self.backlight.label_left.set_text(_(i18n_keys.ITEM__BRIGHTNESS))
+        self.home_scr.label_left.set_text(_(i18n_keys.ITEM__HOMESCREEN))
         self.animation.label_left.set_text(_(i18n_keys.ITEM__ANIMATIONS))
         self.tap_awake.label_left.set_text(_(i18n_keys.ITEM__LOCK_SCREEN))
         self.autolock_and_shutdown.label_left.set_text(
             _(i18n_keys.ITEM__AUTO_LOCK_AND_SHUTDOWN)
         )
-        self.power.label_left.set_text(_(i18n_keys.ITEM__POWER_OFF))
+        # self.power.label_left.set_text(_(i18n_keys.ITEM__POWER_OFF))
         self.container.update_layout()
-        self.power.align_to(self.container, lv.ALIGN.OUT_BOTTOM_MID, 0, 12)
+        # self.power.align_to(self.container, lv.ALIGN.OUT_BOTTOM_MID, 0, 12)
 
-    def on_click(self, event_obj):
-        code = event_obj.code
+    def on_click_event(self, event_obj):
         target = event_obj.get_target()
-        if code == lv.EVENT.CLICKED:
-            if utils.lcd_resume():
-                return
-            if target == self.language:
-                LanguageSetting(self)
-            elif target == self.backlight:
-                BacklightSetting(self)
-            elif target == self.animation:
-                Animations(self)
-            elif target == self.tap_awake:
-                TapAwakeSetting(self)
-            elif target == self.autolock_and_shutdown:
-                Autolock_and_ShutingDown(self)
-            elif target == self.power:
-                PowerOff()
-            else:
-                pass
+        if target == self.language:
+            LanguageSetting(self)
+        elif target == self.backlight:
+            BacklightSetting(self)
+        elif target == self.animation:
+            Animations(self)
+        elif target == self.tap_awake:
+            TapAwakeSetting(self)
+        elif target == self.autolock_and_shutdown:
+            Autolock_and_ShutingDown(self)
+        # elif target == self.power:
+        #     PowerOff()
+        elif target == self.home_scr:
+            HomeScreenSetting(self)
+        elif target == self.rti_btn:
+            PowerOff()
+        else:
+            pass
 
 
 class Animations(AnimScreen):
@@ -2988,6 +3038,9 @@ class Autolock_and_ShutingDown(AnimScreen):
                 if value == "1"
                 else i18n_keys.OPTION__STR_HOURS
             ).format(value)
+        elif auto_lock_time < 1:
+            value = str(time_ms // 1000).split(".")[0]
+            text = _(i18n_keys.OPTION__STR_SECONDS).format(value)
         else:
             value = str(auto_lock_time).split(".")[0]
             text = _(
@@ -3032,7 +3085,7 @@ class AutoLockSetting(AnimScreen):
         )
 
         self.container = ContainerFlexCol(self.content_area, self.title, padding_row=2)
-        self.setting_items = [1, 2, 5, 10, 30, "Never", None]
+        self.setting_items = [0.5, 1, 2, 5, 10, 30, "Never", None]
         has_custom = True
         self.checked_index = 0
         self.btns: [ListItemBtn] = [None] * (len(self.setting_items))
@@ -3040,11 +3093,14 @@ class AutoLockSetting(AnimScreen):
             if item is None:
                 break
             if not item == "Never":  # last item
-                item = _(
-                    i18n_keys.ITEM__STATUS__STR_MINUTES
-                    if item != 1
-                    else i18n_keys.OPTION__STR_MINUTE
-                ).format(item)
+                if item == 0.5:
+                    item = _(i18n_keys.OPTION__STR_SECONDS).format(int(item * 60))
+                else:
+                    item = _(
+                        i18n_keys.ITEM__STATUS__STR_MINUTES
+                        if item != 1
+                        else i18n_keys.OPTION__STR_MINUTE
+                    ).format(item)
             else:
                 item = _(i18n_keys.ITEM__STATUS__NEVER)
             self.btns[index] = ListItemBtn(
@@ -3118,13 +3174,13 @@ class AutoLockSetting(AnimScreen):
                         item.set_checked()
                         self.btns[self.checked_index].set_uncheck()
                         self.checked_index = index
-                        if index == 5:
+                        if index == 6:
                             auto_lock_time = device.AUTOLOCK_DELAY_MAXIMUM
-                        elif index == 6:
+                        elif index == 7:
                             auto_lock_time = self.custom
                         else:
                             auto_lock_time = self.setting_items[index] * 60 * 1000
-                        device.set_autolock_delay_ms(auto_lock_time)
+                        device.set_autolock_delay_ms(int(auto_lock_time))
                         Autolock_and_ShutingDown.cur_auto_lock_ms = auto_lock_time
                         self.fresh_tips()
                         from apps.base import reload_settings_from_storage
@@ -4445,10 +4501,8 @@ class DeviceAuthScreen(AnimScreen):
         self.load_screen(self)
         gc.collect()
 
-    def on_click(self, btn):
-        if utils.lcd_resume():
-            return
-        if btn == self.btn:
+    def on_click(self, target):
+        if target == self.btn:
             DeviceAuthTutorial(self)
 
 
@@ -4942,6 +4996,88 @@ class WalletScreen(AnimScreen):
             self.trezor_mode.clear_state()
 
 
+class FidoKeysSetting(AnimScreen):
+    def collect_animation_targets(self) -> list:
+        targets = []
+        if hasattr(self, "container") and self.container:
+            targets.append(self.container)
+        if hasattr(self, "description") and self.description:
+            targets.append(self.description)
+        return targets
+
+    def __init__(self, prev_scr=None):
+        if not hasattr(self, "_init"):
+            self._init = True
+        else:
+            return
+        super().__init__(
+            prev_scr=prev_scr, title=_(i18n_keys.FIDO_FIDO_KEYS_LABEL), nav_back=True
+        )
+
+        self.container = ContainerFlexCol(self.content_area, self.title)
+        self.fido = ListItemBtnWithSwitch(
+            self.container, _(i18n_keys.SECURITY__ENABLE_FIDO_KEYS)
+        )
+        self.description = lv.label(self.content_area)
+        self.description.set_size(456, lv.SIZE.CONTENT)
+        self.description.set_long_mode(lv.label.LONG.WRAP)
+        self.description.set_style_text_color(lv_colors.ONEKEY_GRAY, lv.STATE.DEFAULT)
+        self.description.set_style_text_font(font_GeistRegular26, lv.STATE.DEFAULT)
+        self.description.set_style_text_line_space(3, 0)
+        self.description.align_to(self.container, lv.ALIGN.OUT_BOTTOM_LEFT, 8, 16)
+
+        self.reset_state()
+        self.container.add_event_cb(self.on_value_changed, lv.EVENT.VALUE_CHANGED, None)
+        self.load_screen(self)
+
+    def reset_state(self):
+        if device.is_fido_enabled():
+            self.fido.add_state()
+            self.description.set_text(_(i18n_keys.SECURITY__ENABLE_FIDO_KEYS_DESC))
+        else:
+            self.fido.clear_state()
+            self.description.set_text(_(i18n_keys.FIDO_DISABLED_INFO_TEXT))
+
+    def on_value_changed(self, event_obj):
+        code = event_obj.code
+        target = event_obj.get_target()
+        if code == lv.EVENT.VALUE_CHANGED:
+            if target == self.fido.switch:
+                FidoKeysToggle(self, not device.is_fido_enabled())
+
+
+class FidoKeysToggle(FullSizeWindow):
+    def __init__(self, callback_obj, enable=False):
+        super().__init__(
+            title=_(
+                i18n_keys.SECURITY__ENABLE_FIDO_KEYS
+                if enable
+                else i18n_keys.SECURITY__DISABLE_FIDO_KEYS
+            ),
+            subtitle=_(i18n_keys.SUBTITLE__RESTORE_TREZOR_COMPATIBILITY),
+            confirm_text=_(i18n_keys.BUTTON__RESTART),
+            cancel_text=_(i18n_keys.BUTTON__CANCEL),
+        )
+        self.enable = enable
+        self.callback_obj = callback_obj
+
+    def eventhandler(self, event_obj):
+        code = event_obj.code
+        target = event_obj.get_target()
+        if code == lv.EVENT.CLICKED:
+            if target == self.btn_no:
+                self.callback_obj.reset_state()
+                self.destroy(200)
+            elif target == self.btn_yes:
+
+                async def restart_delay():
+                    await loop.sleep(1000)
+                    utils.reset()
+
+                device.set_fido_enable(self.enable)
+                workflow.spawn(restart_delay())
+
+
 class PassphraseScreen(AnimScreen):
     def collect_animation_targets(self) -> list:
         targets = []
@@ -5179,6 +5315,8 @@ class UserGuide(Screen):
         if not hasattr(self, "_init"):
             self._init = True
         else:
+            if not self.is_visible():
+                self._load_scr(self)
             return
         kwargs = {
             "prev_scr": prev_scr,

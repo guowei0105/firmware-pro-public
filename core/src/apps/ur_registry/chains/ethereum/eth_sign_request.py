@@ -1,6 +1,6 @@
 from apps.ur_registry.chains import MismatchError
 from apps.ur_registry.crypto_key_path import CryptoKeyPath
-from apps.ur_registry.registry_types import UUID
+from apps.ur_registry.registry_types import ETH_SIGN_REQUEST, UUID
 from apps.ur_registry.ur_py.ur.cbor_lite import CBORDecoder, CBOREncoder
 from apps.ur_registry.ur_py.ur.ur import UR
 
@@ -42,11 +42,11 @@ class EthSignRequest:
 
     @staticmethod
     def get_registry_type():
-        return "eth-sign-request"
+        return ETH_SIGN_REQUEST.get_registry_type()
 
     @staticmethod
     def get_tag():
-        return 401
+        return ETH_SIGN_REQUEST.get_tag()
 
     @staticmethod
     def new(
