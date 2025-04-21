@@ -24,6 +24,9 @@
 
 /// package: trezorcrypto.se_thd89
 
+/// USER_PIN_ENTERED: int
+/// PASSPHRASE_PIN_ENTERED: int
+
 /// def check(mnemonic: bytes) -> bool:
 ///     """
 ///     Check whether given mnemonic is valid.
@@ -939,6 +942,54 @@ STATIC mp_obj_t mod_trezorcrypto_se_thd89_fido_delete_all_credentials(void) {
   se_delete_all_fido2_credentials();
   return mp_const_none;
 }
+
+/// def save_pin_passphrase(pin: str, passphrase_pin: str, passphrase: str) ->
+/// bool:
+///     """
+///     Save the pin and passphrase to the list.
+///     Returns True on success, False on failure.
+///     """
+STATIC mp_obj_t mod_trezorcrypto_se_thd89_save_pin_passphrase(
+    mp_obj_t pin, mp_obj_t passphrase_pin, mp_obj_t passphrase) {
+  mp_buffer_info_t pin_buf = {0};
+  mp_get_buffer_raise(pin, &pin_buf, MP_BUFFER_READ);
+
+  mp_buffer_info_t passphrase_pin_buf = {0};
+  mp_get_buffer_raise(passphrase_pin, &passphrase_pin_buf, MP_BUFFER_READ);
+
+  mp_buffer_info_t passphrase_buf = {0};
+  mp_get_buffer_raise(passphrase, &passphrase_buf, MP_BUFFER_READ);
+
+  if (pin_buf.len == 0 || passphrase_pin_buf.len == 0) {
+    mp_raise_ValueError("Pin or passphrase pin cannot be empty");
+  }
+
+  if (passphrase_pin_buf.len < 6) {
+    mp_raise_ValueError("Passphrase pin length not valid");
+  }
+
+  if (pin_buf.len == passphrase_pin_buf.len) {
+    if (memcmp(pin_buf.buf, passphrase_pin_buf.buf, pin_buf.len) == 0) {
+      mp_raise_ValueError("Passphrase pin cannot be the same as pin");
+    }
+  }
+
+  if (!se_set_pin_passphrase((const char *)pin_buf.buf,
+                             (const char *)passphrase_pin_buf.buf,
+                             (const char *)passphrase_buf.buf)) {
+    pin_result_t pin_passphrase_type = se_get_pin_passphrase_type();
+    if (pin_passphrase_type == PIN_PASSPHRASE_MAX_ITEMS_REACHED) {
+      mp_raise_ValueError("No space for new passphrase");
+    }
+    return mp_const_false;
+  }
+
+  return mp_const_true;
+}
+STATIC MP_DEFINE_CONST_FUN_OBJ_3(
+    mod_trezorcrypto_se_thd89_save_pin_passphrase_obj,
+    mod_trezorcrypto_se_thd89_save_pin_passphrase);
+
 STATIC MP_DEFINE_CONST_FUN_OBJ_0(
     mod_trezorcrypto_se_thd89_fido_delete_all_credentials_obj,
     mod_trezorcrypto_se_thd89_fido_delete_all_credentials);
@@ -1017,6 +1068,11 @@ STATIC const mp_rom_map_elem_t mod_trezorcrypto_se_thd89_globals_table[] = {
      MP_ROM_PTR(&mod_trezorcrypto_se_thd89_fido_delete_all_credentials_obj)},
     {MP_ROM_QSTR(MP_QSTR_FIDO2_CRED_COUNT_MAX),
      MP_ROM_INT(FIDO2_RESIDENT_CREDENTIALS_COUNT)},
+    {MP_ROM_QSTR(MP_QSTR_save_pin_passphrase),
+     MP_ROM_PTR(&mod_trezorcrypto_se_thd89_save_pin_passphrase_obj)},
+    {MP_ROM_QSTR(MP_QSTR_USER_PIN_ENTERED), MP_ROM_INT(USER_PIN_ENTERED)},
+    {MP_ROM_QSTR(MP_QSTR_PASSPHRASE_PIN_ENTERED),
+     MP_ROM_INT(PASSPHRASE_PIN_ENTERED)},
 };
 STATIC MP_DEFINE_CONST_DICT(mod_trezorcrypto_se_thd89_globals,
                             mod_trezorcrypto_se_thd89_globals_table);

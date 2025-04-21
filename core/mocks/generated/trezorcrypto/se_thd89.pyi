@@ -1,4 +1,6 @@
 from typing import *
+USER_PIN_ENTERED: int
+PASSPHRASE_PIN_ENTERED: int
 
 
 # extmod/modtrezorcrypto/modtrezorcrypto-se-thd89.h
@@ -287,5 +289,14 @@ def fido_att_sign_digest(
 def fido_delete_all_credentials() -> None:
     """
     Delete all FIDO2 credentials.
+    """
+
+
+# extmod/modtrezorcrypto/modtrezorcrypto-se-thd89.h
+def save_pin_passphrase(pin: str, passphrase_pin: str, passphrase: str) ->
+bool:
+    """
+    Save the pin and passphrase to the list.
+    Returns True on success, False on failure.
     """
 FIDO2_CRED_COUNT_MAX: int
