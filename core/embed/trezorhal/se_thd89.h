@@ -18,7 +18,9 @@
 typedef enum {
   PIN_SUCCESS,
   USER_PIN_ENTERED,
+  USER_PIN_FAILED,
   PASSPHRASE_PIN_ENTERED,
+  PASSPHRASE_PIN_NO_MATCHED,
   USER_PIN_NOT_ENTERED,
   WIPE_CODE_ENTERED,
   PIN_SAME_AS_USER_PIN,
@@ -100,7 +102,8 @@ secbool se_changePin(const char *oldpin, const char *newpin);
 uint32_t se_pinFailedCounter(void);
 secbool se_getRetryTimes(uint8_t *ptimes);
 pin_result_t se_get_pin_type(void);
-secbool se_set_pin_passphrase(const char *pin, const char *passphrase);
+secbool se_set_pin_passphrase(const char *pin, const char *passphrase_pin,
+                              const char *passphrase);
 pin_result_t se_get_pin_passphrase_type(void);
 secbool se_clearSecsta(void);
 secbool se_getSecsta(void);

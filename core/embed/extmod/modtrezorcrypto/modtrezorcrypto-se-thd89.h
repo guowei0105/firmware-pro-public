@@ -943,24 +943,39 @@ STATIC mp_obj_t mod_trezorcrypto_se_thd89_fido_delete_all_credentials(void) {
   return mp_const_none;
 }
 
-/// def save_pin_passphrase(pin: str, passphrase: str) -> bool:
+/// def save_pin_passphrase(pin: str, passphrase_pin: str, passphrase: str) ->
+/// bool:
 ///     """
 ///     Save the pin and passphrase to the list.
 ///     Returns True on success, False on failure.
 ///     """
 STATIC mp_obj_t mod_trezorcrypto_se_thd89_save_pin_passphrase(
-    mp_obj_t pin, mp_obj_t passphrase) {
+    mp_obj_t pin, mp_obj_t passphrase_pin, mp_obj_t passphrase) {
   mp_buffer_info_t pin_buf = {0};
   mp_get_buffer_raise(pin, &pin_buf, MP_BUFFER_READ);
+
+  mp_buffer_info_t passphrase_pin_buf = {0};
+  mp_get_buffer_raise(passphrase_pin, &passphrase_pin_buf, MP_BUFFER_READ);
 
   mp_buffer_info_t passphrase_buf = {0};
   mp_get_buffer_raise(passphrase, &passphrase_buf, MP_BUFFER_READ);
 
-  if (pin_buf.len == 0 || passphrase_buf.len == 0) {
-    mp_raise_ValueError("Pin or passphrase cannot be empty");
+  if (pin_buf.len == 0 || passphrase_pin_buf.len == 0) {
+    mp_raise_ValueError("Pin or passphrase pin cannot be empty");
+  }
+
+  if (passphrase_pin_buf.len < 6) {
+    mp_raise_ValueError("Passphrase pin length not valid");
+  }
+
+  if (pin_buf.len == passphrase_pin_buf.len) {
+    if (memcmp(pin_buf.buf, passphrase_pin_buf.buf, pin_buf.len) == 0) {
+      mp_raise_ValueError("Passphrase pin cannot be the same as pin");
+    }
   }
 
   if (!se_set_pin_passphrase((const char *)pin_buf.buf,
+                             (const char *)passphrase_pin_buf.buf,
                              (const char *)passphrase_buf.buf)) {
     pin_result_t pin_passphrase_type = se_get_pin_passphrase_type();
     if (pin_passphrase_type == PIN_PASSPHRASE_MAX_ITEMS_REACHED) {
@@ -971,7 +986,7 @@ STATIC mp_obj_t mod_trezorcrypto_se_thd89_save_pin_passphrase(
 
   return mp_const_true;
 }
-STATIC MP_DEFINE_CONST_FUN_OBJ_2(
+STATIC MP_DEFINE_CONST_FUN_OBJ_3(
     mod_trezorcrypto_se_thd89_save_pin_passphrase_obj,
     mod_trezorcrypto_se_thd89_save_pin_passphrase);
 

@@ -293,7 +293,8 @@ def fido_delete_all_credentials() -> None:
 
 
 # extmod/modtrezorcrypto/modtrezorcrypto-se-thd89.h
-def save_pin_passphrase(pin: str, passphrase: str) -> bool:
+def save_pin_passphrase(pin: str, passphrase_pin: str, passphrase: str) ->
+bool:
     """
     Save the pin and passphrase to the list.
     Returns True on success, False on failure.

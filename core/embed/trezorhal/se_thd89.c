@@ -1323,25 +1323,31 @@ static secbool se_clearSecsta_ex(uint8_t addr, uint8_t *session_key) {
   return sectrue;
 }
 
-secbool se_set_pin_passphrase(const char *pin, const char *passphrase) {
-  if (strlen(pin) < 6 || strlen(pin) > PIN_MAX_LENGTH) {
+secbool se_set_pin_passphrase(const char *pin, const char *passphrase_pin,
+                              const char *passphrase) {
+  if (strlen(passphrase_pin) < 6 || strlen(passphrase_pin) > PIN_MAX_LENGTH) {
     return secfalse;
   }
-  if (strlen(passphrase) == 0 || strlen(passphrase) > PASSPHRASE_MAX_LENGTH) {
+  if (strlen(passphrase) > PASSPHRASE_MAX_LENGTH) {
     return secfalse;
   }
 
-  uint8_t buf[PIN_MAX_LENGTH + PASSPHRASE_MAX_LENGTH + 2];
+  uint8_t buf[2 * PIN_MAX_LENGTH + PASSPHRASE_MAX_LENGTH + 3];
   uint8_t resp[1];
   uint16_t resp_len = 1;
+  uint32_t offset = 0;
 
-  buf[0] = strlen(pin);
-  memcpy(buf + 1, (uint8_t *)pin, strlen(pin));
-  buf[strlen(pin) + 1] = strlen(passphrase);
-  memcpy(buf + strlen(pin) + 2, (uint8_t *)passphrase, strlen(passphrase));
+  buf[offset++] = strlen(pin);
+  memcpy(buf + offset, (uint8_t *)pin, strlen(pin));
+  offset += strlen(pin);
+  buf[offset++] = strlen(passphrase_pin);
+  memcpy(buf + offset, (uint8_t *)passphrase_pin, strlen(passphrase_pin));
+  offset += strlen(passphrase_pin);
+  buf[offset++] = strlen(passphrase);
+  memcpy(buf + offset, (uint8_t *)passphrase, strlen(passphrase));
+  offset += strlen(passphrase);
 
-  if (!se_transmit_mac(SE_INS_PIN, 0x00, 0x09, buf,
-                       strlen(pin) + strlen(passphrase) + 2, resp, &resp_len)) {
+  if (!se_transmit_mac(SE_INS_PIN, 0x00, 0x09, buf, offset, resp, &resp_len)) {
     return secfalse;
   }
   if (resp[0] == PIN_SUCCESS) {

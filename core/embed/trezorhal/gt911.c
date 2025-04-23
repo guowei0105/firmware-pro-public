@@ -140,17 +140,17 @@ void gt911_set_config(void) {
   GT911_Config_t *p_config = (GT911_Config_t *)config_data;
 
   gt911_read(GTP_REG_CONFIG_DATA, (uint8_t *)config_data, 1);
-  if (config_data[0] == 0x4F) {
+  if (config_data[0] == 0x50) {
     return;
   }
 
   gt911_read(GTP_REG_CONFIG_DATA, (uint8_t *)config_data, sizeof(config_data));
 
-  p_config->config_version = 0x4F;  // ‘O’
+  p_config->config_version = 0x50;
 
-  p_config->shake_count = 0x22;
+  p_config->shake_count = 0x11;
   p_config->noise_reduction = 10;
-  p_config->screen_touch_level = 0xA0;
+  p_config->screen_touch_level = 0x60;
 
   p_config->check_sum = 0;
   for (int i = 0; i < sizeof(config_data) - 2; i++) {
