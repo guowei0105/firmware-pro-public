@@ -12,6 +12,12 @@
 [![Pull Requests](https://img.shields.io/github/issues-pr-raw/OneKeyHQ/firmware-pro.svg?style=for-the-badge&labelColor=000)](https://github.com/OneKeyHQ/firmware-pro/pulls?q=is%3Apr+is%3Aopen)
 [![Twitter Follow](https://img.shields.io/twitter/follow/OneKeyHQ?style=for-the-badge&labelColor=000)](https://twitter.com/OneKeyHQ)
 
+## Document
+
+[Deepwiki](https://deepwiki.com/OneKeyHQ/firmware-pro/1-overview)
+
+![CleanShot 2025-04-27 at 15 42 19@2x](https://github.com/user-attachments/assets/9d7cc41f-17a2-4ba6-87eb-21118225e401)
+
 
 ## Community & Support
 
