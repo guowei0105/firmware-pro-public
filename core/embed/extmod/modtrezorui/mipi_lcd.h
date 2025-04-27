@@ -90,6 +90,9 @@ void dma2d_copy_buffer(uint32_t *pSrc, uint32_t *pDst, uint16_t x, uint16_t y,
 void dma2d_copy_ycbcr_to_rgb(uint32_t *pSrc, uint32_t *pDst, uint16_t xsize,
                              uint16_t ysize, uint32_t ChromaSampling);
 
+void lcd_set_src_addr(uint32_t addr);
+uint32_t lcd_get_src_addr(void);
+
 // #ifdef __cplusplus
 // }
 // #endif
