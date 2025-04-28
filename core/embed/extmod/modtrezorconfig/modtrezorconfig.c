@@ -106,7 +106,7 @@ STATIC mp_obj_t mod_trezorconfig_is_initialized(void) {
 STATIC MP_DEFINE_CONST_FUN_OBJ_0(mod_trezorconfig_is_initialized_obj,
                                  mod_trezorconfig_is_initialized);
 
-/// def unlock(pin: str, ext_salt: bytes | None, verify_user_pin: bool = True)
+/// def unlock(pin: str, ext_salt: bytes | None, pin_use_type: int = 0)
 /// -> tuple[bool, int]:
 ///     """
 ///     Attempts to unlock the storage with the given PIN and external salt.
@@ -124,10 +124,10 @@ STATIC mp_obj_t mod_trezorconfig_unlock(size_t n_args, const mp_obj_t *args) {
       mp_raise_msg(&mp_type_ValueError, "Invalid length of external salt.");
   }
 
-  bool verify_user_pin_val = true;
+  pin_type_t pin_use_type = PIN_TYPE_USER;
 
   if (n_args > 2) {
-    verify_user_pin_val = mp_obj_is_true(args[2]);
+    pin_use_type = mp_obj_get_int(args[2]);
   }
 
   // display_clear();
@@ -135,7 +135,7 @@ STATIC mp_obj_t mod_trezorconfig_unlock(size_t n_args, const mp_obj_t *args) {
   secbool ret = secfalse;
 
   // verify se pin first when not in emulator
-  ret = se_verifyPin(pin_b.buf, verify_user_pin_val);
+  ret = se_verifyPin(pin_b.buf, pin_use_type);
   if (ret != sectrue) {
     if (!pin_state.pin_unlocked_initialized) {
       pin_state.pin_unlocked = false;
@@ -144,7 +144,7 @@ STATIC mp_obj_t mod_trezorconfig_unlock(size_t n_args, const mp_obj_t *args) {
     return mp_const_false;
   }
 
-  pin_result_t pin_type = se_get_pin_type();
+  pin_result_t pin_type = se_get_pin_result_type();
 
   fpsensor_data_init();
   pin_state.pin_unlocked = true;
@@ -160,8 +160,8 @@ STATIC mp_obj_t mod_trezorconfig_unlock(size_t n_args, const mp_obj_t *args) {
 STATIC MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(mod_trezorconfig_unlock_obj, 2, 3,
                                            mod_trezorconfig_unlock);
 
-/// def check_pin(pin: str, ext_salt: bytes | None, verify_user_pin: bool =
-/// True) -> bool:
+/// def check_pin(pin: str, ext_salt: bytes | None, pin_use_type: int = 0) ->
+/// bool:
 ///     """
 ///     Check the given PIN with the given external salt.
 ///     Returns True on success, False on failure.

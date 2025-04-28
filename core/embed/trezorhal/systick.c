@@ -83,15 +83,15 @@ void SysTick_Handler(void) {
 #define DWT_CYCCNT                (*(volatile uint32_t*) (0xE0001004uL))
 // clang-format on
 
-void dwt_init(void) {
-  if ((DEMCR & TRACEENA_BIT) == 0) {
-    DEMCR |= TRACEENA_BIT;
+void dwt_init(void) {  // 初始化数据监视跟踪单元
+  if ((DEMCR & TRACEENA_BIT) == 0) {  // 检查调试异常和监视器控制寄存器中的跟踪使能位是否已设置
+    DEMCR |= TRACEENA_BIT;  // 设置跟踪使能位
   }
 
-  if ((DWT_CTRL & CYCCNTENA_BIT) == 0) {  // Cycle counter not enabled?
-    DWT_CTRL |= CYCCNTENA_BIT;            // Enable Cycle counter
+  if ((DWT_CTRL & CYCCNTENA_BIT) == 0) {  // 检查周期计数器是否未启用
+    DWT_CTRL |= CYCCNTENA_BIT;            // 启用周期计数器
   }
-  DWT_CYCCNT = 0;
+  DWT_CYCCNT = 0;  // 重置周期计数器的值为0
 }
 
 // 400MHZ  min 2.5ns,max 10.73s

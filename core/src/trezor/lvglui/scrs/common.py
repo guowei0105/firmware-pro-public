@@ -496,6 +496,7 @@ class FullSizeWindow(lv.obj):
     def add_nav_back(self):
         self.nav_back = Navigation(self)
         self.content_area.align_to(self.nav_back, lv.ALIGN.OUT_BOTTOM_LEFT, 0, 0)
+    
 
     def eventhandler(self, event_obj):
         code = event_obj.code

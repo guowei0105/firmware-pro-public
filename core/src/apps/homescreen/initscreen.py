@@ -17,7 +17,6 @@ async def initscreen() -> None:
     if type_init in TYPE_NEW_WALLET:
         from ..management.reset_device import reset_device
         from trezor.messages import ResetDevice
-
         await workflow.spawn(
             reset_device(
                 DUMMY_CONTEXT,

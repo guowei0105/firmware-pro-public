@@ -96,129 +96,137 @@ static void copyflash2sdram(void) {
 }
 
 int main(void) {
-  SystemCoreClockUpdate();
-  dwt_init();
+  SystemCoreClockUpdate();  // 更新系统核心时钟变量
+  dwt_init();  // 初始化数据监视跟踪单元
 
-  mpu_config_boardloader(sectrue, secfalse);
-  mpu_config_bootloader(sectrue, secfalse);
-  mpu_config_firmware(sectrue, sectrue);
-  mpu_config_base();  // base config last as it contains deny access layers and
-                      // mpu may already running
-  mpu_ctrl(sectrue);  // ensure enabled
+  // 配置内存保护单元(MPU)以保护不同的固件区域
+  mpu_config_boardloader(sectrue, secfalse);  // 配置板载加载程序区域
+  mpu_config_bootloader(sectrue, secfalse);   // 配置引导加载程序区域
+  mpu_config_firmware(sectrue, sectrue);      // 配置固件区域
+  mpu_config_base();  // 基础配置最后设置，因为它包含拒绝访问层，且MPU可能已经运行
+  mpu_ctrl(sectrue);  // 确保MPU已启用
 
-  // disable all external communication or user input irq
-  // will be re-enabled later by calling their init function
-  // bluetooth uart
+  // 禁用所有外部通信或用户输入中断
+  // 稍后将通过调用它们的初始化函数重新启用
+  // 蓝牙UART
   HAL_NVIC_DisableIRQ(UART4_IRQn);
   HAL_NVIC_ClearPendingIRQ(UART4_IRQn);
-  // bluetooth spi
+  // 蓝牙SPI
   HAL_NVIC_DisableIRQ(SPI2_IRQn);
   HAL_NVIC_ClearPendingIRQ(SPI2_IRQn);
   HAL_NVIC_DisableIRQ(EXTI15_10_IRQn);
   HAL_NVIC_ClearPendingIRQ(EXTI15_10_IRQn);
-  // usb
+  // USB
   HAL_NVIC_DisableIRQ(OTG_HS_IRQn);
   HAL_NVIC_ClearPendingIRQ(OTG_HS_IRQn);
 
-  // re-enable global irq
+  // 重新启用全局中断
   __enable_irq();
   __enable_fault_irq();
 
-  lcd_ltdc_dsi_disable();
-  sdram_reinit();
-  // lcd_para_init(DISPLAY_RESX, DISPLAY_RESY, LCD_PIXEL_FORMAT_RGB565);
-  lcd_ltdc_dsi_enable();
-  lcd_pwm_init();
-  touch_init();
-  adc_init();
+  // 初始化显示和内存
+  lcd_ltdc_dsi_disable();  // 禁用LCD控制器
+  sdram_reinit();          // 重新初始化SDRAM
+  // lcd_para_init(DISPLAY_RESX, DISPLAY_RESY, LCD_PIXEL_FORMAT_RGB565);  // 已注释的LCD参数初始化
+  lcd_ltdc_dsi_enable();   // 启用LCD控制器
+  lcd_pwm_init();          // 初始化LCD背光PWM
+  touch_init();            // 初始化触摸屏
+  adc_init();              // 初始化模数转换器
 
-  ensure_emmcfs(emmc_fs_init(), "emmc_fs_init");
-  ensure_emmcfs(emmc_fs_mount(true, false), "emmc_fs_mount");
-  if (get_hw_ver() < HW_VER_3P0A) {
-    qspi_flash_init();
-    qspi_flash_config();
-    qspi_flash_memory_mapped();
+  // 初始化文件系统和闪存
+  ensure_emmcfs(emmc_fs_init(), "emmc_fs_init");  // 确保eMMC文件系统初始化成功
+  ensure_emmcfs(emmc_fs_mount(true, false), "emmc_fs_mount");  // 确保eMMC文件系统挂载成功
+  if (get_hw_ver() < HW_VER_3P0A) {  // 如果硬件版本低于3.0A
+    qspi_flash_init();               // 初始化QSPI闪存
+    qspi_flash_config();             // 配置QSPI闪存
+    qspi_flash_memory_mapped();      // 设置QSPI闪存为内存映射模式
   }
   cm_backtrace_init("firmware", hw_ver_to_str(get_hw_ver()), ONEKEY_VERSION);
 
-  ble_usart_init();
-  spi_slave_init();
+  // 初始化通信接口
+  ble_usart_init();   // 初始化蓝牙UART
+  spi_slave_init();   // 初始化SPI从设备
 
-  random_delays_init();
-  collect_hw_entropy();
+  // 初始化随机数生成和安全功能
+  random_delays_init();  // 初始化随机延迟
+  collect_hw_entropy();  // 收集硬件熵
 
-  motor_init();
-  thd89_init();
-  camera_init();
-  fingerprint_init();
-  nfc_init();
+  // 初始化外设
+  motor_init();        // 初始化电机
+  thd89_init();        // 初始化THD89模块
+  camera_init();       // 初始化摄像头
+  fingerprint_init();  // 初始化指纹传感器
+  nfc_init();          // 初始化NFC
 
-  timer_init();
-  display_clear();
-  pendsv_init();
+  // 系统初始化
+  timer_init();        // 初始化定时器
+  display_clear();     // 清除显示
+  pendsv_init();       // 初始化PendSV中断
 
-  device_test(false);
-  device_burnin_test(false);
+  // 设备测试
+  device_test(false);         // 执行设备测试
+  device_burnin_test(false);  // 执行设备老化测试
 
-  device_para_init();
-  ensure(se_sync_session_key(), "se start up failed");
+  // 设备参数和安全初始化
+  device_para_init();  // 初始化设备参数
+  ensure(se_sync_session_key(), "se start up failed");  // 确保安全元件会话密钥同步成功
 
+  // 检查引导加载程序版本并决定是否需要复制固件
   uint32_t bootloader_version = get_bootloader_version();
-
   bootloader_version >>= 8;
 
   if (bootloader_version >= 0x020503) {
-    // bootloader version is greater than 2.5.3, firmware copy is not needed
+    // 引导加载程序版本大于等于2.5.3，不需要固件复制
   } else {
-    copyflash2sdram();
+    copyflash2sdram();  // 将闪存内容复制到SDRAM
   }
 
 #ifdef RDI
-  rdi_start();
+  rdi_start();  // 启动RDI（如果定义）
 #endif
 
 #ifdef SYSTEM_VIEW
-  enable_systemview();
+  enable_systemview();  // 启用SystemView调试（如果定义）
 #endif
 
 #if !PRODUCTION
-  // enable BUS fault and USAGE fault handlers
+  // 启用总线故障和使用故障处理程序（非生产环境）
   SCB->SHCSR |= (SCB_SHCSR_USGFAULTENA_Msk | SCB_SHCSR_BUSFAULTENA_Msk);
 #endif
 
 #ifdef USE_SECP256K1_ZKP
-  ensure(sectrue * (zkp_context_init() == 0), NULL);
+  ensure(sectrue * (zkp_context_init() == 0), NULL);  // 初始化零知识证明上下文（如果定义）
 #endif
+
   printf("CORE: Preparing stack\n");
-  // Stack limit should be less than real stack size, so we have a chance
-  // to recover from limit hit.
-  mp_stack_set_top(&_estack);
-  mp_stack_set_limit((char *)&_estack - (char *)&_sstack - 1024);
+  // 栈限制应小于实际栈大小，以便我们有机会从限制命中中恢复
+  mp_stack_set_top(&_estack);  // 设置MicroPython栈顶
+  mp_stack_set_limit((char *)&_estack - (char *)&_sstack - 1024);  // 设置栈限制
 
 #if MICROPY_ENABLE_PYSTACK
-  static mp_obj_t pystack[2048];
-  mp_pystack_init(pystack, &pystack[MP_ARRAY_SIZE(pystack)]);
+  static mp_obj_t pystack[2048];  // 定义Python栈
+  mp_pystack_init(pystack, &pystack[MP_ARRAY_SIZE(pystack)]);  // 初始化Python栈
 #endif
 
-  // GC init
+  // 垃圾回收初始化
   printf("CORE: Starting GC\n");
-  gc_init(&_heap_start, &_heap_end);
+  gc_init(&_heap_start, &_heap_end);  // 初始化垃圾回收器
 
-  // Interpreter init
+  // 解释器初始化
   printf("CORE: Starting interpreter\n");
-  mp_init();
-  mp_obj_list_init(mp_sys_argv, 0);
-  mp_obj_list_init(mp_sys_path, 0);
+  mp_init();  // 初始化MicroPython
+  mp_obj_list_init(mp_sys_argv, 0);  // 初始化sys.argv
+  mp_obj_list_init(mp_sys_path, 0);  // 初始化sys.path
   mp_obj_list_append(
       mp_sys_path,
-      MP_OBJ_NEW_QSTR(MP_QSTR_));  // current dir (or base dir of the script)
+      MP_OBJ_NEW_QSTR(MP_QSTR_));  // 添加当前目录（或脚本的基本目录）到sys.path
 
-  // Execute the main script
+  // 执行主脚本
   printf("CORE: Executing main script\n");
-  pyexec_frozen_module("main.py");
-  // Clean up
+  pyexec_frozen_module("main.py");  // 执行冻结的main.py模块
+  // 清理
   printf("CORE: Main script finished, cleaning up\n");
-  mp_deinit();
+  mp_deinit();  // 反初始化MicroPython
 
   return 0;
 }

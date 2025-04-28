@@ -42,7 +42,7 @@ async def show_fullsize_window(
     screen.btn_layout_ver()
     if hasattr(screen, "subtitle"):
         screen.subtitle.set_recolor(True)
-    result = await ctx.wait(screen.request())
+    
     return result
 
 

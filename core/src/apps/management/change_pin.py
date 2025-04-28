@@ -16,7 +16,6 @@ from apps.common.request_pin import (
 
 if TYPE_CHECKING:
     from typing import Awaitable
-
     from trezor.messages import ChangePin
 
 

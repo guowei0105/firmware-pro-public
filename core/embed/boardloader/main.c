@@ -98,115 +98,115 @@ uint8_t *boardloader_buf = (uint8_t *)0x24000000;
 // purpose). if bus fault enabled, it will catched by BusFault_Handler, then we
 // could ignore it. if bus fault disabled, it will elevate to hard fault, this
 // is not what we want
-static secbool handle_flash_ecc_error = secfalse;
-static inline void set_handle_flash_ecc_error(secbool val) {
+static secbool handle_flash_ecc_error = secfalse;  // 用于控制是否处理闪存ECC错误的标志
+static inline void set_handle_flash_ecc_error(secbool val) {  // 设置处理闪存ECC错误标志的函数
   handle_flash_ecc_error = val;
 }
 
-// fault handlers
-void HardFault_Handler(void) {
-  error_shutdown("Internal error", "(HF)", NULL, NULL);
+// fault handlers  // 故障处理程序
+void HardFault_Handler(void) {  // 硬件故障处理函数
+  error_shutdown("Internal error", "(HF)", NULL, NULL);  // 显示硬件故障错误并关机
 }
 
-void MemManage_Handler_MM(void) {
-  error_shutdown("Internal error", "(MM)", NULL, NULL);
+void MemManage_Handler_MM(void) {  // 内存管理故障处理函数
+  error_shutdown("Internal error", "(MM)", NULL, NULL);  // 显示内存管理错误并关机
 }
 
-void MemManage_Handler_SO(void) {
-  error_shutdown("Internal error", "(SO)", NULL, NULL);
+void MemManage_Handler_SO(void) {  // 堆栈溢出故障处理函数
+  error_shutdown("Internal error", "(SO)", NULL, NULL);  // 显示堆栈溢出错误并关机
 }
 
-void BusFault_Handler(void) {
-  // if want handle flash ecc error
-  if (handle_flash_ecc_error == sectrue) {
+void BusFault_Handler(void) {  // 总线故障处理函数
+  // if want handle flash ecc error  // 如果需要处理闪存ECC错误
+  if (handle_flash_ecc_error == sectrue) {  // 检查是否启用了闪存ECC错误处理
     // dbgprintf_Wait("Internal flash ECC error detected at 0x%X", SCB->BFAR);
 
-    // check if it's triggered by flash DECC
-    if (flash_check_ecc_fault()) {
-      // reset flash controller error flags
-      flash_clear_ecc_fault(SCB->BFAR);
+    // check if it's triggered by flash DECC  // 检查是否由闪存DECC触发
+    if (flash_check_ecc_fault()) {  // 检查是否为ECC故障
+      // reset flash controller error flags  // 重置闪存控制器错误标志
+      flash_clear_ecc_fault(SCB->BFAR);  // 清除ECC故障标志
 
-      // reset bus fault error flags
-      SCB->CFSR &= ~(SCB_CFSR_BFARVALID_Msk | SCB_CFSR_PRECISERR_Msk);
-      __DSB();
-      SCB->SHCSR &= ~(SCB_SHCSR_BUSFAULTACT_Msk);
-      __DSB();
+      // reset bus fault error flags  // 重置总线故障错误标志
+      SCB->CFSR &= ~(SCB_CFSR_BFARVALID_Msk | SCB_CFSR_PRECISERR_Msk);  // 清除总线故障状态寄存器标志
+      __DSB();  // 数据同步屏障
+      SCB->SHCSR &= ~(SCB_SHCSR_BUSFAULTACT_Msk);  // 清除系统处理控制寄存器中的总线故障活动位
+      __DSB();  // 数据同步屏障
 
-      // try to fix ecc error and reboot
-      if (flash_fix_ecc_fault_BOOTLOADER(SCB->BFAR)) {
-        error_shutdown("Internal flash ECC error", "Cleanup successful",
-                       "Bootloader reinstall may required",
-                       "If the issue persists, contact support.");
+      // try to fix ecc error and reboot  // 尝试修复ECC错误并重启
+      if (flash_fix_ecc_fault_BOOTLOADER(SCB->BFAR)) {  // 尝试修复引导加载程序中的ECC故障
+        error_shutdown("Internal flash ECC error", "Cleanup successful",  // 显示ECC错误已成功清理
+                       "Bootloader reinstall may required",  // 可能需要重新安装引导加载程序
+                       "If the issue persists, contact support.");  // 如果问题持续存在，请联系支持
       } else {
-        error_shutdown("Internal error", "Cleanup failed",
-                       "Reboot to try again",
-                       "If the issue persists, contact support.");
+        error_shutdown("Internal error", "Cleanup failed",  // 显示清理失败错误
+                       "Reboot to try again",  // 建议重启再试
+                       "If the issue persists, contact support.");  // 如果问题持续存在，请联系支持
       }
     }
   }
 
-  // normal route
-  error_shutdown("Internal error", "(BF)", NULL, NULL);
+  // normal route  // 正常路径
+  error_shutdown("Internal error", "(BF)", NULL, NULL);  // 显示总线故障错误并关机
 }
 
-void UsageFault_Handler(void) {
-  error_shutdown("Internal error", "(UF)", NULL, NULL);
+void UsageFault_Handler(void) {  // 使用故障处理函数
+  error_shutdown("Internal error", "(UF)", NULL, NULL);  // 显示使用故障错误并关机
 }
 
-const char *const STAY_REASON_str[] = {
-    ENUM_NAME_ARRAY_ITEM(STAY_REASON_NONE),
-    ENUM_NAME_ARRAY_ITEM(STAY_REASON_REQUIRED_BY_FLAG),
-    ENUM_NAME_ARRAY_ITEM(STAY_REASON_MANUAL_OVERRIDE),
-    ENUM_NAME_ARRAY_ITEM(STAY_REASON_INVALID_DEPENDENCY),
-    ENUM_NAME_ARRAY_ITEM(STAY_REASON_INVALID_NEXT_TARGET),
-    ENUM_NAME_ARRAY_ITEM(STAY_REASON_UPDATE_NEXT_TARGET),
-    ENUM_NAME_ARRAY_ITEM(STAY_REASON_UNKNOWN),
+const char *const STAY_REASON_str[] = {  // 停留原因字符串数组
+    ENUM_NAME_ARRAY_ITEM(STAY_REASON_NONE),  // 无原因
+    ENUM_NAME_ARRAY_ITEM(STAY_REASON_REQUIRED_BY_FLAG),  // 由标志要求
+    ENUM_NAME_ARRAY_ITEM(STAY_REASON_MANUAL_OVERRIDE),  // 手动覆盖
+    ENUM_NAME_ARRAY_ITEM(STAY_REASON_INVALID_DEPENDENCY),  // 无效依赖
+    ENUM_NAME_ARRAY_ITEM(STAY_REASON_INVALID_NEXT_TARGET),  // 无效的下一个目标
+    ENUM_NAME_ARRAY_ITEM(STAY_REASON_UPDATE_NEXT_TARGET),  // 更新下一个目标
+    ENUM_NAME_ARRAY_ITEM(STAY_REASON_UNKNOWN),  // 未知原因
 };
-static inline void display_boardloader_title(char *message,
-                                             STAY_REASON stay_reason) {
-  if ((stay_reason < STAY_REASON_NONE) || (stay_reason > STAY_REASON_UNKNOWN))
-    stay_reason = STAY_REASON_UNKNOWN;
-  display_backlight(255);
-  display_clear();
-  display_printf("OneKey Boardloader " VERSION_STR "\n");
-  display_printf("---------------------------------------\n");
-  display_printf("%s\n", STAY_REASON_str[stay_reason]);
-  display_printf("---------------------------------------\n");
-  display_print(message, -1);
+static inline void display_boardloader_title(char *message,  // 显示板载加载程序标题的函数
+                                             STAY_REASON stay_reason) {  // 参数：消息和停留原因
+  if ((stay_reason < STAY_REASON_NONE) || (stay_reason > STAY_REASON_UNKNOWN))  // 检查停留原因是否有效
+    stay_reason = STAY_REASON_UNKNOWN;  // 如果无效，设为未知
+  display_backlight(255);  // 设置显示背光为最亮
+  display_clear();  // 清除显示
+  display_printf("OneKey Boardloader " VERSION_STR "\n");  // 显示OneKey板载加载程序版本
+  display_printf("---------------------------------------\n");  // 显示分隔线
+  display_printf("%s\n", STAY_REASON_str[stay_reason]);  // 显示停留原因
+  display_printf("---------------------------------------\n");  // 显示分隔线
+  display_print(message, -1);  // 显示消息
 }
 
-void show_poweron_bar(void) {
-  static bool forward = true;
-  static uint32_t step = 0, location = 0, indicator = 0;
+void show_poweron_bar(void) {  // 显示开机进度条的函数
+  static bool forward = true;  // 静态变量，控制进度条方向
+  static uint32_t step = 0, location = 0, indicator = 0;  // 静态变量，控制进度条步骤、位置和指示器
 
-  if (forward) {
-    step += PIXEL_STEP;
-    if (step <= 90) {
-      indicator += PIXEL_STEP;
-    } else if (step <= 160) {
-      location += PIXEL_STEP;
-    } else if (step < 250) {
-      location += PIXEL_STEP;
-      indicator -= PIXEL_STEP;
-    } else {
-      forward = false;
+  if (forward) {  // 如果是前进方向
+    step += PIXEL_STEP;  // 步骤增加
+    if (step <= 90) {  // 如果步骤小于等于90
+      indicator += PIXEL_STEP;  // 指示器增加
+    } else if (step <= 160) {  // 如果步骤小于等于160
+      location += PIXEL_STEP;  // 位置增加
+    } else if (step < 250) {  // 如果步骤小于250
+      location += PIXEL_STEP;  // 位置增加
+      indicator -= PIXEL_STEP;  // 指示器减少
+    } else {  // 如果步骤大于等于250
+      forward = false;  // 改变方向为后退
     }
-  } else {
-    step -= PIXEL_STEP;
-    if (step > 160) {
-      location -= PIXEL_STEP;
-      indicator += PIXEL_STEP;
-    } else if (step > 90) {
-      location -= PIXEL_STEP;
-    } else if (step > 0) {
-      indicator -= PIXEL_STEP;
-    } else {
-      forward = true;
+  } else {  // 如果是后退方向
+    step -= PIXEL_STEP;  // 步骤减少
+    if (step > 160) {  // 如果步骤大于160
+      location -= PIXEL_STEP;  // 位置减少
+      indicator += PIXEL_STEP;  // 指示器增加
+    } else if (step > 90) {  // 如果步骤大于90
+      location -= PIXEL_STEP;  // 位置减少
+    } else if (step > 0) {  // 如果步骤大于0
+      indicator -= PIXEL_STEP;  // 指示器减少
+    } else {  // 如果步骤小于等于0
+      forward = true;  // 改变方向为前进
     }
   }
 
-  display_bar_radius(160, 352, 160, 4, COLOR_DARK, COLOR_BLACK, 2);
-  display_bar_radius(160 + location, 352, indicator, 4, COLOR_WHITE,
+  display_bar_radius(160, 352, 160, 4, COLOR_DARK, COLOR_BLACK, 2);  // 显示进度条背景
+  display_bar_radius(160 + location, 352, indicator, 4, COLOR_WHITE,  // 显示进度条指示器
                      COLOR_BLACK, 2);
 }
 
@@ -481,274 +481,273 @@ static BOOT_TARGET decide_boot_target(STAY_REASON *stay_reason,
                                       image_header *const hdr,
                                       secbool *hdr_valid, secbool *code_valid) {
   // get boot target flag
-  BOOT_TARGET boot_target = *BOOT_TARGET_FLAG_ADDR;  // cache flag
-  *BOOT_TARGET_FLAG_ADDR = BOOT_TARGET_NORMAL;       // consume(reset) flag
+  BOOT_TARGET boot_target = *BOOT_TARGET_FLAG_ADDR;  // cache flag  // 获取启动目标标志并缓存
+  *BOOT_TARGET_FLAG_ADDR = BOOT_TARGET_NORMAL;       // consume(reset) flag  // 消费(重置)标志
 
   // handle stay reason
-  STAY_REASON dummy_stay_reason;
-  if (stay_reason == NULL) {
-    stay_reason = &dummy_stay_reason;
+  STAY_REASON dummy_stay_reason;  // 创建一个临时的停留原因变量
+  if (stay_reason == NULL) {  // 如果传入的停留原因指针为空
+    stay_reason = &dummy_stay_reason;  // 使用临时变量
   }
-  *stay_reason = STAY_REASON_NONE;
+  *stay_reason = STAY_REASON_NONE;  // 初始化停留原因为无
 
   // if boot target already set to this level, no more checks
-  if (boot_target == BOOT_TARGET_BOARDLOADER) {
-    *stay_reason = STAY_REASON_REQUIRED_BY_FLAG;
-    return boot_target;
+  if (boot_target == BOOT_TARGET_BOARDLOADER) {  // 如果启动目标已设置为板载加载器
+    *stay_reason = STAY_REASON_REQUIRED_BY_FLAG;  // 设置停留原因为标志要求
+    return boot_target;  // 返回启动目标
   }
 
   // check manual overrides
-  uint32_t touch_data = 0;
-  uint16_t touch_start_pos[2] = {0, 0};  // {x,y}
-  uint16_t touch_move_pos[2] = {0, 0};   // {x,y}
-  uint16_t touch_end_pos[2] = {0, 0};    // {x,y}
-  TOUCH_AREA ta_start = TOUCH_AREA_OTHER;
-  TOUCH_AREA ta_end = TOUCH_AREA_OTHER;
-  bool touch_center_cross = false;
+  uint32_t touch_data = 0;  // 触摸数据
+  uint16_t touch_start_pos[2] = {0, 0};  // {x,y}  // 触摸开始位置
+  uint16_t touch_move_pos[2] = {0, 0};   // {x,y}  // 触摸移动位置
+  uint16_t touch_end_pos[2] = {0, 0};    // {x,y}  // 触摸结束位置
+  TOUCH_AREA ta_start = TOUCH_AREA_OTHER;  // 触摸开始区域
+  TOUCH_AREA ta_end = TOUCH_AREA_OTHER;  // 触摸结束区域
+  bool touch_center_cross = false;  // 是否穿过中心区域
 
-  for (int timer = 0; timer < 1600; timer++) {
+  for (int timer = 0; timer < 1600; timer++) {  // 循环1600次，约1.6秒
     // display bar
-    if (timer % 8 == 0) {
-      show_poweron_bar();
+    if (timer % 8 == 0) {  // 每8次循环更新一次进度条
+      show_poweron_bar();  // 显示开机进度条
     }
 
     // pull touch screen
-    touch_data = touch_read();
-    if (touch_data != 0) {
-      if (touch_data & TOUCH_START) {
+    touch_data = touch_read();  // 读取触摸屏数据
+    if (touch_data != 0) {  // 如果有触摸事件
+      if (touch_data & TOUCH_START) {  // 如果是触摸开始事件
         // reset on new touch event
-        touch_center_cross = false;
-        ta_start = TOUCH_AREA_OTHER;
-        ta_end = TOUCH_AREA_OTHER;
+        touch_center_cross = false;  // 重置中心穿越标志
+        ta_start = TOUCH_AREA_OTHER;  // 重置开始区域
+        ta_end = TOUCH_AREA_OTHER;  // 重置结束区域
 
-        touch_start_pos[0] = (touch_data >> 12) & 0xFFF;
-        touch_start_pos[1] = (touch_data >> 0) & 0xFFF;
+        touch_start_pos[0] = (touch_data >> 12) & 0xFFF;  // 获取触摸开始X坐标
+        touch_start_pos[1] = (touch_data >> 0) & 0xFFF;  // 获取触摸开始Y坐标
 
-        ta_start = touch_pos_to_area(touch_start_pos[0], touch_start_pos[1]);
+        ta_start = touch_pos_to_area(touch_start_pos[0], touch_start_pos[1]);  // 计算触摸开始区域
       }
-      if (touch_data & TOUCH_MOVE) {
-        touch_move_pos[0] = (touch_data >> 12) & 0xFFF;
-        touch_move_pos[1] = (touch_data >> 0) & 0xFFF;
+      if (touch_data & TOUCH_MOVE) {  // 如果是触摸移动事件
+        touch_move_pos[0] = (touch_data >> 12) & 0xFFF;  // 获取触摸移动X坐标
+        touch_move_pos[1] = (touch_data >> 0) & 0xFFF;  // 获取触摸移动Y坐标
 
         if (TOUCH_AREA_C ==
-            touch_pos_to_area(touch_move_pos[0], touch_move_pos[1]))
-          touch_center_cross = true;
+            touch_pos_to_area(touch_move_pos[0], touch_move_pos[1]))  // 如果触摸移动到中心区域
+          touch_center_cross = true;  // 设置中心穿越标志
       }
-      if (touch_data & TOUCH_END) {
-        touch_end_pos[0] = (touch_data >> 12) & 0xFFF;
-        touch_end_pos[1] = (touch_data >> 0) & 0xFFF;
+      if (touch_data & TOUCH_END) {  // 如果是触摸结束事件
+        touch_end_pos[0] = (touch_data >> 12) & 0xFFF;  // 获取触摸结束X坐标
+        touch_end_pos[1] = (touch_data >> 0) & 0xFFF;  // 获取触摸结束Y坐标
 
-        ta_end = touch_pos_to_area(touch_end_pos[0], touch_end_pos[1]);
+        ta_end = touch_pos_to_area(touch_end_pos[0], touch_end_pos[1]);  // 计算触摸结束区域
       }
     }
 
     // check if condition meet
     if (touch_center_cross && ta_start == TOUCH_AREA_TL &&
-        ta_end == TOUCH_AREA_BR) {
-      boot_target = BOOT_TARGET_BOARDLOADER;
-      *stay_reason = STAY_REASON_MANUAL_OVERRIDE;
-      break;
+        ta_end == TOUCH_AREA_BR) {  // 如果从左上角到右下角穿过中心
+      boot_target = BOOT_TARGET_BOARDLOADER;  // 设置启动目标为板载加载器
+      *stay_reason = STAY_REASON_MANUAL_OVERRIDE;  // 设置停留原因为手动覆盖
+      break;  // 跳出循环
     }
 
     if (touch_center_cross && ta_start == TOUCH_AREA_TR &&
-        ta_end == TOUCH_AREA_BL) {
-      boot_target = BOOT_TARGET_BOOTLOADER;
-      *stay_reason = STAY_REASON_MANUAL_OVERRIDE;
-      break;
+        ta_end == TOUCH_AREA_BL) {  // 如果从右上角到左下角穿过中心
+      boot_target = BOOT_TARGET_BOOTLOADER;  // 设置启动目标为引导加载器
+      *stay_reason = STAY_REASON_MANUAL_OVERRIDE;  // 设置停留原因为手动覆盖
+      break;  // 跳出循环
     }
 
     // delay
-    hal_delay(1);
+    hal_delay(1);  // 延迟1毫秒
   }
 
   // clear poweron bar
-  display_bar(160, 352, 160, 4, COLOR_BLACK);
+  display_bar(160, 352, 160, 4, COLOR_BLACK);  // 清除开机进度条
 
   // if manual override stay at this level no more checks
   if ((*stay_reason == STAY_REASON_MANUAL_OVERRIDE) &&
-      (boot_target == BOOT_TARGET_BOARDLOADER)) {
-    return boot_target;
+      (boot_target == BOOT_TARGET_BOARDLOADER)) {  // 如果是手动覆盖且目标是板载加载器
+    return boot_target;  // 返回启动目标
   }
 
   // check bootloader update
-  if (sectrue == try_bootloader_update(false, false)) {
-    boot_target = BOOT_TARGET_BOARDLOADER;
-    *stay_reason = STAY_REASON_UPDATE_NEXT_TARGET;
-    return boot_target;
+  if (sectrue == try_bootloader_update(false, false)) {  // 如果需要更新引导加载器
+    boot_target = BOOT_TARGET_BOARDLOADER;  // 设置启动目标为板载加载器
+    *stay_reason = STAY_REASON_UPDATE_NEXT_TARGET;  // 设置停留原因为更新下一个目标
+    return boot_target;  // 返回启动目标
   }
 
   // check res
-  if (!emmc_fs_path_exist("0:res/.ONEKEY_RESOURCE")) {
-    boot_target = BOOT_TARGET_BOARDLOADER;
-    *stay_reason = STAY_REASON_INVALID_DEPENDENCY;
-    return boot_target;
+  if (!emmc_fs_path_exist("0:res/.ONEKEY_RESOURCE")) {  // 如果资源文件不存在
+    boot_target = BOOT_TARGET_BOARDLOADER;  // 设置启动目标为板载加载器
+    *stay_reason = STAY_REASON_INVALID_DEPENDENCY;  // 设置停留原因为无效依赖
+    return boot_target;  // 返回启动目标
   }
 
   // check bootloader
-  if (sectrue != verify_bootloader(hdr, hdr_valid, code_valid, NULL, 0)) {
-    boot_target = BOOT_TARGET_BOARDLOADER;
-    *stay_reason = STAY_REASON_INVALID_NEXT_TARGET;
-    return boot_target;
+  if (sectrue != verify_bootloader(hdr, hdr_valid, code_valid, NULL, 0)) {  // 如果引导加载器验证失败
+    boot_target = BOOT_TARGET_BOARDLOADER;  // 设置启动目标为板载加载器
+    *stay_reason = STAY_REASON_INVALID_NEXT_TARGET;  // 设置停留原因为无效下一个目标
+    return boot_target;  // 返回启动目标
   }
 
-  return boot_target;
+  return boot_target;  // 返回启动目标
 }
 
 static secbool get_device_serial(char *serial, size_t len) {
   // init
-  uint8_t otp_serial[FLASH_OTP_BLOCK_SIZE] = {0};
-  memzero(otp_serial, sizeof(otp_serial));
-  memzero(serial, len);
+  uint8_t otp_serial[FLASH_OTP_BLOCK_SIZE] = {0};  // OTP序列号缓冲区
+  memzero(otp_serial, sizeof(otp_serial));  // 清零OTP序列号缓冲区
+  memzero(serial, len);  // 清零输出序列号缓冲区
 
   // get OTP serial
-  if (sectrue != flash_otp_is_locked(FLASH_OTP_DEVICE_SERIAL)) return secfalse;
+  if (sectrue != flash_otp_is_locked(FLASH_OTP_DEVICE_SERIAL)) return secfalse;  // 如果设备序列号OTP区域未锁定，返回失败
 
   if (sectrue != flash_otp_read(FLASH_OTP_DEVICE_SERIAL, 0, otp_serial,
-                                sizeof(otp_serial))) {
-    return secfalse;
+                                sizeof(otp_serial))) {  // 读取OTP序列号
+    return secfalse;  // 如果读取失败，返回失败
   }
 
   // make sure last element is '\0'
-  otp_serial[FLASH_OTP_BLOCK_SIZE - 1] = '\0';
+  otp_serial[FLASH_OTP_BLOCK_SIZE - 1] = '\0';  // 确保最后一个字节是字符串结束符
 
   // check if all is ascii
-  for (uint32_t i = 0; i < sizeof(otp_serial); i++) {
-    if (otp_serial[i] == '\0') {
-      break;
+  for (uint32_t i = 0; i < sizeof(otp_serial); i++) {  // 遍历OTP序列号
+    if (otp_serial[i] == '\0') {  // 如果遇到字符串结束符
+      break;  // 跳出循环
     }
-    if (otp_serial[i] < ' ' || otp_serial[i] > '~') {
-      return secfalse;
+    if (otp_serial[i] < ' ' || otp_serial[i] > '~') {  // 如果不是可打印ASCII字符
+      return secfalse;  // 返回失败
     }
   }
 
   // copy to output buffer
-  memcpy(serial, otp_serial, MIN(len, sizeof(otp_serial)));
+  memcpy(serial, otp_serial, MIN(len, sizeof(otp_serial)));  // 复制序列号到输出缓冲区
 
   // cutoff by strlen
-  serial[strlen(serial)] = '\0';
+  serial[strlen(serial)] = '\0';  // 确保输出缓冲区以字符串结束符结尾
 
-  return sectrue;
+  return sectrue;  // 返回成功
 }
 
 static void usb_connect_switch(void) {
-  static bool usb_opened = false;
-  static uint32_t counter0 = 0, counter1 = 0;
+  static bool usb_opened = false;  // 静态变量，记录USB是否已打开
+  static uint32_t counter0 = 0, counter1 = 0;  // 静态计数器
 
-  if (usb_3320_host_connected()) {
-    counter0++;
-    counter1 = 0;
-    hal_delay(1);
-    if (counter0 > 5) {
-      counter0 = 0;
-      if (!usb_opened) {
-        usb_start();
-        usb_opened = true;
+  if (usb_3320_host_connected()) {  // 如果USB主机已连接
+    counter0++;  // 连接计数器增加
+    counter1 = 0;  // 断开计数器重置
+    hal_delay(1);  // 延迟1毫秒
+    if (counter0 > 5) {  // 如果连接计数器大于5
+      counter0 = 0;  // 重置连接计数器
+      if (!usb_opened) {  // 如果USB未打开
+        usb_start();  // 启动USB
+        usb_opened = true;  // 设置USB已打开标志
       }
     }
-  } else {
-    counter0 = 0;
-    counter1++;
-    hal_delay(1);
-    if (counter1 > 5) {
-      counter1 = 0;
-      if (usb_opened) {
-        usb_stop();
-        usb_opened = false;
+  } else {  // 如果USB主机未连接
+    counter0 = 0;  // 重置连接计数器
+    counter1++;  // 断开计数器增加
+    hal_delay(1);  // 延迟1毫秒
+    if (counter1 > 5) {  // 如果断开计数器大于5
+      counter1 = 0;  // 重置断开计数器
+      if (usb_opened) {  // 如果USB已打开
+        usb_stop();  // 停止USB
+        usb_opened = false;  // 清除USB已打开标志
       }
     }
   }
 }
 
 int main(void) {
-  // minimal initialize
-  reset_flags_reset();
-  periph_init();
-  system_clock_config();
-  dwt_init();
-  cpu_cache_enable();
-  sdram_init();
+  // 最小化初始化 (minimal initialization)
+  reset_flags_reset();                // 重置标志位
+  periph_init();                      // 外设初始化
+  system_clock_config();              // 系统时钟配置
+  dwt_init();                         // 数据观察跟踪初始化
+  cpu_cache_enable();                 // 启用CPU缓存
+  sdram_init();                       // SDRAM初始化
 
-  // enforce protection
-  flash_option_bytes_init();
+  // 强制保护 (enforce protection)
+  flash_option_bytes_init();          // 初始化Flash选项字节
 
-  mpu_config_boardloader(sectrue, sectrue);
-  mpu_config_bootloader(sectrue, secfalse);
-  mpu_config_base();  // base config last as it contains deny access layers and
-                      // mpu may already running
-  mpu_ctrl(sectrue);  // ensure enabled
+  mpu_config_boardloader(sectrue, sectrue);  // 配置板载加载器的MPU保护，设置内存保护单元规则以保护boardloader代码区域
+  mpu_config_bootloader(sectrue, secfalse);  // 配置引导加载器的MPU保护，允许访问bootloader代码但禁止执行
+  mpu_config_base();                  // 配置基本MPU设置，包括默认的内存访问权限和拒绝访问层，必须放在最后应用
+  mpu_ctrl(sectrue);                  // 启用MPU控制器，确保所有内存保护规则生效
 
-  // user interface
-  lcd_init();
-  display_clear();
-  lcd_pwm_init();
-  display_backlight(128);
-  touch_init();
+  // 用户界面 (user interface)
+  lcd_init();                         // LCD初始化
+  display_clear();                    // 清除显示
+  lcd_pwm_init();                     // LCD PWM初始化
+  display_backlight(128);             // 设置背光亮度为128
+  touch_init();                       // 触摸初始化
 
-  // fault handler
-  bus_fault_enable();  // it's here since requires user interface
-  set_handle_flash_ecc_error(sectrue);
+  // 故障处理程序 (fault handler)
+  bus_fault_enable();                 // 启用总线故障处理（放在这里是因为需要用户界面）
+  set_handle_flash_ecc_error(sectrue); // 设置处理Flash ECC错误
 
-  // periph initialize
-  flash_otp_init();
-  rng_init();
-  clear_otg_hs_memory();
+  // 外设初始化 (peripheral initialization)
+  flash_otp_init();                   // Flash一次性可编程存储器初始化
+  rng_init();                         // 随机数生成器初始化
+  clear_otg_hs_memory();              // 清除OTG HS内存
 
-  // emmc init and volume check
-  emmc_fs_init();
-  if (!emmc_fs_is_partitioned()) {
-    emmc_fs_recreate(true, true, true);
+  // EMMC初始化和卷检查 (emmc init and volume check)
+  emmc_fs_init();                     // EMMC文件系统初始化
+  if (!emmc_fs_is_partitioned()) {    // 如果EMMC未分区
+    emmc_fs_recreate(true, true, true); // 重新创建EMMC文件系统
   }
-  emmc_fs_mount(true, true);
+  emmc_fs_mount(true, true);          // 挂载EMMC文件系统
 
-  // display boot screen
+  // 显示启动屏幕 (display boot screen)
   display_image((DISPLAY_RESX - 128) / 2, 190, 128, 128, toi_icon_onekey + 12,
-                sizeof(toi_icon_onekey) - 12);
+                sizeof(toi_icon_onekey) - 12);  // 显示OneKey图标
   display_image((DISPLAY_RESX - 140) / 2, DISPLAY_RESY - 120, 140, 30,
-                toi_icon_safeos + 12, sizeof(toi_icon_safeos) - 12);
+                toi_icon_safeos + 12, sizeof(toi_icon_safeos) - 12);  // 显示SafeOS图标
   display_text_center(DISPLAY_RESX / 2, DISPLAY_RESY - 64, "Powered by OneKey",
-                      -1, FONT_NORMAL, COLOR_GRAY, COLOR_BLACK);
+                      -1, FONT_NORMAL, COLOR_GRAY, COLOR_BLACK);  // 显示"Powered by OneKey"文本
 #if !PRODUCTION
   display_text_center(DISPLAY_RESX / 2, DISPLAY_RESY / 2, "TEST VERSION", -1,
-                      FONT_NORMAL, COLOR_RED, COLOR_BLACK);
+                      FONT_NORMAL, COLOR_RED, COLOR_BLACK);  // 非生产版本显示"TEST VERSION"
 #endif
 
-  STAY_REASON stay_reason;
-  image_header hdr;
-  secbool hdr_valid = secfalse;
-  secbool code_valid = secfalse;
+  STAY_REASON stay_reason;            // 停留原因
+  image_header hdr;                   // 镜像头部
+  secbool hdr_valid = secfalse;       // 头部有效标志
+  secbool code_valid = secfalse;      // 代码有效标志
   BOOT_TARGET boot_target =
-      decide_boot_target(&stay_reason, &hdr, &hdr_valid, &code_valid);
+      decide_boot_target(&stay_reason, &hdr, &hdr_valid, &code_valid);  // 决定启动目标
 
-  if (boot_target == BOOT_TARGET_BOARDLOADER) {
-    if (stay_reason == STAY_REASON_UPDATE_NEXT_TARGET) {
-      try_bootloader_update(true, true);
+  if (boot_target == BOOT_TARGET_BOARDLOADER) {  // 如果启动目标是板载加载器
+    if (stay_reason == STAY_REASON_UPDATE_NEXT_TARGET) {  // 如果停留原因是更新下一个目标
+      try_bootloader_update(true, true);  // 尝试更新引导加载器
     } else {
-      display_boardloader_title("USB Mass Storage Mode\n", stay_reason);
+      display_boardloader_title("USB Mass Storage Mode\n", stay_reason);  // 显示板载加载器标题
 
-      char serial[USB_SIZ_STRING_SERIAL];
-      get_device_serial(serial, sizeof(serial));
-      usb_msc_init(serial, sizeof(serial));
+      char serial[USB_SIZ_STRING_SERIAL];  // USB序列号
+      get_device_serial(serial, sizeof(serial));  // 获取设备序列号
+      usb_msc_init(serial, sizeof(serial));  // 初始化USB大容量存储
 
-      while (1) {
-        usb_connect_switch();
-        if (system_reset == 1) {
-          hal_delay(5);
-          restart();
+      while (1) {  // 无限循环
+        usb_connect_switch();  // USB连接切换
+        if (system_reset == 1) {  // 如果系统重置标志为1
+          hal_delay(5);  // 延迟5毫秒
+          restart();  // 重启系统
         }
       }
     }
   }
 
-  *BOOT_TARGET_FLAG_ADDR = boot_target;  // set flag for bootloader to comsume
+  *BOOT_TARGET_FLAG_ADDR = boot_target;  // 设置标志供引导加载器使用
 
-  set_handle_flash_ecc_error(secfalse);
-  bus_fault_disable();
+  set_handle_flash_ecc_error(secfalse);  // 禁用Flash ECC错误处理
+  bus_fault_disable();  // 禁用总线故障处理
 
-  SCB_CleanDCache();  // TODO: needed?
+  SCB_CleanDCache();  // 清理D缓存（TODO: 是否需要？）
 
-  mpu_config_bootloader(sectrue, sectrue);
+  mpu_config_bootloader(sectrue, sectrue);  // 重新配置引导加载器的MPU保护
 
-  jump_to(BOOTLOADER_START + hdr.hdrlen);
+  jump_to(BOOTLOADER_START + hdr.hdrlen);  // 跳转到引导加载器
 
-  return 0;
+  return 0;  // 返回0（实际上永远不会执行到这里）
 }

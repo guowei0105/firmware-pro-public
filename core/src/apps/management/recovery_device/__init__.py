@@ -108,7 +108,6 @@ def _validate(msg: RecoveryDevice) -> None:
         raise wire.ProcessError(
             "Value enforce_wordlist must be True, Trezor Core enforces words automatically."
         )
-
     if msg.dry_run:
         # check that only allowed fields are set
         for key, value in msg.__dict__.items():

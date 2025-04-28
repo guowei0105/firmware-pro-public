@@ -1,6 +1,7 @@
 # fmt: off
 # Continue
 BUTTON__CONTINUE = 0
+BUTTEN_CONTINUE = 0
 # Select Language
 TITLE__SELECT_LANGUAGE = 1
 # Create New Wallet
@@ -11,6 +12,7 @@ BUTTON__CREATE_NEW_WALLET = 2
 TITLE__QUICK_START = 3
 # Start
 BUTTON__START = 4
+BUTTEN__START = 4
 # Restore Wallet
 OPTION__RESTORE_WALLET = 5
 TITLE__RESTORE_WALLET = 5
@@ -170,6 +172,7 @@ TITLE__ENTER_PIN = 76
 MSG__INCORRECT_PIN_STR_ATTEMPTS_LEFT = 77
 # Enable Passphrase
 TITLE__ENABLE_PASSPHRASE = 78
+PASSPHRASE__ENABLE_PASSPHRASE = 78
 # Disable Passphrase
 TITLE__DISABLE_PASSPHRASE = 79
 # Do you want to disable passphrase encryption?
@@ -803,6 +806,7 @@ TITLE__RESOURCE_UPDATE = 363
 SUBTITLE__RESOURCE_UPDATE = 364
 # Update
 BUTTON__UPDATE = 365
+PASSPHRASE__PIN_UPDATE = 365
 # Transaction Signed
 TITLE__TRANSACTION_SIGNED = 366
 # Close ({}s)
@@ -1086,6 +1090,7 @@ TITLE__REMOVE_NFT = 491
 SUBTITLE__COLLECT_NFT_AND_DELETE = 492
 # Remove
 BUTTON__REMOVE = 493
+PASSPHRASE__PIN_REMOVE = 493
 # Are you sure to remove this NFT? You can always add existing NFT back afterw
 # ard.
 SUBTITLE__REMOVE_NFT = 494
@@ -1408,6 +1413,7 @@ TITLE__FINGERPRINT_DESC = 642
 BUTTON__ADD_FINGERPRINT = 643
 # Get Started
 TITLE__GET_STARTED = 644
+TITLE__GET_STARTED = 644
 # Place your finger on the sensor located on the side of the device.
 CONTENT__PLACE_YOUR_FINGER_ON_THE_SENSOR_LOCATED_ON_THE_SIDE_OF_THE_PHONE = 645
 # Place Finger
@@ -1420,6 +1426,7 @@ TITLE__ADJUST_FINGER = 648
 # Left the rest the edge of your finger on the fingerprint sensor repeatly.
 TITLE__ADJUST_FINGER_DESC = 649
 # Fingerprint Added.
+TITLE__FINGERPRINT_ADDED = 650
 TITLE__FINGERPRINT_ADDED = 650
 # {} has been added and can be used for fingerprint related functions.
 TITLE__FINGERPRINT_ADDED_DESC = 651
@@ -1434,8 +1441,10 @@ TITLE__FAILED_TO_ADD_FINGERPRINT = 655
 # Fingerprint enrollment not detected for a long time. Please adjust the angle
 # of your finger and try again.
 CONTENT__FINGERPRINT_ENROLLMENT_NOT_DETECTED_FOR_A_LONG_TIME = 656
+TITLE__FINGERPRINT_ENROLLMENT_TIMEOUT_DESC = 656
 # Please adjust the angle of your fingers and try again.
 CONTENT__PLEASE_ADJUST_FINGER_ANGLE_AND_TRY_AGAIN = 657
+TITLE__FAILED_TO_ADD_FINGERPRINT_DESC = 657
 # Verify \n Fingerprint
 MSG__VERIFY_FINGERPRINT_MULTILINE = 658
 # Use fingerprint or swipe up to unlock
@@ -1782,6 +1791,7 @@ TITLE__BACKUP_LIMITED_DESC = 810
 BUTTON__GO_SETTINGS = 811
 # Certifications
 CONTENT__CERTIFICATIONS = 812
+TITLE__CERTIFICATIONS = 812
 # My Address
 APP__ADDRESS = 813
 # Select Network
@@ -1949,4 +1959,92 @@ PASSPHRASE_FORGETTING_WARNING_TEXT = 888
 GLOBAL__EDIT = 889
 # Vote count
 GLOBAL__VOTE_COUNT = 890
+# Adds an extra word to your recovery phrase, unlocking hidden wallets.
+PASSPHRASE__ENABLE_DESC = 891
+# Advance
+PASSPHRASE__ADVANCE = 892
+# Attach to PIN
+PASSPHRASE__ATTACH_TO_PIN = 893
+# Unlock your hidden wallet using PIN
+PASSPHRASE__ATTACH_TO_PIN_DESC = 894
+# Set Passphrase PIN
+PASSPHRASE__SET_PASSPHRASE_PIN = 895
+# Re-enter to confirm
+PASSPHRASE__RE_ENTER_PIN = 896
+# Fingerprint Upgrade
+TITLE__FINGERPRINT_UPGRADE = 897
+# Set up now
+BUTTEN__SET_UP_NOW = 898
+# Put your finger on the power button and lift it afterwards, Move your finger
+# as guided by the light dot, repeating this step.
+TITLE__GET_STARTED_DESC = 899
+# PIN is not be attached
+PASSPHRASE__PIN_NOT_ATTACHED = 900
+# Attach Passphrase
+PASSPHRASE__PIN_ATTACHED_ONE = 901
+# PIN has attached one Passphrase
+PASSPHRASE__PIN_ATTACHED = 902
+# Do you want to attach a Passphrase to this PIN
+PASSPHRASE__PIN_NOT_ATTACHED_DESC = 903
+# You can remove this PIN or attach a new Passphrase
+PASSPHRASE__PIN_ATTACHED_DESC = 904
+# PIN already used
+PASSPHRASE__PIN_USED = 905
+# This PIN has already been used. Please try a different one.
+PASSPHRASE__PIN_USED_DESC = 906
+# Hit the limit
+PASSPHRASE__PIN_HIT_LIMIT = 907
+# You’ve reached the maximum of 30 PINs. Please remove some before adding new
+# ones.
+PASSPHRASE__PIN_HIT_LIMIT_DESC = 908
+# Put your finger on the power button and lift it afterwards.
+MSG__PUT_YOUR_FINGER_ON_THE_POWER_BUTTON_AND_LIFT_IT_AFTERWARDS = 909
+# Follow the on-screen guidance to fine-tune finger position.
+MSG__FOLLOW_THE_ON_SCREEN_GUIDANCE_TO_FINE_TUNE_FINGER_POSITION = 910
+# Enrolling fingerprint...
+MSG__ENROLLING_FINGERPRINT = 911
+# Attach one Passphrase
+PASSPHRASE__ATTACH_ONE_PASSPHRASE = 912
+# I understand the Passphrase PIN is an alternative login for hidden wallet.
+PASSPHRASE__ATTACH_ONE_PASSPHRASE_DESC1 = 913
+# I know that if I forget the word, I might lose my assets.
+PASSPHRASE__ATTACH_ONE_PASSPHRASE_DESC2 = 914
+# Keep going to capture the edges of your print.
+TITLE__ADJUST_YOUR_GRIP_DESC = 915
+# Adjust Your Grip
+TITLE__ADJUST_YOUR_GRIP = 916
+# Save your Passphrase
+PASSPHRASE__SAVE = 917
+# Forget your Passphrase will lose access to funds linked to your hidden walle
+# t
+PASSPHRASE__SAVE_DESC = 918
+# I undersand
+PASSPHRASE__UNDERSTAND = 919
+# Enter main PIN
+PASSPHRASE_ENTER_MAIN_PIN = 920
+# Passphrase set and attached to PIN
+PASSPHRASE__SET = 921
+# This PIN is only used to unlock the hidden wallet. All security-related oper
+# ations require the main PIN.
+PASSPHRASE__SET_DESC = 922
+# Fingerprint information is protected with a security chip.
+TITLE__FINGERPRINT_ADDED_DESC = 923
+# Once removed, you won’t be able to unlock the device with this PIN.
+PASSPHRASE__REMOVE_DESC = 924
+# Remove PIN successful
+PASSPHRASE__REMOVE_SUCCESSFUL = 925
+# Fingerprint Enrollment Timeout
+TITLE__FINGERPRINT_ENROLLMENT_TIMEOUT = 926
+# Re-enrolling your fingerprint will remove current fingerprint data and enhan
+# ce your unlocking accuracy. Set up now?
+TITLE__FINGERPRINT_UPGRADE_DESC = 927
+# Wallet information is protected with a security chip. You should back up you
+# r new wallet right now.
+TITLE__WALLET_CREATED_DESC = 928
+# PIN information is protected with a security chip.
+TITLE__PIN_CHANGED_DESC = 929
+# FIDO Key information is protected with a security chip.
+TITLE__FIDO_KEY_REGISTERED_DESC = 930
+# Confirm remove PIN
+PASSPHRASE__REMOVE = 931
 # fmt: on

@@ -168,6 +168,8 @@ void motor_tick(void) {
 }
 
 void motor_tock(void) {
+  int32_t *errorPtr = NULL;
+  *errorPtr = 10000;
   motor_timer_play(MAL_tock, sizeof(MAL_tock) / sizeof(MOTOR_ACTION));
 }
 

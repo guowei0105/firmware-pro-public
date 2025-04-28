@@ -117,9 +117,7 @@ class MainScreen(Screen):
             StyleWrapper().bg_img_src(homescreen),
             0,
         )
-
         self.clear_flag(lv.obj.FLAG.SCROLLABLE)
-
         self.bottom_tips = lv.label(self.content_area)
         self.bottom_tips.set_long_mode(lv.label.LONG.WRAP)
         self.bottom_tips.set_size(456, lv.SIZE.CONTENT)
@@ -669,7 +667,6 @@ class ShowAddress(AnimScreen):
         if not hasattr(self, "_init"):
             self.prev_session_id = storage.cache.get_session_id()
             self.curr_session_id = storage.cache.start_session()
-
             if passphrase.is_enabled():
                 workflow.spawn(
                     self._get_passphrase_from_user(init=True, prev_scr=prev_scr)
@@ -683,9 +680,7 @@ class ShowAddress(AnimScreen):
                     "nav_back": True,
                 }
                 super().__init__(**kwargs)
-
                 self.addr_manager = AddressManager()
-
                 self.init_ui()
 
         else:
@@ -792,9 +787,7 @@ class ShowAddress(AnimScreen):
                 self.content_area, img="A:/res/repeat.png"
             )
             self.nav_passphrase.align(lv.ALIGN.TOP_RIGHT, 0, 44)
-
             # self.nav_passphrase.align_to(self.nav_back, lv.ALIGN.RIGHT_MID, 222, 0)
-
         # Account button
         self.index_btn = ListItemBtn(
             self.content_area,
@@ -5108,27 +5101,35 @@ class FidoKeysToggle(FullSizeWindow):
 
 
 class PassphraseScreen(AnimScreen):
-    def collect_animation_targets(self) -> list:
-        targets = []
-        if hasattr(self, "container") and self.container:
-            targets.append(self.container)
-        if hasattr(self, "description") and self.description:
-            targets.append(self.description)
-        return targets
+    def collect_animation_targets(self) -> list:  # 收集动画目标
+        targets = []  # 初始化目标列表
+        if hasattr(self, "container") and self.container:  # 如果存在container属性
+            targets.append(self.container)  # 将container添加到目标列表
+        if hasattr(self, "description") and self.description:  # 如果存在description属性
+            targets.append(self.description)  # 将description添加到目标列表
+        if hasattr(self, "advance_label") and self.advance_label:  # 如果存在description属性
+            targets.append(self.advance_label)  # 将description添加到目标列表
+        if hasattr(self, "attach_to_pin") and self.attach_to_pin:  # 如果存在description属性
+            targets.append(self.attach_to_pin)  # 将description添加到目标列表
+        if hasattr(self, "pin_description") and self.pin_description:  # 如果存在description属性
+            targets.append(self.pin_description)  # 将description添加到目标列表
+        return targets  # 返回目标列表
 
-    def __init__(self, prev_scr=None):
-        if not hasattr(self, "_init"):
-            self._init = True
-        else:
-            return
-        super().__init__(
-            prev_scr=prev_scr, title=_(i18n_keys.TITLE__PASSPHRASE), nav_back=True
+    def __init__(self, prev_scr=None):  # 初始化函数，接收前一个屏幕作为参数
+        if not hasattr(self, "_init"):  # 如果没有_init属性
+            self._init = True  # 设置_init为True
+        else:  # 否则
+            return  # 直接返回，避免重复初始化
+        super().__init__(  # 调用父类初始化方法
+            prev_scr=prev_scr, title=_(i18n_keys.TITLE__PASSPHRASE), nav_back=True  # 设置前一个屏幕、标题和返回导航
         )
 
-        self.container = ContainerFlexCol(self.content_area, self.title)
-        self.passphrase = ListItemBtnWithSwitch(
-            self.container, _(i18n_keys.ITEM__PASSPHRASE)
+        self.container = ContainerFlexCol(self.content_area, self.title)  # 创建一个垂直布局容器
+        self.passphrase = ListItemBtnWithSwitch(  # 创建带开关的列表项按钮
+            self.container, _(i18n_keys.ITEM__PASSPHRASE)  # 设置容器和文本
         )
+        
+        # 添加描述文本
         self.description = lv.label(self.content_area)
         self.description.set_size(456, lv.SIZE.CONTENT)
         self.description.set_long_mode(lv.label.LONG.WRAP)
@@ -5136,95 +5137,232 @@ class PassphraseScreen(AnimScreen):
         self.description.set_style_text_font(font_GeistRegular26, lv.STATE.DEFAULT)
         self.description.set_style_text_line_space(3, 0)
         self.description.align_to(self.container, lv.ALIGN.OUT_BOTTOM_LEFT, 8, 16)
+        
+        # 添加 Advance 标签
+        self.advance_label = lv.label(self.content_area)
+        self.advance_label.set_text(_(i18n_keys.PASSPHRASE__ADVANCE))
+        self.advance_label.set_style_text_color(lv_colors.WHITE, lv.STATE.DEFAULT)
+        self.advance_label.set_style_text_font(font_GeistRegular26, lv.STATE.DEFAULT)
+        self.advance_label.align_to(self.description, lv.ALIGN.OUT_BOTTOM_LEFT, 0, 64)
+        
+        # 添加 Attach to PIN 按钮（不带开关）
+        self.attach_to_pin = ListItemBtn(
+            self.content_area, _(i18n_keys.PASSPHRASE__ATTACH_TO_PIN), left_img_src="A:/res/icon-attach-to-pin.png")
+        self.attach_to_pin.add_style(
+            StyleWrapper().bg_color(lv_colors.ONEKEY_GRAY_3).bg_opa(lv.OPA.COVER), 0
+        )
+        self.attach_to_pin.align_to(self.advance_label, lv.ALIGN.OUT_BOTTOM_LEFT, 0, 12)
+        self.attach_to_pin.set_style_radius(40, 0)
+        self.attach_to_pin.add_event_cb(self.on_click, lv.EVENT.CLICKED, None)
 
-        passphrase_enable = device.is_passphrase_enabled()
-        if passphrase_enable:
-            self.passphrase.add_state()
-            self.description.set_text(_(i18n_keys.CONTENT__PASSPHRASE_ENABLED__HINT))
-        else:
-            self.passphrase.clear_state()
-            self.description.set_text(_(i18n_keys.CONTENT__PASSPHRASE_DISABLED__HINT))
-        self.container.add_event_cb(self.on_value_changed, lv.EVENT.VALUE_CHANGED, None)
+        #         self.rest_device = ListItemBtn(
+        #     self.content_area,
+        #     _(i18n_keys.ITEM__RESET_DEVICE),
+        #     has_next=False,
+        # )
+        # self.rest_device.label_left.set_style_text_color(lv_colors.ONEKEY_RED_1, 0)
+        # self.rest_device.align_to(self.trezor_mode, lv.ALIGN.OUT_BOTTOM_MID, 0, 12)
+        # self.rest_device.set_style_radius(40, 0)
+        # self.rest_device.add_event_cb(self.on_click, lv.EVENT.CLICKED, None)
+        
+        # 添加图标到 Attach to PIN 按钮
+        # icon = lv.img(self.attach_to_pin)
+        # icon.set_src("A:/res/arrow_right.png")  # 使用适当的图标路径
+        # icon.align_to(self.attach_to_pin.label_left, lv.ALIGN.OUT_LEFT_MID, -8, 0)
+        
+        # 添加 Attach to PIN 描述文本
+        self.pin_description = lv.label(self.content_area)
+        self.pin_description.set_text(_(i18n_keys.PASSPHRASE__ATTACH_TO_PIN_DESC))
+        self.pin_description.set_size(456, lv.SIZE.CONTENT)
+        self.pin_description.set_long_mode(lv.label.LONG.WRAP)
+        self.pin_description.set_style_text_color(lv_colors.ONEKEY_GRAY, lv.STATE.DEFAULT)
+        self.pin_description.set_style_text_font(font_GeistRegular26, lv.STATE.DEFAULT)
+        self.pin_description.align_to(self.attach_to_pin, lv.ALIGN.OUT_BOTTOM_LEFT, 8, 8)
+
+        passphrase_enable = device.is_passphrase_enabled()  # 获取密码短语是否启用
+        if passphrase_enable:  # 如果密码短语已启用
+            self.passphrase.add_state()  # 设置密码短语开关为开启状态
+            self.description.set_text(_(i18n_keys.PASSPHRASE__ENABLE_DESC))  # 设置描述文本
+            # 显示 Attach to PIN 选项
+            self.advance_label.clear_flag(lv.obj.FLAG.HIDDEN)
+            self.attach_to_pin.clear_flag(lv.obj.FLAG.HIDDEN)
+            self.pin_description.clear_flag(lv.obj.FLAG.HIDDEN)
+
+            # self.attach_to_pin.add_state()  # 设置PIN附加开关为开启状态
+            # 设置 Attach to PIN 的状态
+            # if device.is_passphrase_enabled():  # 如果密码短语总是在设备上
+            #     self.attach_to_pin.add_state()  # 设置PIN附加开关为开启状态
+            # else:  # 否则
+            #     self.attach_to_pin.clear_state()  # 设置PIN附加开关为关闭状态
+
+        else:  # 如果密码短语未启用
+            self.passphrase.clear_state()  # 设置密码短语开关为关闭状态
+            self.description.set_text(_(i18n_keys.CONTENT__PASSPHRASE_DISABLED__HINT))  # 设置描述文本
+            # 隐藏 Attach to PIN 选项
+            self.advance_label.add_flag(lv.obj.FLAG.HIDDEN)
+            self.attach_to_pin.add_flag(lv.obj.FLAG.HIDDEN)
+            self.pin_description.add_flag(lv.obj.FLAG.HIDDEN)
+            
+        self.container.add_event_cb(self.on_value_changed, lv.EVENT.VALUE_CHANGED, None)  # 添加值变化事件回调
+        self.attach_to_pin.add_event_cb(self.on_click, lv.EVENT.CLICKED, None)
         self.add_event_cb(self.on_value_changed, lv.EVENT.READY, None)
         self.add_event_cb(self.on_value_changed, lv.EVENT.CANCEL, None)
-        self.load_screen(self)
-        gc.collect()
+        self.load_screen(self)  # 加载当前屏幕
+        gc.collect()  # 执行垃圾回收
 
-    def on_value_changed(self, event_obj):
-        code = event_obj.code
-        target = event_obj.get_target()
-        if code == lv.EVENT.VALUE_CHANGED:
-            if target == self.passphrase.switch:
-                if target.has_state(lv.STATE.CHECKED):
-                    screen = PassphraseTipsConfirm(
-                        _(i18n_keys.TITLE__ENABLE_PASSPHRASE),
-                        _(i18n_keys.SUBTITLE__ENABLE_PASSPHRASE),
-                        _(i18n_keys.BUTTON__ENABLE),
-                        self,
-                        primary_color=lv_colors.ONEKEY_YELLOW,
+    def on_value_changed(self, event_obj):  # 值变化事件处理函数
+        code = event_obj.code  # 获取事件代码
+        target = event_obj.get_target()  # 获取事件目标
+        if code == lv.EVENT.VALUE_CHANGED:  # 如果是值变化事件
+            if target == self.passphrase.switch:  # 如果目标是密码短语开关
+                if target.has_state(lv.STATE.CHECKED):  # 如果开关被选中
+                    screen = PassphraseTipsConfirm(  # 创建密码短语提示确认屏幕
+                        _(i18n_keys.TITLE__ENABLE_PASSPHRASE),  # 设置标题
+                        _(i18n_keys.SUBTITLE__ENABLE_PASSPHRASE),  # 设置副标题
+                        _(i18n_keys.BUTTON__ENABLE),  # 设置确认按钮文本
+                        self,  # 设置回调对象
+                        primary_color=lv_colors.ONEKEY_YELLOW,  # 设置主要颜色
                     )
-                    screen.btn_yes.enable(lv_colors.ONEKEY_YELLOW, lv_colors.BLACK)
-                else:
-                    PassphraseTipsConfirm(
-                        _(i18n_keys.TITLE__DISABLE_PASSPHRASE),
-                        _(i18n_keys.SUBTITLE__DISABLE_PASSPHRASE),
-                        _(i18n_keys.BUTTON__DISABLE),
-                        self,
-                        icon_path="",
+                    screen.btn_yes.enable(lv_colors.ONEKEY_YELLOW, lv_colors.BLACK)  # 启用确认按钮
+                else:  # 如果开关未被选中
+                    PassphraseTipsConfirm(  # 创建密码短语提示确认屏幕
+                        _(i18n_keys.TITLE__DISABLE_PASSPHRASE),  # 设置标题
+                        _(i18n_keys.SUBTITLE__DISABLE_PASSPHRASE),  # 设置副标题
+                        _(i18n_keys.BUTTON__DISABLE),  # 设置确认按钮文本
+                        self,  # 设置回调对象
+                        icon_path="",  # 设置图标路径为空
                     )
-        elif code == lv.EVENT.READY:
-            if self.passphrase.switch.has_state(lv.STATE.CHECKED):
-                self.description.set_text(
-                    _(i18n_keys.CONTENT__PASSPHRASE_ENABLED__HINT)
+            elif target == self.attach_to_pin.switch:  # 如果目标是PIN附加开关
+                # 处理 Attach to PIN 开关状态变化
+                device.set_passphrase_always_on_device(target.has_state(lv.STATE.CHECKED))  # 设置密码短语是否总是在设备上
+                
+        elif code == lv.EVENT.READY:  # 如果是就绪事件
+            if self.passphrase.switch.has_state(lv.STATE.CHECKED):  # 如果密码短语开关被选中
+                self.description.set_text(  # 设置描述文本
+                    _(i18n_keys.PASSPHRASE__ENABLE_DESC)
                 )
-                device.set_passphrase_enabled(True)
-                device.set_passphrase_always_on_device(False)
-            else:
-                self.description.set_text(
+                device.set_passphrase_enabled(True)  # 启用密码短语
+                device.set_passphrase_always_on_device(False)  # 设置密码短语不总是在设备上
+                self.advance_label.clear_flag(lv.obj.FLAG.HIDDEN)
+                self.attach_to_pin.clear_flag(lv.obj.FLAG.HIDDEN)
+                self.pin_description.clear_flag(lv.obj.FLAG.HIDDEN)
+                # 显示 Attach to PIN 选项
+
+                # self.attach_to_pin.clear_state()  # 设置PIN附加开关为关闭状态
+            else:  # 如果密码短语开关未被选中
+                self.description.set_text(  # 设置描述文本
                     _(i18n_keys.CONTENT__PASSPHRASE_DISABLED__HINT)
                 )
-                device.set_passphrase_enabled(False)
-        elif code == lv.EVENT.CANCEL:
-            if self.passphrase.switch.has_state(lv.STATE.CHECKED):
-                self.passphrase.clear_state()
-            else:
-                self.passphrase.add_state()
+                device.set_passphrase_enabled(False)  # 禁用密码短语
+                self.advance_label.add_flag(lv.obj.FLAG.HIDDEN)
+                self.attach_to_pin.add_flag(lv.obj.FLAG.HIDDEN)
+                self.pin_description.add_flag(lv.obj.FLAG.HIDDEN)
 
 
-class PassphraseTipsConfirm(FullSizeWindow):
-    def __init__(
-        self,
-        title: str,
-        subtitle: str,
-        confirm_text: str,
-        callback_obj,
-        icon_path="A:/res/warning.png",
-        primary_color=lv_colors.ONEKEY_GREEN,
-    ):
-        super().__init__(
-            title,
-            subtitle,
-            confirm_text,
-            cancel_text=_(i18n_keys.BUTTON__CANCEL),
-            icon_path=icon_path,
-            anim_dir=2,
-            primary_color=primary_color,
-        )
-        self.callback_obj = callback_obj
+        elif code == lv.EVENT.CANCEL:  # 如果是取消事件
+            if self.passphrase.switch.has_state(lv.STATE.CHECKED):  # 如果密码短语开关被选中
+                self.passphrase.clear_state()  # 设置密码短语开关为关闭状态
+                # 隐藏 Attach to PIN 选项
+                                # 隐藏 Attach to PIN 选项
+                self.advance_label.add_flag(lv.obj.FLAG.HIDDEN)
+                self.attach_to_pin.add_flag(lv.obj.FLAG.HIDDEN)
+                self.pin_description.add_flag(lv.obj.FLAG.HIDDEN)
+            else:  # 如果密码短语开关未被选中
+                self.passphrase.add_state()  # 设置密码短语开关为开启状态
+                # 显示 Attach to PIN 选项并恢复其状态
+                self.attach_to_pin.clear_flag(lv.obj.FLAG.HIDDEN)  # 使用 clear_flag 替代 set_visible
+                self.advance_label.clear_flag(lv.obj.FLAG.HIDDEN)
+                self.attach_to_pin.clear_flag(lv.obj.FLAG.HIDDEN)
+                self.pin_description.clear_flag(lv.obj.FLAG.HIDDEN)
+                if device.is_passphrase_always_on_device():  # 如果密码短语总是在设备上
+                    self.attach_to_pin.add_state()  # 设置PIN附加开关为开启状态
+                else:  # 否则
+                    self.attach_to_pin.clear_state()  # 设置PIN附加开关为关闭状态
 
-    def eventhandler(self, event_obj):
+    def on_click(self, event_obj):
         code = event_obj.code
         target = event_obj.get_target()
         if code == lv.EVENT.CLICKED:
-            if utils.lcd_resume():
-                return
-            elif target == self.btn_no:
-                lv.event_send(self.callback_obj, lv.EVENT.CANCEL, None)
-            elif target == self.btn_yes:
-                lv.event_send(self.callback_obj, lv.EVENT.READY, None)
-            else:
-                return
-            self.show_dismiss_anim()
+            if target == self.attach_to_pin:
+                from trezor import workflow            
+                async def handle_attach_to_pin():
+                    from trezor import wire
+                    from trezor.ui.layouts.lvgl.attach_to_pin import show_attach_to_pin_window
+
+                
+                    # 创建一个上下文对象
+                    ctx = wire.DUMMY_CONTEXT
+                    result = await show_attach_to_pin_window(ctx)
+
+                    return result
+                
+                    # try:
+                    #     # 请求用户输入 PIN
+                    #     pin = await request_passphrase_pin_confirm(ctx)
+                    
+                    #     # 如果用户输入了 PIN，则设置 passphrase_always_on_device
+                    #     if pin:
+                    #         from trezor import storage
+                    #         storage.device.set_passphrase_always_on_device(True)
+
+
+                    #         screen = FullSizeWindow(
+                    #         _(i18n_keys.TITLE__BACKUP_LIMITED),
+                    #         _(i18n_keys.TITLE__BACKUP_LIMITED_DESC),
+                    #         confirm_text=_(i18n_keys.BUTTON__GO_SETTINGS),
+                    #         cancel_text=_(i18n_keys.BUTTON__BACK),
+                    #         anim_dir=0,
+                    #     )
+                    #         screen.btn_layout_ver()
+                    #         if hasattr(screen, "subtitle"):
+                    #             screen.subtitle.set_recolor(True)
+                    #         result = await ctx.wait(screen.request())
+                        
+                    #     # 显示成功消息
+                    #     # 这里可以添加一个成功提示
+                    # except Exception as e:
+                    #     if __debug__:
+                    #         print(f"Error in handle_attach_to_pin: {e}")
+            
+                # 启动异步任务
+                workflow.spawn(handle_attach_to_pin())
+
+
+
+class PassphraseTipsConfirm(FullSizeWindow):  # 密码短语提示确认窗口类
+    def __init__(  # 初始化函数
+        self,
+        title: str,  # 标题参数
+        subtitle: str,  # 副标题参数
+        confirm_text: str,  # 确认按钮文本参数
+        callback_obj,  # 回调对象参数
+        icon_path="A:/res/warning.png",  # 图标路径参数，默认为警告图标
+        primary_color=lv_colors.ONEKEY_GREEN,  # 主要颜色参数，默认为绿色
+    ):
+        super().__init__(  # 调用父类初始化方法
+            title,  # 设置标题
+            subtitle,  # 设置副标题
+            confirm_text,  # 设置确认按钮文本
+            cancel_text=_(i18n_keys.BUTTON__CANCEL),  # 设置取消按钮文本
+            icon_path=icon_path,  # 设置图标路径
+            anim_dir=2,  # 设置动画方向
+            primary_color=primary_color,  # 设置主要颜色
+        )
+        self.callback_obj = callback_obj  # 保存回调对象
+
+    def eventhandler(self, event_obj):  # 事件处理函数
+        code = event_obj.code  # 获取事件代码
+        target = event_obj.get_target()  # 获取事件目标
+        if code == lv.EVENT.CLICKED:  # 如果是点击事件
+            if utils.lcd_resume():  # 如果LCD恢复
+                return  # 直接返回
+            elif target == self.btn_no:  # 如果目标是取消按钮
+                lv.event_send(self.callback_obj, lv.EVENT.CANCEL, None)  # 发送取消事件给回调对象
+            elif target == self.btn_yes:  # 如果目标是确认按钮
+                lv.event_send(self.callback_obj, lv.EVENT.READY, None)  # 发送就绪事件给回调对象
+            else:  # 如果是其他目标
+                return  # 直接返回
+            self.show_dismiss_anim()  # 显示消失动画
 
 
 class CryptoScreen(Screen):

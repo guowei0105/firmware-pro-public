@@ -35,7 +35,6 @@ async def request_pin_confirm(ctx: wire.Context, *args: Any, **kwargs: Any) -> s
     while True:
         if kwargs.get("show_tip", True):
             from trezor.ui.layouts import request_pin_tips
-
             await request_pin_tips(ctx)
         pin1 = await request_pin(
             ctx, _(i18n_keys.TITLE__ENTER_NEW_PIN), *args, **kwargs
@@ -90,82 +89,81 @@ def _get_last_unlock_time() -> int:
 
 
 async def verify_user_pin(
-    ctx: wire.GenericContext = wire.DUMMY_CONTEXT,
-    prompt: str = "",
-    allow_cancel: bool = True,
-    retry: bool = True,
-    cache_time_ms: int = 0,
-    re_loop: bool = False,
-    callback=None,
-    allow_fingerprint: bool = True,
-    close_others: bool = True,
+    ctx: wire.GenericContext = wire.DUMMY_CONTEXT,  # 上下文，默认为虚拟上下文
+    prompt: str = "",  # 提示信息
+    allow_cancel: bool = True,  # 是否允许取消
+    retry: bool = True,  # 是否允许重试
+    cache_time_ms: int = 0,  # PIN缓存时间（毫秒）
+    re_loop: bool = False,  # 是否重新循环
+    callback=None,  # 回调函数
+    allow_fingerprint: bool = True,  # 是否允许指纹解锁
+    close_others: bool = True,  # 是否关闭其他界面
 ) -> None:
-    last_unlock = _get_last_unlock_time()
+    last_unlock = _get_last_unlock_time()  # 获取上次解锁时间
     if (
-        cache_time_ms
-        and last_unlock
-        and utime.ticks_ms() - last_unlock <= cache_time_ms
-        and config.is_unlocked()
-        and fingerprints.is_unlocked()
+        cache_time_ms  # 如果设置了缓存时间
+        and last_unlock  # 且有上次解锁记录
+        and utime.ticks_ms() - last_unlock <= cache_time_ms  # 且当前时间与上次解锁时间的差值小于等于缓存时间
+        and config.is_unlocked()  # 且配置已解锁
+        and fingerprints.is_unlocked()  # 且指纹已解锁
     ):
-        return
+        return  # 直接返回，无需再次验证
 
-    if config.has_pin():
-        from trezor.ui.layouts import request_pin_on_device
+    if config.has_pin():  # 如果设置了PIN码
+        from trezor.ui.layouts import request_pin_on_device  # 导入PIN码请求界面
 
-        pin = await request_pin_on_device(
+        pin = await request_pin_on_device(  # 在设备上请求PIN码
             ctx,
             prompt,
-            config.get_pin_rem(),
+            config.get_pin_rem(),  # 获取剩余尝试次数
             allow_cancel,
             allow_fingerprint,
             close_others=close_others,
         )
 
-        config.ensure_not_wipe_code(pin)
+        config.ensure_not_wipe_code(pin)  # 确保输入的不是擦除码
     else:
-        pin = ""
+        pin = ""  # 如果没有设置PIN码，则使用空字符串
     try:
-        salt = await request_sd_salt(ctx)
-    except SdCardUnavailable:
-        raise wire.PinCancelled("SD salt is unavailable")
+        salt = await request_sd_salt(ctx)  # 请求SD卡盐值
+    except SdCardUnavailable:  # 如果SD卡不可用
+        raise wire.PinCancelled("SD salt is unavailable")  # 抛出PIN取消异常
 
-    if not config.is_unlocked():
-        verified = config.unlock(pin, salt)
+    if not config.is_unlocked():  # 如果配置未解锁
+        verified = config.unlock(pin, salt)  # 尝试解锁
     else:
-        verified = config.check_pin(pin, salt)
-    if verified:
-        if re_loop:
-            loop.clear()
-        elif callback:
-            callback()
-        _set_last_unlock_time()
-        return
-    elif not config.has_pin():
-        raise RuntimeError
-    while retry:
-        pin_rem = config.get_pin_rem()
-        pin = await request_pin_on_device(  # type: ignore ["request_pin_on_device" is possibly unbound]
+        verified = config.check_pin(pin, salt)  # 检查PIN码是否正确
+    if verified:  # 如果验证成功
+        if re_loop:  # 如果需要重新循环
+            loop.clear()  # 清除循环
+        elif callback:  # 如果有回调函数
+            callback()  # 执行回调
+        _set_last_unlock_time()  # 设置最后解锁时间
+        return  # 返回
+    elif not config.has_pin():  # 如果没有设置PIN码但验证失败
+        raise RuntimeError  # 抛出运行时错误
+    while retry:  # 当允许重试时
+        pin_rem = config.get_pin_rem()  # 获取剩余尝试次数
+        pin = await request_pin_on_device(  # type: ignore ["request_pin_on_device" is possibly unbound]  # 再次请求PIN码
             ctx,
-            _(i18n_keys.TITLE__ENTER_PIN),
+            _(i18n_keys.TITLE__ENTER_PIN),  # 使用本地化的"输入PIN"标题
             pin_rem,
             allow_cancel,
             allow_fingerprint,
             close_others=close_others,
         )
-        if not config.is_unlocked():
-            verified = config.unlock(pin, salt)
+        if not config.is_unlocked():  # 如果配置未解锁
+            verified = config.unlock(pin, salt)  # 尝试解锁
         else:
-            verified = config.check_pin(pin, salt)
-        if verified:
-            if re_loop:
-                loop.clear()
-            elif callback:
-                callback()
-            _set_last_unlock_time()
-            return
-
-    raise wire.PinInvalid
+            verified = config.check_pin(pin, salt)  # 检查PIN码是否正确
+        if verified:  # 如果验证成功
+            if re_loop:  # 如果需要重新循环
+                loop.clear()  # 清除循环
+            elif callback:  # 如果有回调函数
+                callback()  # 执行回调
+            _set_last_unlock_time()  # 设置最后解锁时间
+            return  # 返回
+    raise wire.PinInvalid  # 如果所有尝试都失败，抛出PIN无效异常
 
 
 async def verify_user_fingerprint(

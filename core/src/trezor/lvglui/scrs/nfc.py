@@ -89,12 +89,10 @@ async def get_card_num(self):
         if sw1sw2 == LITE_CARD_DISCONECT_STATUS:
             await handle_sw1sw2_connect_error(self)
             return card_num, LITE_CARD_ERROR_REPONSE
-
     if isinstance(card_num, bytes):
         card_num_str = card_num.decode("utf-8")
     else:
         card_num_str = str(card_num)
-
     return card_num_str, LITE_CARD_SUCCESS_REPONSE
 
 
@@ -109,7 +107,6 @@ def get_card_type(card_num_str):
 
 
 async def check_card_data(self):
-
     card_num, status = await get_card_num(self)
     if status == LITE_CARD_ERROR_REPONSE:
         return

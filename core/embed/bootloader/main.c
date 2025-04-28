@@ -690,117 +690,123 @@ static BOOT_TARGET decide_boot_target(vendor_header* const vhdr,
 }
 
 int main(void) {
-  SystemCoreClockUpdate();
-  dwt_init();
+  SystemCoreClockUpdate();  // 更新系统核心时钟变量
+  dwt_init();  // 初始化数据监视跟踪单元
 
-  mpu_config_boardloader(sectrue, secfalse);
-  mpu_config_bootloader(sectrue, sectrue);
-  mpu_config_firmware(sectrue, secfalse);
-  mpu_config_base();  // base config last as it contains deny access layers and
-                      // mpu may already running
-  mpu_ctrl(sectrue);  // ensure enabled
+  // 配置内存保护单元(MPU)以保护不同的固件区域
+  mpu_config_boardloader(sectrue, secfalse);  // 配置板载加载程序区域
+  mpu_config_bootloader(sectrue, sectrue);    // 配置引导加载程序区域
+  mpu_config_firmware(sectrue, secfalse);     // 配置固件区域
+  mpu_config_base();  // 基础配置最后设置，因为它包含拒绝访问层，且MPU可能已经运行
+  mpu_ctrl(sectrue);  // 确保MPU已启用
 
-  // disable all external communication or user input irq
-  // will be re-enabled later by calling their init function
-  // bluetooth uart
+  // 禁用所有外部通信或用户输入中断
+  // 稍后将通过调用它们的初始化函数重新启用
+  // 蓝牙UART
   HAL_NVIC_DisableIRQ(UART4_IRQn);
   HAL_NVIC_ClearPendingIRQ(UART4_IRQn);
-  // bluetooth spi
+  // 蓝牙SPI
   HAL_NVIC_DisableIRQ(SPI2_IRQn);
   HAL_NVIC_ClearPendingIRQ(SPI2_IRQn);
   HAL_NVIC_DisableIRQ(EXTI15_10_IRQn);
   HAL_NVIC_ClearPendingIRQ(EXTI15_10_IRQn);
-  // usb
+  // USB
   HAL_NVIC_DisableIRQ(OTG_HS_IRQn);
   HAL_NVIC_ClearPendingIRQ(OTG_HS_IRQn);
 
+  // 重新启用全局中断
   __enable_irq();
   __enable_fault_irq();
 
-  lcd_ltdc_dsi_disable();
-  sdram_reinit();
-  // lcd_para_init(DISPLAY_RESX, DISPLAY_RESY, LCD_PIXEL_FORMAT_RGB565);
-  lcd_ltdc_dsi_enable();
-  lcd_pwm_init();
-  touch_init();
+  // 初始化显示和内存
+  lcd_ltdc_dsi_disable();  // 禁用LCD控制器
+  sdram_reinit();          // 重新初始化SDRAM
+  // lcd_para_init(DISPLAY_RESX, DISPLAY_RESY, LCD_PIXEL_FORMAT_RGB565);  // 已注释的LCD参数初始化
+  lcd_ltdc_dsi_enable();   // 启用LCD控制器
+  lcd_pwm_init();          // 初始化LCD背光PWM
+  touch_init();            // 初始化触摸屏
 
-  adc_init();
+  adc_init();              // 初始化模数转换器
 
-  // keep the screen but cover the boot bar
+  // 保持屏幕但覆盖启动栏
   // display_clear();
-  display_bar_radius(160, 352, 160, 4, COLOR_BLACK, COLOR_BLACK, 2);
+  display_bar_radius(160, 352, 160, 4, COLOR_BLACK, COLOR_BLACK, 2);  // 绘制黑色覆盖栏
 
-  // fault handler
-  bus_fault_enable();  // it's here since requires user interface
+  // 故障处理程序
+  bus_fault_enable();  // 启用总线故障处理（放在这里是因为需要用户界面）
 
-  // storages
-  ensure_emmcfs(emmc_fs_init(), "emmc_fs_init");
-  ensure_emmcfs(emmc_fs_mount(true, false), "emmc_fs_mount");
-  if (get_hw_ver() < HW_VER_3P0A) {
-    qspi_flash_init();
-    qspi_flash_config();
-    qspi_flash_memory_mapped();
+  // 存储初始化
+  ensure_emmcfs(emmc_fs_init(), "emmc_fs_init");  // 确保eMMC文件系统初始化成功
+  ensure_emmcfs(emmc_fs_mount(true, false), "emmc_fs_mount");  // 确保eMMC文件系统挂载成功
+  if (get_hw_ver() < HW_VER_3P0A) {  // 如果硬件版本低于3.0A
+    qspi_flash_init();               // 初始化QSPI闪存
+    qspi_flash_config();             // 配置QSPI闪存
+    qspi_flash_memory_mapped();      // 设置QSPI闪存为内存映射模式
   }
 
-  // bt/pm
-  ble_usart_init();
-  spi_slave_init();
-  ble_reset();
+  // 蓝牙/电源管理初始化
+  ble_usart_init();  // 初始化蓝牙UART
+  spi_slave_init();  // 初始化SPI从设备
+  ble_reset();       // 重置蓝牙模块
 
-  // misc/feedback
-  random_delays_init();
+  // 杂项/反馈
+  random_delays_init();  // 初始化随机延迟
 
-  // as they using same i2c bus, both needs to be powered up before any
-  // communication
-  camera_io_init();
-  thd89_io_init();
+  // 由于使用相同的I2C总线，在任何通信前都需要给两者供电
+  camera_io_init();  // 初始化摄像头IO
+  thd89_io_init();   // 初始化THD89模块IO
 
-  // se
-  thd89_reset();
-  thd89_init();
+  // 安全元件
+  thd89_reset();     // 重置THD89模块
+  thd89_init();      // 初始化THD89模块
 
-  uint8_t se_mode = se_get_state();
-  // all se in app mode
+  uint8_t se_mode = se_get_state();  // 获取安全元件状态
+  // 所有安全元件处于应用模式
   if (se_mode == 0) {
-    device_para_init();
+    device_para_init();  // 初始化设备参数
   }
 
+  // 如果设备序列号未设置或安全元件没有证书，且安全元件处于应用模式
   if ((!device_serial_set() || !se_has_cerrificate()) && se_mode == 0) {
-    display_clear();
-    device_set_factory_mode(true);
-    ui_bootloader_factory();
-    if (bootloader_usb_loop_factory(NULL, NULL) != sectrue) {
-      return 1;
+    display_clear();                // 清除显示
+    device_set_factory_mode(true);  // 设置设备为工厂模式
+    ui_bootloader_factory();        // 显示工厂模式界面
+    if (bootloader_usb_loop_factory(NULL, NULL) != sectrue) {  // 进入工厂模式USB循环
+      return 1;  // 如果失败则返回1
     }
   }
 
-#if !PRODUCTION
+#if !PRODUCTION  // 非生产环境代码
 
+  // 注释掉的代码：如果设备序列号未设置，写入虚拟序列号
   // if (!device_serial_set()) {
   //   write_dev_dummy_serial();
   // }
-  UNUSED(write_dev_dummy_serial);
+  UNUSED(write_dev_dummy_serial);  // 防止未使用函数警告
 
+  // 注释掉的代码：如果安全元件没有证书，写入虚拟证书
   // if (!se_has_cerrificate()) {
   //   write_dev_dummy_cert();
   // }
-  UNUSED(write_dev_dummy_cert);
+  UNUSED(write_dev_dummy_cert);  // 防止未使用函数警告
 
+  // 注释掉的代码：覆盖设备序列号
   // if(!device_overwrite_serial("PRA50I0000 QA"))
   // {
   //   dbgprintf_Wait("serial overwrite failed!");
   // }
 
+  // 注释掉的代码：设备测试
   // device_test(true);
 
-  device_backup_otp(false);
-  // device_restore_otp();
+  device_backup_otp(false);  // 备份一次性可编程存储器
+  // device_restore_otp();   // 注释掉的恢复OTP代码
 
 #endif
 
-#if PRODUCTION
+#if PRODUCTION  // 生产环境代码
 
-  // check bootloader downgrade
+  // 检查引导加载程序降级
   check_bootloader_version();
 
 #endif
@@ -815,43 +821,45 @@ int main(void) {
   secbool hdr_valid = secfalse;
   secbool code_valid = secfalse;
 
+  // 决定启动目标
   BOOT_TARGET boot_target =
       decide_boot_target(&vhdr, &hdr, &vhdr_valid, &hdr_valid, &code_valid);
-  // boot_target = BOOT_TARGET_BOOTLOADER;
+  // boot_target = BOOT_TARGET_BOOTLOADER;  // 注释掉的强制设置启动目标代码
 
-  if (boot_target == BOOT_TARGET_BOOTLOADER) {
-    display_clear();
+  if (boot_target == BOOT_TARGET_BOOTLOADER) {  // 如果启动目标是引导加载程序
+    display_clear();  // 清除显示
 
-    if (sectrue == vhdr_valid && sectrue == hdr_valid) {
-      ui_bootloader_first(&hdr);
-      if (bootloader_usb_loop(&vhdr, &hdr) != sectrue) {
-        return 1;
+    if (sectrue == vhdr_valid && sectrue == hdr_valid) {  // 如果供应商头部和镜像头部都有效
+      ui_bootloader_first(&hdr);  // 显示带有镜像头部信息的引导加载程序界面
+      if (bootloader_usb_loop(&vhdr, &hdr) != sectrue) {  // 进入带有头部信息的USB循环
+        return 1;  // 如果失败则返回1
       }
-    } else {
-      ui_bootloader_first(NULL);
-      if (bootloader_usb_loop(NULL, NULL) != sectrue) {
-        return 1;
+    } else {  // 如果头部无效
+      ui_bootloader_first(NULL);  // 显示不带头部信息的引导加载程序界面
+      if (bootloader_usb_loop(NULL, NULL) != sectrue) {  // 进入不带头部信息的USB循环
+        return 1;  // 如果失败则返回1
       }
     }
-  } else if (boot_target == BOOT_TARGET_NORMAL) {
-    // check bluetooth key
+  } else if (boot_target == BOOT_TARGET_NORMAL) {  // 如果启动目标是正常启动
+    // 检查蓝牙密钥
     device_verify_ble();
 
-    // if all VTRUST flags are unset = ultimate trust => skip the procedure
+    // 如果所有VTRUST标志都未设置 = 完全信任 => 跳过验证程序
     if ((vhdr.vtrust & VTRUST_ALL) != VTRUST_ALL) {
-      // ui_fadeout();  // no fadeout - we start from black screen
-      ui_screen_boot(&vhdr, &hdr);
-      ui_fadein();
+      // ui_fadeout();  // 无淡出 - 我们从黑屏开始
+      ui_screen_boot(&vhdr, &hdr);  // 显示启动屏幕
+      ui_fadein();  // 淡入显示
 
+      // 处理等待延迟
       int delay = (vhdr.vtrust & VTRUST_WAIT) ^ VTRUST_WAIT;
-      if (delay > 1) {
+      if (delay > 1) {  // 如果延迟大于1秒
         while (delay > 0) {
-          ui_screen_boot_wait(delay);
-          hal_delay(1000);
-          delay--;
+          ui_screen_boot_wait(delay);  // 显示等待倒计时
+          hal_delay(1000);  // 延迟1秒
+          delay--;  // 减少倒计时
         }
-      } else if (delay == 1) {
-        hal_delay(1000);
+      } else if (delay == 1) {  // 如果延迟等于1秒
+        hal_delay(1000);  // 延迟1秒
       }
 
       if ((vhdr.vtrust & VTRUST_CLICK) == 0) {
@@ -870,13 +878,15 @@ int main(void) {
     display_clear();
     bus_fault_disable();
 
-    // enable firmware region
-    mpu_config_firmware(sectrue, sectrue);
+    // 启用固件区域
+    mpu_config_firmware(sectrue, sectrue);  // 配置固件区域为可访问可执行
 
+    // 跳转到固件起始地址
     jump_to(FIRMWARE_START + vhdr.hdrlen + hdr.hdrlen);
   }
 
+  // 如果到达这里，说明启动目标无效，显示错误并关机
   error_shutdown("Internal error", "Boot target invalid", "Tap to restart.",
                  "If the issue persists, contact support.");
-  return -1;
+  return -1;  // 返回错误代码
 }

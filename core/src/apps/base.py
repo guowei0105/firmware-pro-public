@@ -432,7 +432,6 @@ def set_homescreen() -> None:
 
 def store_ble_name(ble_name):
     from trezor import uart
-
     temp_ble_name = uart.get_ble_name()
     if not ble_name and temp_ble_name:
         storage.device.set_ble_name(temp_ble_name)
