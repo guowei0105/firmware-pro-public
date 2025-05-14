@@ -517,7 +517,6 @@ async def handle_session(
         import apps.debug
 
         apps.debug.DEBUG_CONTEXT = ctx
-
     # Take a mark of modules that are imported at this point, so we can
     # roll back and un-import any others.
     modules = utils.unimport_begin()

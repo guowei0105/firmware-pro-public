@@ -19,8 +19,7 @@ def is_initialized() -> bool:
 
 
 # extmod/modtrezorconfig/modtrezorconfig.c
-def unlock(pin: str, ext_salt: bytes | None, pin_use_type: int = 0)
--> tuple[bool, int]:
+def unlock(pin: str, ext_salt: bytes | None, pin_use_type: int = 0) -> tuple[bool, int]:
     """
     Attempts to unlock the storage with the given PIN and external salt.
     Returns True on success, False on failure.
@@ -28,8 +27,7 @@ def unlock(pin: str, ext_salt: bytes | None, pin_use_type: int = 0)
 
 
 # extmod/modtrezorconfig/modtrezorconfig.c
-def check_pin(pin: str, ext_salt: bytes | None, pin_use_type: int = 0) ->
-bool:
+def check_pin(pin: str, ext_salt: bytes | None, pin_use_type: int = 0) ->bool:
     """
     Check the given PIN with the given external salt.
     Returns True on success, False on failure.
