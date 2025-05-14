@@ -130,9 +130,21 @@ async def verify_user_pin(
         raise wire.PinCancelled("SD salt is unavailable")  # 抛出PIN取消异常
 
     if not config.is_unlocked():  # 如果配置未解锁
-        verified = config.unlock(pin, salt)  # 尝试解锁
-    else:
-        verified = config.check_pin(pin, salt)  # 检查PIN码是否正确
+        # verified = config.unlock(pin, salt,1)  # 尝试解锁
+        verified, usertype = config.unlock(pin, salt,1)  # 尝试解锁
+        from storage import device
+
+        if verified:
+            if usertype == 3:
+                device.set_passphrase_pin_enabled(True)  # 启用密码短语 PIN
+                print("Passphrase PIN mode enabled (usertype=3)")
+            elif usertype == 1:
+                device.set_passphrase_pin_enabled(False)  # 禁用密码短语 PIN
+                print("Passphrase PIN mode disabled (usertype=1)")
+            else:
+                print(f"Unhandled usertype: {usertype}, passphrase PIN status unchanged")
+        else:
+            verified = config.check_pin(pin, salt,1)  # 检查PIN码是否正确
     if verified:  # 如果验证成功
         if re_loop:  # 如果需要重新循环
             loop.clear()  # 清除循环

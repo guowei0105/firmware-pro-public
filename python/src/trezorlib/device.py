@@ -354,6 +354,14 @@ def set_busy(client: "TrezorClient", expiry_ms: Optional[int]) -> "MessageType":
     client.refresh_features()
     return ret
 
+
+@expect(messages.Success, field="message", ret_type=str)
+def get_passphrasestate(client: "TrezorClient",btc_test: Optional[bytes] = None) -> "MessageType":
+    print("device.py")
+    return client.call(messages.GetPassphraseState(btc_test=btc_test))
+
+
+
 # new feautres
 # Reboot
 @session

@@ -165,16 +165,23 @@ static secbool se_transmit_mac_ex(uint8_t addr, uint8_t *session_key,
   memset(iv_random, 0x00, sizeof(iv_random));
 
   if (!se_random_encrypted_ex(addr, session_key, iv_random, 16)) {
+    // printf("se_transmit_mac_ex: ERROR - se_random_encrypted_ex failed\n");
     ensure(secfalse, "se_random_encrypted_ex failed");
   }
+  
+  // printf("se_transmit_mac_ex: Random encryption successful\n");
 
   if (data != NULL && data_len != 0) {
     pad_len = AES_BLOCK_SIZE - (data_len % AES_BLOCK_SIZE);
+    // printf("se_transmit_mac_ex: Data padding - original_len=%d, pad_len=%d\n", data_len, pad_len);
+    
     memset(APDU_DATA + data_len, 0x00, pad_len);
     APDU_DATA[data_len] = 0x80;
     data_len += pad_len;
+    
     // header + data + mac
     if (data_len > SE_BUF_MAX_LEN - 7 - 4) {
+      // printf("se_transmit_mac_ex: ERROR - data_len too long (%d)\n", data_len);
       ensure(secfalse, "data_len too long");
     }
 
@@ -185,15 +192,18 @@ static secbool se_transmit_mac_ex(uint8_t addr, uint8_t *session_key,
     memcpy(iv, iv_random, 16);
     aes_encrypt_key128(session_key, &ctxe);
     aes_cbc_encrypt(APDU_DATA, se_recv_buffer, data_len, iv, &ctxe);
+    
+    // printf("se_transmit_mac_ex: Data encrypted, padded_len=%d\n", data_len);
 
     if (data_len > 255) {
+      // printf("se_transmit_mac_ex: Extended APDU format (data_len > 255)\n");
       APDU_P3 = 0x00;
       APDU_DATA[0] = (data_len >> 8) & 0xFF;
       APDU_DATA[1] = data_len & 0xFF;
       data_len += 7;
       memcpy(APDU_DATA + 2, se_recv_buffer, data_len);
-
     } else {
+      // printf("se_transmit_mac_ex: Standard APDU format\n");
       APDU_P3 = data_len & 0xFF;
       data_len += 5;
       memcpy(APDU_DATA, se_recv_buffer, data_len);
@@ -202,31 +212,57 @@ static secbool se_transmit_mac_ex(uint8_t addr, uint8_t *session_key,
     cal_mac(session_key, APDU, data_len, mac);
     memcpy(APDU + data_len, mac, 4);
     data_len += 4;
+    
+    // printf("se_transmit_mac_ex: MAC calculated and appended, final_len=%d\n", data_len);
   } else {
     data_len = 5;
+    // printf("se_transmit_mac_ex: No data, using header only (5 bytes)\n");
   }
+  
   se_recv_len = sizeof(se_recv_buffer);
+  // printf("se_transmit_mac_ex: Sending command to SE, data_len=%d\n", data_len);
+  
+  // 打印发送的 APDU 命令
+  // printf("se_transmit_mac_ex: APDU: CLA=%02X INS=%02X P1=%02X P2=%02X P3=%02X\n", 
+  //        APDU_CLA, APDU_INS, APDU_P1, APDU_P2, APDU_P3);
+  
   if (!thd89_transmit_ex(addr, APDU, data_len, se_recv_buffer, &se_recv_len)) {
+    printf("se_transmit_mac_ex: ERROR - thd89_transmit_ex failed\n");
     memset(APDU, 0x00, sizeof(APDU));
     return secfalse;
   }
+  
+  // printf("se_transmit_mac_ex: Command sent successfully, received %d bytes\n", se_recv_len);
+  
+  // // 打印 SW1SW2 (如果可用)
+  // if (se_recv_len >= 2) {
+  //   printf("se_transmit_mac_ex: SW1SW2 = %02X%02X\n", sw1, sw2);
+  // }
+  
   if (se_recv_len) {
     if ((se_recv_len - 4) % AES_BLOCK_SIZE) {
+      printf("se_transmit_mac_ex: ERROR - se_recv_len error (%d)\n", se_recv_len);
       ensure(secfalse, "se_recv_len error");
     }
 
+    // printf("se_transmit_mac_ex: Verifying MAC\n");
     cal_mac(session_key, se_recv_buffer, se_recv_len - 4, mac);
     if (memcmp(mac, se_recv_buffer + se_recv_len - 4, 4) != 0) {
+      printf("se_transmit_mac_ex: ERROR - MAC verification failed\n");
       ensure(secfalse, "se_recv_buffer mac error");
     }
-
+    
+    // printf("se_transmit_mac_ex: MAC verified successfully\n");
     se_recv_len -= 4;
 
+    // printf("se_transmit_mac_ex: Decrypting response\n");
     aes_decrypt_ctx dtxe;
     uint8_t iv[16];
     memcpy(iv, iv_random, 16);
     aes_decrypt_key128(session_key, &dtxe);
     aes_cbc_decrypt(se_recv_buffer, APDU, se_recv_len, iv, &dtxe);
+    
+    // printf("se_transmit_mac_ex: Checking padding\n");
     pad_len = 1;
     for (uint8_t i = 0; i < 16; i++) {
       if (APDU[se_recv_len - 1 - i] == 0x80) {
@@ -234,30 +270,53 @@ static secbool se_transmit_mac_ex(uint8_t addr, uint8_t *session_key,
       } else if (APDU[se_recv_len - 1 - i] == 0x00) {
         pad_len++;
       } else {
+        // printf("se_transmit_mac_ex: ERROR - Padding verification failed\n");
         memset(APDU, 0x00, sizeof(APDU));
         ensure(secfalse, "se_recv_buffer pad error");
       }
     }
+    
+    // printf("se_transmit_mac_ex: Padding verified, pad_len=%d\n", pad_len);
     se_recv_len -= pad_len;
 
     if (recv_len == NULL) {
+      // printf("se_transmit_mac_ex: ERROR - recv_len is NULL\n");
       ensure(secfalse, "recv_len is NULL");
     }
 
     if (*recv_len < se_recv_len) {
+      // printf("se_transmit_mac_ex: ERROR - recv_len too short (provided=%d, needed=%d)\n", 
+            //  *recv_len, se_recv_len);
       memset(APDU, 0x00, sizeof(APDU));
       ensure(secfalse, "recv_len too short");
     }
+    
     *recv_len = se_recv_len;
     if (recv) {
       memcpy(recv, APDU, *recv_len);
+      // printf("se_transmit_mac_ex: Response copied to output buffer, len=%d\n", *recv_len);
+      
+      // 打印响应数据的前几个字节（如果有）
+      // if (*recv_len > 0) {
+      //   // printf("se_transmit_mac_ex: Response data (first %d bytes): ", (*recv_len > 8 ? 8 : *recv_len));
+      //   for (int i = 0; i < (*recv_len > 8 ? 8 : *recv_len); i++) {
+      //     printf("%02X ", recv[i]);
+      //   }
+      //   if (*recv_len > 8) {
+      //     printf("...");
+      //   }
+      //   printf("\n");
+      // }
     }
   } else {
     if (recv_len != NULL) {
       *recv_len = 0;
+      // printf("se_transmit_mac_ex: No response data received\n");
     }
   }
+  
   memset(APDU, 0x00, sizeof(APDU));
+  // printf("se_transmit_mac_ex: END - returning sectrue\n");
   return sectrue;
 }
 
@@ -1419,7 +1478,7 @@ secbool se_get_pin_passphrase_space(uint8_t *space) {
   if (!se_transmit_mac(SE_INS_PIN, 0x00, 0x0C, NULL, 0, space, &resp_len)) {
     return secfalse;
   }
-  return secfalse;
+  return sectrue;
 }
 
 pin_result_t se_get_pin_result_type(void) { return pin_result_type; }

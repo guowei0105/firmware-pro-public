@@ -1149,41 +1149,41 @@ async def require_confirm_passphrase(
 
 
 async def request_pin_on_device(
-    ctx: wire.GenericContext,
-    prompt: str,
-    attempts_remaining: int | None,
-    allow_cancel: bool,
-    allow_fingerprint: bool,
-    close_others: bool = True,
-) -> str:
+    ctx: wire.GenericContext,  # 上下文对象，用于处理通信
+    prompt: str,  # PIN输入界面的提示文本
+    attempts_remaining: int | None,  # 剩余尝试次数，如果为None则表示未知
+    allow_cancel: bool,  # 是否允许取消PIN输入
+    allow_fingerprint: bool,  # 是否允许使用指纹解锁
+    close_others: bool = True,  # 是否关闭其他界面
+) -> str:  # 返回用户输入的PIN码字符串
     await button_request(
         ctx, "pin_device", code=ButtonRequestType.PinEntry, close_others=close_others
-    )
-    from storage import device
+    )  # 发送按钮请求，通知主机设备正在等待PIN输入
+    from storage import device  # 导入设备存储模块
 
     if attempts_remaining is None or attempts_remaining == device.PIN_MAX_ATTEMPTS:
-        subprompt = ""
+        subprompt = ""  # 如果是首次尝试或尝试次数未知，则不显示额外提示
     elif attempts_remaining == 5:
-        await confirm_password_input(ctx)
-        subprompt = f"{_(i18n_keys.MSG__INCORRECT_PIN_STR_ATTEMPTS_LEFT).format(attempts_remaining)}"
+        await confirm_password_input(ctx)  # 当剩余5次尝试时，显示确认密码输入界面
+        subprompt = f"{_(i18n_keys.MSG__INCORRECT_PIN_STR_ATTEMPTS_LEFT).format(attempts_remaining)}"  # 显示剩余尝试次数
     elif attempts_remaining == 1:
-        subprompt = f"{_(i18n_keys.MSG__INCORRECT_PIN_THIS_IS_YOUR_LAST_ATTEMPT)}"
+        subprompt = f"{_(i18n_keys.MSG__INCORRECT_PIN_THIS_IS_YOUR_LAST_ATTEMPT)}"  # 最后一次尝试的特殊提示
     else:
-        subprompt = f"{_(i18n_keys.MSG__INCORRECT_PIN_STR_ATTEMPTS_LEFT).format(attempts_remaining)}"
-    from trezor.lvglui.scrs.pinscreen import InputPin
+        subprompt = f"{_(i18n_keys.MSG__INCORRECT_PIN_STR_ATTEMPTS_LEFT).format(attempts_remaining)}"  # 显示剩余尝试次数
+    from trezor.lvglui.scrs.pinscreen import InputPin  # 导入PIN输入界面
 
     pinscreen = InputPin(
         title=prompt, subtitle=subprompt, allow_fingerprint=allow_fingerprint
-    )
-    result = await ctx.wait(pinscreen.request())
+    )  # 创建PIN输入界面实例
+    result = await ctx.wait(pinscreen.request())  # 等待用户输入PIN
     if not result:
         if not allow_cancel:
-            from trezor import loop
+            from trezor import loop  # 导入循环模块
 
-            loop.clear()
-        raise wire.PinCancelled
-    assert isinstance(result, str)
-    return result
+            loop.clear()  # 如果不允许取消且结果为空，清除循环
+        raise wire.PinCancelled  # 抛出PIN取消异常
+    assert isinstance(result, str)  # 确保结果是字符串类型
+    return result  # 返回用户输入的PIN
 
 
 async def request_pin_tips(ctx: wire.GenericContext) -> None:

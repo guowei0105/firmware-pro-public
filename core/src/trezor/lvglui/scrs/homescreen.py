@@ -5289,44 +5289,41 @@ class PassphraseScreen(AnimScreen):
                     from trezor import wire
                     from trezor.ui.layouts.lvgl.attach_to_pin import show_attach_to_pin_window
 
-                
-                    # 创建一个上下文对象
-                    ctx = wire.DUMMY_CONTEXT
-                    result = await show_attach_to_pin_window(ctx)
+                    try:
+                        # 创建一个上下文对象
+                        ctx = wire.DUMMY_CONTEXT
+                        result = await show_attach_to_pin_window(ctx)
 
-                    return result
-                
-                    # try:
-                    #     # 请求用户输入 PIN
-                    #     pin = await request_passphrase_pin_confirm(ctx)
-                    
-                    #     # 如果用户输入了 PIN，则设置 passphrase_always_on_device
-                    #     if pin:
-                    #         from trezor import storage
-                    #         storage.device.set_passphrase_always_on_device(True)
-
-
-                    #         screen = FullSizeWindow(
-                    #         _(i18n_keys.TITLE__BACKUP_LIMITED),
-                    #         _(i18n_keys.TITLE__BACKUP_LIMITED_DESC),
-                    #         confirm_text=_(i18n_keys.BUTTON__GO_SETTINGS),
-                    #         cancel_text=_(i18n_keys.BUTTON__BACK),
-                    #         anim_dir=0,
-                    #     )
-                    #         screen.btn_layout_ver()
-                    #         if hasattr(screen, "subtitle"):
-                    #             screen.subtitle.set_recolor(True)
-                    #         result = await ctx.wait(screen.request())
+                        print(f"show_attach_to_pin_window : {result}")
                         
-                    #     # 显示成功消息
-                    #     # 这里可以添加一个成功提示
-                    # except Exception as e:
-                    #     if __debug__:
-                    #         print(f"Error in handle_attach_to_pin: {e}")
-            
+                        # 根据结果更新界面或导航
+                        if result == True:
+                            # 操作成功，可以在这里添加代码来更新界面
+                            # 例如：显示成功消息或刷新当前页面
+                            print("PIN success")
+                            # self.load_screen(self)  # 重新加载当前屏幕
+                            # 可以发送一个事件来刷新界面
+                            if hasattr(self, "prev_scr") and self.prev_scr:
+                                self.prev_scr.load_screen(self.prev_scr)
+                            # else:
+                            # # 如果没有上一个屏幕，尝试使用事件
+                            lv.event_send(self, lv.EVENT.READY, None)
+                        else:
+                            # 操作失败或被取消
+                            print("PIN error")
+                            # 可以发送一个事件来恢复界面状态
+                            lv.event_send(self, lv.EVENT.CANCEL, None)
+                        
+                        return result
+                    except Exception as e:
+                        if __debug__:
+                            print(f"Error in handle_attach_to_pin: {e}")
+                        # 发生异常时，恢复界面状态
+                        lv.event_send(self, lv.EVENT.CANCEL, None)
+                        return False
+                
                 # 启动异步任务
                 workflow.spawn(handle_attach_to_pin())
-
 
 
 class PassphraseTipsConfirm(FullSizeWindow):  # 密码短语提示确认窗口类

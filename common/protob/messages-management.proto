@@ -33,9 +33,9 @@ enum SafetyCheckLevel {
  * @next Features
  */
 message Initialize {
-    optional bytes session_id = 1;     // assumed device session id; Trezor clears caches if it is different or empty
-    optional bool _skip_passphrase = 2 [deprecated=true]; // removed as part of passphrase redesign
-    optional bool derive_cardano = 3;  // whether to derive Cardano Icarus root keys in this session
+    optional bytes session_id = 1;     // assumed device session id; Trezor clears caches if it is different or empty  // 假定的设备会话 ID；如果不同或为空，Trezor 将清除缓存
+    optional bool _skip_passphrase = 2 [deprecated=true]; // removed as part of passphrase redesign  // 作为密码短语重新设计的一部分而移除
+    optional bool derive_cardano = 3;  // whether to derive Cardano Icarus root keys in this session  // 是否在此会话中派生 Cardano Icarus 根密钥
 }
 
 /**
@@ -77,115 +77,115 @@ enum OneKeySEState {
  * @end
  */
 message Features {
-    optional string vendor = 1;                 // name of the manufacturer, e.g. "trezor.io"
-    required uint32 major_version = 2;          // major version of the firmware/bootloader, e.g. 1
-    required uint32 minor_version = 3;          // minor version of the firmware/bootloader, e.g. 0
-    required uint32 patch_version = 4;          // patch version of the firmware/bootloader, e.g. 0
-    optional bool bootloader_mode = 5;          // is device in bootloader mode?
-    optional string device_id = 6;              // device's unique identifier
-    optional bool pin_protection = 7;           // is device protected by PIN?
-    optional bool passphrase_protection = 8;    // is node/mnemonic encrypted using passphrase?
-    optional string language = 9;               // device language
-    optional string label = 10;                 // device description label
-    optional bool initialized = 12;             // does device contain seed?
-    optional bytes revision = 13;               // SCM revision of firmware
-    optional bytes bootloader_hash = 14;        // hash of the bootloader
-    optional bool imported = 15;                // was storage imported from an external source?
-    optional bool unlocked = 16;                // is the device unlocked? called "pin_cached" previously
-    optional bool _passphrase_cached = 17 [deprecated=true]; // is passphrase already cached in session?
-    optional bool firmware_present = 18;        // is valid firmware loaded?
-    optional bool needs_backup = 19;            // does storage need backup? (equals to Storage.needs_backup)
-    optional uint32 flags = 20;                 // device flags (equals to Storage.flags)
-    optional string model = 21;                 // device hardware model
-    optional uint32 fw_major = 22;              // reported firmware version if in bootloader mode
-    optional uint32 fw_minor = 23;              // reported firmware version if in bootloader mode
-    optional uint32 fw_patch = 24;              // reported firmware version if in bootloader mode
-    optional string fw_vendor = 25;             // reported firmware vendor if in bootloader mode
-    // optional bytes fw_vendor_keys = 26;      // obsoleted, use fw_vendor
-    optional bool unfinished_backup = 27;       // report unfinished backup (equals to Storage.unfinished_backup)
-    optional bool no_backup = 28;               // report no backup (equals to Storage.no_backup)
-    optional bool recovery_mode = 29;           // is recovery mode in progress
-    repeated Capability capabilities = 30;      // list of supported capabilities
+    optional string vendor = 1;                 // name of the manufacturer, e.g. "trezor.io"  // 制造商名称，例如 "trezor.io"
+    required uint32 major_version = 2;          // major version of the firmware/bootloader, e.g. 1  // 固件/引导加载程序的主要版本，例如 1
+    required uint32 minor_version = 3;          // minor version of the firmware/bootloader, e.g. 0  // 固件/引导加载程序的次要版本，例如 0
+    required uint32 patch_version = 4;          // patch version of the firmware/bootloader, e.g. 0  // 固件/引导加载程序的补丁版本，例如 0
+    optional bool bootloader_mode = 5;          // is device in bootloader mode?  // 设备是否处于引导加载程序模式？
+    optional string device_id = 6;              // device's unique identifier  // 设备的唯一标识符
+    optional bool pin_protection = 7;           // is device protected by PIN?  // 设备是否受 PIN 保护？
+    optional bool passphrase_protection = 8;    // is node/mnemonic encrypted using passphrase?  // 节点/助记词是否使用密码短语加密？
+    optional string language = 9;               // device language  // 设备语言
+    optional string label = 10;                 // device description label  // 设备描述标签
+    optional bool initialized = 12;             // does device contain seed?  // 设备是否包含种子？
+    optional bytes revision = 13;               // SCM revision of firmware  // 固件的 SCM 修订版本
+    optional bytes bootloader_hash = 14;        // hash of the bootloader  // 引导加载程序的哈希值
+    optional bool imported = 15;                // was storage imported from an external source?  // 存储是否从外部源导入？
+    optional bool unlocked = 16;                // is the device unlocked? called "pin_cached" previously  // 设备是否已解锁？之前称为 "pin_cached"
+    optional bool _passphrase_cached = 17 [deprecated=true]; // is passphrase already cached in session?  // 密码短语是否已在会话中缓存？
+    optional bool firmware_present = 18;        // is valid firmware loaded?  // 是否加载了有效的固件？
+    optional bool needs_backup = 19;            // does storage need backup? (equals to Storage.needs_backup)  // 存储是否需要备份？（等同于 Storage.needs_backup）
+    optional uint32 flags = 20;                 // device flags (equals to Storage.flags)  // 设备标志（等同于 Storage.flags）
+    optional string model = 21;                 // device hardware model  // 设备硬件型号
+    optional uint32 fw_major = 22;              // reported firmware version if in bootloader mode  // 如果在引导加载程序模式下报告的固件主版本
+    optional uint32 fw_minor = 23;              // reported firmware version if in bootloader mode  // 如果在引导加载程序模式下报告的固件次版本
+    optional uint32 fw_patch = 24;              // reported firmware version if in bootloader mode  // 如果在引导加载程序模式下报告的固件补丁版本
+    optional string fw_vendor = 25;             // reported firmware vendor if in bootloader mode  // 如果在引导加载程序模式下报告的固件供应商
+    // optional bytes fw_vendor_keys = 26;      // obsoleted, use fw_vendor  // 已废弃，使用 fw_vendor
+    optional bool unfinished_backup = 27;       // report unfinished backup (equals to Storage.unfinished_backup)  // 报告未完成的备份（等同于 Storage.unfinished_backup）
+    optional bool no_backup = 28;               // report no backup (equals to Storage.no_backup)  // 报告无备份（等同于 Storage.no_backup）
+    optional bool recovery_mode = 29;           // is recovery mode in progress  // 恢复模式是否正在进行中
+    repeated Capability capabilities = 30;      // list of supported capabilities  // 支持的功能列表
     enum Capability {
         option (has_bitcoin_only_values) = true;
 
-        Capability_Bitcoin = 1 [(bitcoin_only) = true];
-        Capability_Bitcoin_like = 2;                    // Altcoins based on the Bitcoin source code
-        Capability_Binance = 3;
-        Capability_Cardano = 4;
-        Capability_Crypto = 5 [(bitcoin_only) = true];  // generic crypto operations for GPG, SSH, etc.
-        Capability_EOS = 6;
-        Capability_Ethereum = 7;
-        Capability_Lisk = 8 [deprecated = true];
-        Capability_Monero = 9;
-        Capability_NEM = 10;
-        Capability_Ripple = 11;
-        Capability_Stellar = 12;
-        Capability_Tezos = 13;
-        Capability_U2F = 14;
-        Capability_Shamir = 15 [(bitcoin_only) = true];
-        Capability_ShamirGroups = 16 [(bitcoin_only) = true];
-        Capability_PassphraseEntry = 17 [(bitcoin_only) = true];  // the device is capable of passphrase entry directly on the device
+        Capability_Bitcoin = 1 [(bitcoin_only) = true];  // 比特币功能
+        Capability_Bitcoin_like = 2;                    // Altcoins based on the Bitcoin source code  // 基于比特币源代码的山寨币
+        Capability_Binance = 3;  // 币安链功能
+        Capability_Cardano = 4;  // 卡尔达诺功能
+        Capability_Crypto = 5 [(bitcoin_only) = true];  // generic crypto operations for GPG, SSH, etc.  // 用于 GPG、SSH 等的通用加密操作
+        Capability_EOS = 6;  // EOS 功能
+        Capability_Ethereum = 7;  // 以太坊功能
+        Capability_Lisk = 8 [deprecated = true];  // Lisk 功能（已弃用）
+        Capability_Monero = 9;  // 门罗币功能
+        Capability_NEM = 10;  // NEM 功能
+        Capability_Ripple = 11;  // 瑞波币功能
+        Capability_Stellar = 12;  // 恒星币功能
+        Capability_Tezos = 13;  // Tezos 功能
+        Capability_U2F = 14;  // U2F 功能
+        Capability_Shamir = 15 [(bitcoin_only) = true];  // Shamir 备份功能
+        Capability_ShamirGroups = 16 [(bitcoin_only) = true];  // Shamir 分组功能
+        Capability_PassphraseEntry = 17 [(bitcoin_only) = true];  // the device is capable of passphrase entry directly on the device  // 设备能够直接在设备上输入密码短语
     }
-    optional BackupType backup_type = 31;       // type of device backup (BIP-39 / SLIP-39 basic / SLIP-39 advanced)
-    optional bool sd_card_present = 32;         // is SD card present
-    optional bool sd_protection = 33;           // is SD Protect enabled
-    optional bool wipe_code_protection = 34;    // is wipe code protection enabled
-    optional bytes session_id = 35;
-    optional bool passphrase_always_on_device = 36;  // device enforces passphrase entry on Trezor
-    optional SafetyCheckLevel safety_checks = 37;            // safety check level, set to Prompt to limit path namespace enforcement
-    optional uint32 auto_lock_delay_ms = 38;    // number of milliseconds after which the device locks itself
-    optional uint32 display_rotation = 39;      // in degrees from North
-    optional bool experimental_features = 40;   // are experimental message types enabled?
+    optional BackupType backup_type = 31;       // type of device backup (BIP-39 / SLIP-39 basic / SLIP-39 advanced)  // 设备备份类型（BIP-39 / SLIP-39 基本 / SLIP-39 高级）
+    optional bool sd_card_present = 32;         // is SD card present  // SD 卡是否存在
+    optional bool sd_protection = 33;           // is SD Protect enabled  // SD 保护是否启用
+    optional bool wipe_code_protection = 34;    // is wipe code protection enabled  // 擦除码保护是否启用
+    optional bytes session_id = 35;  // 会话 ID
+    optional bool passphrase_always_on_device = 36;  // device enforces passphrase entry on Trezor  // 设备强制在 Trezor 上输入密码短语
+    optional SafetyCheckLevel safety_checks = 37;            // safety check level, set to Prompt to limit path namespace enforcement  // 安全检查级别，设置为 Prompt 以限制路径命名空间强制执行
+    optional uint32 auto_lock_delay_ms = 38;    // number of milliseconds after which the device locks itself  // 设备自动锁定的毫秒数
+    optional uint32 display_rotation = 39;      // in degrees from North  // 从北方开始的度数
+    optional bool experimental_features = 40;   // are experimental message types enabled?  // 是否启用实验性消息类型？
 
-    optional uint32 offset = 500;
-    optional string ble_name = 501;             // OneKey BLE name
-    optional string ble_ver = 502;
-    optional bool ble_enable = 503;
-    optional bool se_enable = 504;
-    optional string se_ver = 506;
-    optional bool backup_only = 507;
-    optional string onekey_version = 508;       // OneKey version
-    optional string onekey_serial = 509;
-    optional string bootloader_version = 510;
+    optional uint32 offset = 500;  // 偏移量
+    optional string ble_name = 501;             // OneKey BLE name  // OneKey 蓝牙名称
+    optional string ble_ver = 502;  // 蓝牙版本
+    optional bool ble_enable = 503;  // 蓝牙是否启用
+    optional bool se_enable = 504;  // 安全元件是否启用
+    optional string se_ver = 506;  // 安全元件版本
+    optional bool backup_only = 507;  // 是否仅备份
+    optional string onekey_version = 508;       // OneKey version  // OneKey 版本
+    optional string onekey_serial = 509;  // OneKey 序列号
+    optional string bootloader_version = 510;  // 引导加载程序版本
 
-    optional string serial_no= 511;
-    optional string spi_flash = 512;
-    optional uint32 initstates = 513;      // list of facotry state
-    optional bytes NFT_voucher = 514;
-    optional string cpu_info = 515;
-    optional string pre_firmware = 516;
+    optional string serial_no= 511;  // 序列号
+    optional string spi_flash = 512;  // SPI 闪存
+    optional uint32 initstates = 513;      // list of facotry state  // 工厂状态列表
+    optional bytes NFT_voucher = 514;  // NFT 凭证
+    optional string cpu_info = 515;  // CPU 信息
+    optional string pre_firmware = 516;  // 预固件
 
-    optional uint32 coin_switch = 517;
-    optional bytes build_id = 518;
-    optional string boardloader_version = 519;
-    optional bool busy = 41;                    // is the device busy, showing "Do not disconnect"?
+    optional uint32 coin_switch = 517;  // 币种切换
+    optional bytes build_id = 518;  // 构建 ID
+    optional string boardloader_version = 519;  // 板载加载程序版本
+    optional bool busy = 41;                    // is the device busy, showing "Do not disconnect"?  // 设备是否忙，显示"请勿断开连接"？
 
-    optional OneKeyDeviceType onekey_device_type = 600;
-    optional OneKeySeType onekey_se_type = 601;
-    optional string onekey_board_version = 602;
-    optional bytes onekey_board_hash = 603;
-    optional string onekey_boot_version = 604;
-    optional bytes onekey_boot_hash = 605;
-    optional string onekey_se01_version = 606;
-    optional bytes onekey_se01_hash = 607;
-    optional string onekey_se01_build_id = 608;
-    optional string onekey_firmware_version = 609;
-    optional bytes onekey_firmware_hash	 = 610;
-    optional string onekey_firmware_build_id = 611;
-    optional string onekey_serial_no = 612;
-    optional string onekey_boot_build_id = 613;
-    optional string onekey_ble_name = 614;
-    optional string onekey_ble_version = 615;
-    optional string onekey_ble_build_id = 616;
-    optional bytes onekey_ble_hash = 617;
-    optional string onekey_se02_version = 618;
-    optional string onekey_se03_version = 619;
-    optional string onekey_se04_version = 620;
-    optional OneKeySEState onekey_se01_state = 621;
-    optional OneKeySEState onekey_se02_state = 622;
-    optional OneKeySEState onekey_se03_state = 623;
-    optional OneKeySEState onekey_se04_state = 624;
+    optional OneKeyDeviceType onekey_device_type = 600;  // OneKey 设备类型
+    optional OneKeySeType onekey_se_type = 601;  // OneKey 安全元件类型
+    optional string onekey_board_version = 602;  // OneKey 主板版本
+    optional bytes onekey_board_hash = 603;  // OneKey 主板哈希
+    optional string onekey_boot_version = 604;  // OneKey 引导版本
+    optional bytes onekey_boot_hash = 605;  // OneKey 引导哈希
+    optional string onekey_se01_version = 606;  // OneKey SE01 版本
+    optional bytes onekey_se01_hash = 607;  // OneKey SE01 哈希
+    optional string onekey_se01_build_id = 608;  // OneKey SE01 构建 ID
+    optional string onekey_firmware_version = 609;  // OneKey 固件版本
+    optional bytes onekey_firmware_hash	 = 610;  // OneKey 固件哈希
+    optional string onekey_firmware_build_id = 611;  // OneKey 固件构建 ID
+    optional string onekey_serial_no = 612;  // OneKey 序列号
+    optional string onekey_boot_build_id = 613;  // OneKey 引导构建 ID
+    optional string onekey_ble_name = 614;  // OneKey 蓝牙名称
+    optional string onekey_ble_version = 615;  // OneKey 蓝牙版本
+    optional string onekey_ble_build_id = 616;  // OneKey 蓝牙构建 ID
+    optional bytes onekey_ble_hash = 617;  // OneKey 蓝牙哈希
+    optional string onekey_se02_version = 618;  // OneKey SE02 版本
+    optional string onekey_se03_version = 619;  // OneKey SE03 版本
+    optional string onekey_se04_version = 620;  // OneKey SE04 版本
+    optional OneKeySEState onekey_se01_state = 621;  // OneKey SE01 状态
+    optional OneKeySEState onekey_se02_state = 622;  // OneKey SE02 状态
+    optional OneKeySEState onekey_se03_state = 623;  // OneKey SE03 状态
+    optional OneKeySEState onekey_se04_state = 624;  // OneKey SE04 状态
 }
 
 /**
@@ -807,3 +807,9 @@ message UnlockPath {
 message UnlockedPathRequest {
     optional bytes mac = 1;            // authentication code for future UnlockPath calls
 }
+
+
+ message GetPassphraseState {
+    optional bytes btc_test = 1;    // Number of bytes being requested (<= 1024)
+}
+

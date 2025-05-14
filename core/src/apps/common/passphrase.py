@@ -9,8 +9,18 @@ _MAX_PASSPHRASE_LEN = const(50)  # 定义密码短语的最大长度为50个字�
 def is_enabled() -> bool:  # 检查密码短语功能是否启用
     return storage.device.is_passphrase_enabled()  # 返回设备存储中密码短语是否启用的状态
 
+def is_passphrase_pin_enabled() -> bool:  # 检查密码短语PIN是否启用
+    return storage.device.is_passphrase_pin_enabled()  # 返回设备存储中密码短语PIN是否启用的状态
+
+
 async def get(ctx: wire.Context) -> str:  # 获取密码短语的异步函数
     if is_enabled():  # 如果密码短语功能已启用
+        if is_passphrase_pin_enabled():
+            # 如果密码短语PIN已启用，则不弹出密码短语输入框
+            # 这里应该返回一个空字符串或者预设的密码短语
+            # 具体行为取决于您的需求
+            print("Passphrase PIN is enabled, skipping passphrase input")
+            return ""  # 或者返回预设的密码短语
         if isinstance(ctx, wire.QRContext) and ctx.passphrase is not None:  # 如果是QR上下文且已有密码短语
             return ctx.passphrase  # 直接返回上下文中的密码短语
         return await _request_from_user(ctx)  # 否则从用户请求密码短语

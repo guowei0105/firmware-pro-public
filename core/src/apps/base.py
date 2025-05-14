@@ -5,6 +5,7 @@ import storage.device
 from trezor import config, loop, protobuf, ui, utils, wire, workflow
 from trezor.enums import MessageType
 from trezor.messages import Success, UnlockPath
+from trezor.crypto import se_thd89
 
 from . import workflow_handlers
 
@@ -22,6 +23,8 @@ if TYPE_CHECKING:
         SetBusy,
         OnekeyGetFeatures,
         OnekeyFeatures,
+        GetPassphraseState,
+        
     )
 
 
@@ -206,48 +209,50 @@ def get_onekey_features() -> OnekeyFeatures:
 async def handle_Initialize(
     ctx: wire.Context | wire.QRContext, msg: Initialize
 ) -> Features:
-    session_id = storage.cache.start_session(msg.session_id)
+    session_id = storage.cache.start_session(msg.session_id)  # 使用消息中的会话ID启动一个新会话
 
-    if not utils.BITCOIN_ONLY:
-        if utils.USE_THD89:
-            if msg.derive_cardano is not None and msg.derive_cardano:
-                # THD89 is not capable of Cardano
-                from trezor.crypto import se_thd89
+    if not utils.BITCOIN_ONLY:  # 如果不是仅比特币模式
+        if utils.USE_THD89:  # 如果使用THD89安全元件
+            if msg.derive_cardano is not None and msg.derive_cardano:  # 如果请求派生Cardano密钥
+                # THD89 is not capable of Cardano  # THD89不支持Cardano
+                from trezor.crypto import se_thd89  # 导入THD89安全元件模块
 
-                state = se_thd89.get_session_state()
-                if state[0] & 0x80 and not state[0] & 0x40:
-                    storage.cache.end_current_session()
-                    session_id = storage.cache.start_session()
+                state = se_thd89.get_session_state()  # 获取当前会话状态
+                if state[0] & 0x80 and not state[0] & 0x40:  # 检查会话状态标志: 这行代码检查THD89安全元件的会话状态。
+                                                            # 它检查状态的第一个字节，判断最高位(0x80)是否设置且第二高位(0x40)是否未设置。
+                                                            # 如果条件满足，表示需要结束当前会话并开始一个新会话。
+                    storage.cache.end_current_session()  # 结束当前会话
+                    session_id = storage.cache.start_session()  # 开始一个新会话
 
-                storage.cache.SESSION_DIRIVE_CARDANO = True
+                storage.cache.SESSION_DIRIVE_CARDANO = True  # 设置会话Cardano派生标志为真
             else:
-                storage.cache.SESSION_DIRIVE_CARDANO = False
+                storage.cache.SESSION_DIRIVE_CARDANO = False  # 设置会话Cardano派生标志为假
 
-        else:
-            derive_cardano = storage.cache.get(storage.cache.APP_COMMON_DERIVE_CARDANO)
-            have_seed = storage.cache.is_set(storage.cache.APP_COMMON_SEED)
+        else:  # 如果使用其他安全元件
+            derive_cardano = storage.cache.get(storage.cache.APP_COMMON_DERIVE_CARDANO)  # 获取Cardano派生设置
+            have_seed = storage.cache.is_set(storage.cache.APP_COMMON_SEED)  # 检查是否已有种子
 
             if (
-                have_seed
-                and msg.derive_cardano is not None
-                and msg.derive_cardano != bool(derive_cardano)
+                have_seed  # 如果已有种子
+                and msg.derive_cardano is not None  # 且请求中指定了Cardano派生设置
+                and msg.derive_cardano != bool(derive_cardano)  # 且与当前设置不同
             ):
                 # seed is already derived, and host wants to change derive_cardano setting
-                # => create a new session
-                storage.cache.end_current_session()
-                session_id = storage.cache.start_session()
-                have_seed = False
+                # => create a new session  # 种子已派生，主机想要更改Cardano派生设置，创建新会话
+                storage.cache.end_current_session()  # 结束当前会话
+                session_id = storage.cache.start_session()  # 开始一个新会话
+                have_seed = False  # 重置种子标志
 
-            if not have_seed:
+            if not have_seed:  # 如果没有种子
                 storage.cache.set(
-                    storage.cache.APP_COMMON_DERIVE_CARDANO,
-                    b"\x01" if msg.derive_cardano else b"",
+                    storage.cache.APP_COMMON_DERIVE_CARDANO,  # 设置Cardano派生标志
+                    b"\x01" if msg.derive_cardano else b"",  # 根据请求设置值
                 )
 
-    features = get_features()
-    features.session_id = session_id
-    storage.cache.update_res_confirm_refresh()
-    return features
+    features = get_features()  # 获取设备特性
+    features.session_id = session_id  # 设置会话ID
+    storage.cache.update_res_confirm_refresh()  # 更新资源确认刷新
+    return features  # 返回设备特性
 
 
 async def handle_GetFeatures(ctx: wire.Context, msg: GetFeatures) -> Features:
@@ -331,29 +336,35 @@ async def handle_UnlockPath(ctx: wire.Context, msg: UnlockPath) -> protobuf.Mess
     from apps.common.seed import Slip21Node, get_seed
     from apps.common.writers import write_uint32_le
 
+    # 定义密钥链MAC密钥路径
     _KEYCHAIN_MAC_KEY_PATH = [b"TREZOR", b"Keychain MAC key"]
 
-    # UnlockPath is relevant only for SLIP-25 paths.
-    # Note: Currently we only allow unlocking the entire SLIP-25 purpose subtree instead of
-    # per-coin or per-account unlocking in order to avoid UI complexity.
+    # UnlockPath仅与SLIP-25路径相关。
+    # 注意：目前我们只允许解锁整个SLIP-25目的子树，而不是按币种或按账户解锁，
+    # 以避免UI复杂性。
     if msg.address_n != [SLIP25_PURPOSE]:
         raise wire.DataError("Invalid path")
 
+    # 获取种子并派生节点
     seed = await get_seed(ctx)
     node = Slip21Node(seed)
     node.derive_path(_KEYCHAIN_MAC_KEY_PATH)
+    # 创建HMAC哈希写入器
     mac = utils.HashWriter(hmac(hmac.SHA256, node.key()))
+    # 将路径写入哈希
     for i in msg.address_n:
         write_uint32_le(mac, i)
     expected_mac = mac.get_digest()
 
-    # Require confirmation to access SLIP25 paths unless already authorized.
+    # 除非已授权，否则需要确认才能访问SLIP25路径。
     if msg.mac:
+        # 验证提供的MAC是否与预期MAC匹配
         if len(msg.mac) != len(expected_mac) or not utils.consteq(
             expected_mac, msg.mac
         ):
             raise wire.DataError("Invalid MAC")
     else:
+        # 如果没有提供MAC，则需要用户确认
         await confirm_action(
             ctx,
             "confirm_coinjoin_access",
@@ -361,14 +372,19 @@ async def handle_UnlockPath(ctx: wire.Context, msg: UnlockPath) -> protobuf.Mess
             description="Do you want to allow access to your CoinJoin account?",
         )
 
+    # 定义允许的消息类型
     wire_types = (MessageType.GetAddress, MessageType.GetPublicKey, MessageType.SignTx)
+    # 调用任何允许的消息类型，并传递MAC
     req = await ctx.call_any(UnlockedPathRequest(mac=expected_mac), *wire_types)
 
+    # 确保返回的消息类型在允许的类型中
     assert req.MESSAGE_WIRE_TYPE in wire_types
+    # 查找对应的处理程序
     handler = workflow_handlers.find_registered_handler(
         ctx.iface, req.MESSAGE_WIRE_TYPE
     )
     assert handler is not None
+    # 调用处理程序处理请求
     return await handler(ctx, req, msg)  # type: ignore [Expected 2 positional arguments]
 
 
@@ -391,6 +407,7 @@ ALLOW_WHILE_LOCKED = (
     MessageType.DoPreauthorized,
     MessageType.WipeDevice,
     MessageType.SetBusy,
+    MessageType.GetPassphraseState,
 )
 
 
@@ -526,38 +543,38 @@ async def unlock_device(ctx: wire.GenericContext = wire.DUMMY_CONTEXT) -> None:
     If the storage is locked, attempt to unlock it. Reset the homescreen and the wire
     handler.
     """
-    from apps.common.request_pin import verify_user_pin, verify_user_fingerprint
+    from apps.common.request_pin import verify_user_pin, verify_user_fingerprint  # 导入PIN验证和指纹验证功能
 
-    if not config.is_unlocked():
-        if __debug__:
-            print("pin is locked ")
+    if not config.is_unlocked():  # 如果设备未解锁
+        if __debug__:  # 如果在调试模式下
+            print("pin is locked ")  # 打印PIN已锁定的信息
         # verify_user_pin will raise if the PIN was invalid
-        await verify_user_pin(ctx, allow_fingerprint=False)
-    else:
-        from trezor.lvglui.scrs import fingerprints
+        await verify_user_pin(ctx, allow_fingerprint=False)  # 验证用户PIN，不允许使用指纹
+    else:  # 如果设备已解锁
+        from trezor.lvglui.scrs import fingerprints  # 导入指纹模块
 
-        if not fingerprints.is_unlocked():
-            if __debug__:
-                print("fingerprint is locked")
-            verify_pin = verify_user_pin(ctx, close_others=False)
-            verify_finger = verify_user_fingerprint(ctx)
-            racer = loop.race(verify_pin, verify_finger)
-            await racer
-            if verify_finger in racer.finished:
-                from trezor.lvglui.scrs.pinscreen import InputPin
+        if not fingerprints.is_unlocked():  # 如果指纹未解锁
+            if __debug__:  # 如果在调试模式下
+                print("fingerprint is locked")  # 打印指纹已锁定的信息
+            verify_pin = verify_user_pin(ctx, close_others=False)  # 创建PIN验证协程，不关闭其他窗口
+            verify_finger = verify_user_fingerprint(ctx)  # 创建指纹验证协程
+            racer = loop.race(verify_pin, verify_finger)  # 同时运行PIN验证和指纹验证
+            await racer  # 等待任一验证完成
+            if verify_finger in racer.finished:  # 如果指纹验证成功完成
+                from trezor.lvglui.scrs.pinscreen import InputPin  # 导入PIN输入界面
 
-                pin_wind = InputPin.get_window_if_visible()
-                if pin_wind:
-                    pin_wind.destroy()
-    if storage.device.is_fingerprint_unlock_enabled():
-        storage.device.finger_failed_count_reset()
+                pin_wind = InputPin.get_window_if_visible()  # 获取当前可见的PIN输入窗口
+                if pin_wind:  # 如果PIN输入窗口存在
+                    pin_wind.destroy()  # 销毁PIN输入窗口
+    if storage.device.is_fingerprint_unlock_enabled():  # 如果启用了指纹解锁
+        storage.device.finger_failed_count_reset()  # 重置指纹失败计数
 
-    utils.mark_pin_verified()
+    utils.mark_pin_verified()  # 标记PIN已验证
 
     # reset the idle_timer
-    reload_settings_from_storage()
-    set_homescreen()
-    wire.find_handler = workflow_handlers.find_registered_handler
+    reload_settings_from_storage()  # 从存储中重新加载设置
+    set_homescreen()  # 设置主屏幕
+    wire.find_handler = workflow_handlers.find_registered_handler  # 恢复正常的消息处理程序查找函数
 
 
 # async def auth(ctx: wire.GenericContext = wire.DUMMY_CONTEXT) -> None:
@@ -595,7 +612,6 @@ def get_pinlocked_handler(
     async def wrapper(ctx: wire.Context, msg: wire.Msg) -> protobuf.MessageType:
         await unlock_device(ctx)
         return await orig_handler(ctx, msg)
-
     return wrapper
 
 
@@ -619,6 +635,101 @@ def reload_settings_from_storage(timeout_ms: int | None = None) -> None:
     ui.display.orientation(storage.device.get_rotation())
 
 
+async def handle_GetPassphraseState(ctx: wire.Context, msg: GetPassphraseState) -> Success:
+    from trezor import wire, messages, config, utils
+    from apps.common import paths
+    from trezor.crypto import se_thd89
+    import utime
+    
+    print("test passphrase state base")
+    print(f"btc_test: {msg.btc_test}")
+    is_valid = False
+    try:
+        # 确保 btc_test 不为空
+        if msg.btc_test is None:
+            print("No Bitcoin test address provided")
+            is_valid = False
+        else:
+            btc_test_bytes = msg.btc_test
+            if isinstance(msg.btc_test, str):
+                btc_test_bytes = msg.btc_test.encode('utf-8')            
+            print(f"Checking Bitcoin test address: {msg.btc_test}")
+            is_valid = se_thd89.check_passphrase_btc_test_address(btc_test_bytes)            
+            if is_valid:
+                print("Bitcoin test address validation successful")
+            else:
+                print("Bitcoin test address validation failed")
+                
+    except Exception as e:
+        print(f"Error checking Bitcoin test address: {e}")
+        is_valid = False
+    
+    # 如果地址有效，则锁定和解锁设备
+    if is_valid:
+        print("Address is valid, locking and unlocking device")
+        # 锁定设备
+        print("Locking the device")
+        lock_device()
+        # 尝试解锁设备
+        print("Attempting to unlock the device")
+        try:
+            # 尝试解锁设备
+            await unlock_device()
+            # 检查设备是否成功解锁
+            if not config.is_unlocked():
+                print("Device unlock failed, user interaction may be required")
+                return Success(message="Device unlock failed, user interaction required")
+            
+            print("Device successfully unlocked")
+            
+            # 添加小延迟确保解锁完全处理
+            utime.sleep_ms(500)
+            
+            # 再次检查设备状态
+            if not config.is_unlocked():
+                print("Device appears to have locked again immediately after unlock")
+                return Success(message="Device locked again after unlock")
+                
+            print("Device confirmed to be in unlocked state")
+            
+        except Exception as e:
+            print(f"Error unlocking device: {e}")
+            return Success(message=f"Unlock error: {e}")
+    else:
+        print("Address is not valid, skipping lock/unlock")
+    
+    # 无论地址是否有效，都获取比特币测试网络地址
+    try:
+        # 使用固定路径 m/44'/1'/0'/0/0
+        fixed_path = "m/44'/1'/0'/0/0"
+        
+        # 创建 GetAddress 消息
+        address_msg = messages.GetAddress(
+            address_n=paths.parse_path(fixed_path), 
+            show_display=False,  
+            script_type=0,  
+            coin_name="Testnet"  
+        )
+        
+        from apps.bitcoin.get_address import get_address as btc_get_address
+        
+        address_obj = await btc_get_address(ctx, address_msg) 
+        
+        print(f"Retrieved Bitcoin address: {address_obj.address}")
+        return Success(message=address_obj.address)
+        
+    except Exception as e:
+        print(f"Error getting Bitcoin address: {e}")
+        
+        # 如果地址有效且我们解锁了设备，则在出错时重新锁定设备
+        if is_valid and config.is_unlocked():
+            lock_device()
+            print("Device locked again due to error")
+        
+        # 返回错误信息
+        return Success(message=f"Error getting address: {e}")
+
+
 def boot() -> None:
     workflow_handlers.register(MessageType.Initialize, handle_Initialize)
     workflow_handlers.register(MessageType.GetFeatures, handle_GetFeatures)
@@ -633,6 +744,7 @@ def boot() -> None:
         MessageType.CancelAuthorization, handle_CancelAuthorization
     )
     workflow_handlers.register(MessageType.SetBusy, handle_SetBusy)
+    workflow_handlers.register(MessageType.GetPassphraseState, handle_GetPassphraseState)
 
     reload_settings_from_storage()
     from trezor.lvglui.scrs import fingerprints

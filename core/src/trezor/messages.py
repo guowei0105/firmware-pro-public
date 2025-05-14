@@ -3918,6 +3918,20 @@ if TYPE_CHECKING:
         def is_type_of(cls, msg: Any) -> TypeGuard["UnlockedPathRequest"]:
             return isinstance(msg, cls)
 
+    class GetPassphraseState(protobuf.MessageType):
+        btc_test: "bytes | None"
+
+        def __init__(
+            self,
+            *,
+            btc_test: "bytes | None" = None,
+        ) -> None:
+            pass
+
+        @classmethod
+        def is_type_of(cls, msg: Any) -> TypeGuard["GetPassphraseState"]:
+            return isinstance(msg, cls)
+
     class FileInfo(protobuf.MessageType):
         name: "str"
         size: "int"

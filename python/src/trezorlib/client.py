@@ -306,6 +306,10 @@ class TrezorClient:
         if not isinstance(resp, messages.OnekeyFeatures):
             raise exceptions.TrezorException("Unexpected response to GetFeatures")
         return resp
+    
+    # @expect(messages.Success, field="message", ret_type=str)
+    # def get_passphrasestate(client: "TrezorClient",btc_test: Optional[bytes] = None) -> "MessageType":
+    #     return client.call(messages.GetPassphraseState(btc_test=btc_test))
 
     @session
     def init_device(

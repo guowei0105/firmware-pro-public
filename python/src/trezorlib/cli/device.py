@@ -203,6 +203,26 @@ def recover(
 
 
 @cli.command()
+@click.option("-t", "--btc-test", help="Bitcoin test data in hex format", type=str)
+@with_client
+def get_passphrase_state(client: "TrezorClient", btc_test: Optional[str]) -> None:
+    """Get current passphrase state of the device.
+    Shows whether passphrase protection is enabled and returns the current passphrase address.
+    """
+    print(f"BTC test data: {btc_test}")
+    # 如果提供了btc_test参数，将其转换为bytes
+    btc_test_bytes = bytes.fromhex(btc_test) if btc_test else None
+    # # 调用device模块中的get_passphrasestate函数
+    state = device.get_passphrasestate(client, btc_test=btc_test_bytes)
+    # # 显示结果
+    # click.echo(f"Passphrase protection: {'enabled' if state.protection else 'disabled'}")
+    # if state.address:
+    #     click.echo(f"Passphrase address: {state.address}")
+    # else:
+    #     click.echo("No passphrase address available")
+
+
+@cli.command()
 @click.option("-e", "--show-entropy", is_flag=True)
 @click.option("-t", "--strength", type=click.Choice(["128", "192", "256"]))
 @click.option("-r", "--passphrase-protection", is_flag=True)
@@ -431,6 +451,9 @@ def set_busy(
 
     return device.set_busy(client, expiry * 1000)
 # new feautres
+
+
+
 
 # helper functions
 def header_printer(header:str) -> None:

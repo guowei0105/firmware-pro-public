@@ -503,7 +503,22 @@ async def request_passphrase_pin_confirm(ctx) -> str:
             return pin2
         if pin1 == pin2:
             return pin1
-        await pin_mismatch(ctx)
+        await passphrase_pin_mismatch(ctx)
+
+async def passphrase_pin_mismatch(ctx) -> None:
+    from trezor.ui.layouts import show_warning
+
+    await show_warning(
+        ctx=ctx,
+        br_type="pin_not_match",
+        header=_(i18n_keys.TITLE__NOT_MATCH),
+        content=_(
+            i18n_keys.SUBTITLE__SETUP_SET_PIN_PIN_NOT_MATCH
+        ),
+        icon="A:/res/danger.png",
+        btn_yes_bg_color=lv_colors.ONEKEY_BLACK,
+    )
+
 
 
 class SetupComplete(FullSizeWindow):

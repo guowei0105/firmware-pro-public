@@ -71,6 +71,7 @@ class MessageType(IntEnum):
     FirmwareHash = 89
     UnlockPath = 93
     UnlockedPathRequest = 94
+    GetPassphraseState = 95
     SetU2FCounter = 63
     GetNextU2FCounter = 80
     NextU2FCounter = 81
@@ -5477,6 +5478,20 @@ class UnlockedPathRequest(protobuf.MessageType):
         mac: Optional["bytes"] = None,
     ) -> None:
         self.mac = mac
+
+
+class GetPassphraseState(protobuf.MessageType):
+    MESSAGE_WIRE_TYPE = 95
+    FIELDS = {
+        1: protobuf.Field("btc_test", "bytes", repeated=False, required=False),
+    }
+
+    def __init__(
+        self,
+        *,
+        btc_test: Optional["bytes"] = None,
+    ) -> None:
+        self.btc_test = btc_test
 
 
 class FileInfo(protobuf.MessageType):
