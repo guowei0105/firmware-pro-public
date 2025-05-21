@@ -72,6 +72,7 @@ class MessageType(IntEnum):
     UnlockPath = 93
     UnlockedPathRequest = 94
     GetPassphraseState = 95
+    PassphraseState = 96
     SetU2FCounter = 63
     GetNextU2FCounter = 80
     NextU2FCounter = 81
@@ -5483,15 +5484,38 @@ class UnlockedPathRequest(protobuf.MessageType):
 class GetPassphraseState(protobuf.MessageType):
     MESSAGE_WIRE_TYPE = 95
     FIELDS = {
-        1: protobuf.Field("btc_test", "bytes", repeated=False, required=False),
+        1: protobuf.Field("btc_test", "string", repeated=False, required=False),
+        2: protobuf.Field("only_main_pin", "bool", repeated=False, required=False),
+        3: protobuf.Field("session_id", "bytes", repeated=False, required=False),
     }
 
     def __init__(
         self,
         *,
-        btc_test: Optional["bytes"] = None,
+        btc_test: Optional["str"] = None,
+        only_main_pin: Optional["bool"] = None,
+        session_id: Optional["bytes"] = None,
     ) -> None:
         self.btc_test = btc_test
+        self.only_main_pin = only_main_pin
+        self.session_id = session_id
+
+
+class PassphraseState(protobuf.MessageType):
+    MESSAGE_WIRE_TYPE = 96
+    FIELDS = {
+        1: protobuf.Field("btc_test", "string", repeated=False, required=False),
+        2: protobuf.Field("session_id", "bytes", repeated=False, required=False),
+    }
+
+    def __init__(
+        self,
+        *,
+        btc_test: Optional["str"] = None,
+        session_id: Optional["bytes"] = None,
+    ) -> None:
+        self.btc_test = btc_test
+        self.session_id = session_id
 
 
 class FileInfo(protobuf.MessageType):

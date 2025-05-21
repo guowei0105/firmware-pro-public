@@ -113,9 +113,7 @@ else:  # 如果是仅比特币模式
             return mnemonic.get_seed(passphrase, progress_bar=False)  # 返回使用助记词和密码短语生成的种子
         else:  # 如果使用THD89安全元件
             from trezor.crypto import se_thd89  # 导入安全元件模块
-
             state = se_thd89.get_session_state()  # 获取会话状态
-
             if not state[0] & 0x80:  # 如果会话未激活
                 passphrase = await get_passphrase(ctx)  # 获取密码短语
                 return mnemonic.get_seed(passphrase, progress_bar=False)  # 返回使用助记词和密码短语生成的种子

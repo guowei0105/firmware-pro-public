@@ -400,7 +400,7 @@ AUTOSHUTDOWN_DELAY_MAXIMUM = AUTOLOCK_DELAY_MAXIMUM = 0x1000_0000  # ~3 days
 # Other SD-salt-related constants are in sd_salt.py
 SD_SALT_AUTH_KEY_LEN_BYTES = const(16)
 
-PIN_MAX_ATTEMPTS = 10
+PIN_MAX_ATTEMPTS = 5
 
 
 def is_version_stored() -> bool:

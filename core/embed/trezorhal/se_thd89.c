@@ -1376,7 +1376,15 @@ secbool se_getRetryTimes(uint8_t *ptimes) {
                              &fp_retry_cnts),
          "get fp retry times failed");
 
+  // 添加日志，打印主 PIN 和指纹 PIN 的剩余尝试次数
+  printf("Master PIN retry count: %d\n", retry_cnts);
+  printf("Fingerprint PIN retry count: %d\n", fp_retry_cnts);
+  
   *ptimes = retry_cnts > fp_retry_cnts ? fp_retry_cnts : retry_cnts;
+  
+  // 打印最终返回的剩余尝试次数
+  printf("Final PIN retry count (minimum of both): %d\n", *ptimes);
+  
   return sectrue;
 }
 
@@ -1392,6 +1400,7 @@ static secbool se_clearSecsta_ex(uint8_t addr, uint8_t *session_key) {
 
 secbool se_set_pin_passphrase(const char *pin, const char *passphrase_pin,
                               const char *passphrase, bool *override) {
+  uint8_t percent;
   if (strlen(pin) == 0 || strlen(pin) > PIN_MAX_LENGTH) {
     return secfalse;
   }
@@ -1418,17 +1427,35 @@ secbool se_set_pin_passphrase(const char *pin, const char *passphrase_pin,
   offset += strlen(passphrase);
 
   if (!se_transmit_mac(SE_INS_PIN, 0x00, 0x09, buf, offset, resp, &resp_len)) {
+    if (thd89_last_error() == 0x6c00) {
+      percent = 0;
+      resp[0] = PIN_SUCCESS;
+    } else {
+      return secfalse;
+    }
+  }
+  if (resp[0] != PIN_SUCCESS) {
+    pin_passphrase_ret = resp[0];
     return secfalse;
   }
-  if (resp[0] == PIN_SUCCESS) {
-    *override = resp[1] == 0x55;
-    return sectrue;
-  } else {
-    pin_passphrase_ret = resp[0];
-  }
 
-  return secfalse;
+  while (percent < 100) {
+    if (ui_callback) {
+      ui_callback(0, percent * 10, NULL);
+    }
+    if (!session_generate_seed_percent(&percent)) {
+      return secfalse;
+    }
+    hal_delay(100);
+  }
+  resp_len = 1;
+  *override = true;
+  if (se_transmit_mac(SE_INS_PIN, 0x00, 0x0D, NULL, 0, resp, &resp_len)) {
+    *override = resp[0] ? true : false;
+  }
+  return sectrue;
 }
+
 
 secbool se_delete_pin_passphrase(const char *passphrase_pin, bool *current) {
   if (strlen(passphrase_pin) < 6 || strlen(passphrase_pin) > PIN_MAX_LENGTH) {

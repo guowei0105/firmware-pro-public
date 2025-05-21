@@ -135,13 +135,25 @@ STATIC mp_obj_t mod_trezorconfig_unlock(size_t n_args, const mp_obj_t *args) {
   secbool ret = secfalse;
 
   // verify se pin first when not in emulator
+  // ret = se_verifyPin(pin_b.buf, pin_use_type);
+  // if (ret != sectrue) {
+  //   if (!pin_state.pin_unlocked_initialized) {
+  //     pin_state.pin_unlocked = false;
+  //     pin_state.pin_unlocked_initialized = true;
+  //   }
+  //   return mp_const_false;
+  // }
   ret = se_verifyPin(pin_b.buf, pin_use_type);
   if (ret != sectrue) {
     if (!pin_state.pin_unlocked_initialized) {
       pin_state.pin_unlocked = false;
       pin_state.pin_unlocked_initialized = true;
     }
-    return mp_const_false;
+    // 创建一个包含 (False, 0) 的元组而不是只返回 False
+    mp_obj_tuple_t *tuple = MP_OBJ_TO_PTR(mp_obj_new_tuple(2, NULL));
+    tuple->items[0] = mp_const_false;
+    tuple->items[1] = mp_obj_new_int(0);  // 失败时 pin_type 为 0
+    return MP_OBJ_FROM_PTR(tuple);
   }
 
   pin_result_t pin_type = se_get_pin_result_type();
@@ -230,6 +242,9 @@ STATIC mp_obj_t mod_trezorconfig_get_pin_rem(void) {
   if (sectrue != se_getRetryTimes(&retry_cnts)) {
     mp_raise_msg(&mp_type_RuntimeError, "Failed to get pin retry times.");
   }
+
+  printf("PIN retry count remaining: %d\n", retry_cnts);
+
 
   return mp_obj_new_int_from_uint(retry_cnts);
 }

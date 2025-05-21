@@ -49,28 +49,22 @@ async def _request_from_user(ctx: wire.Context) -> str:  # 从用户请求密码
 
 async def _request_on_host(ctx: wire.Context) -> str:  # 在主机上请求密码短语的内部异步函数
     from trezor.messages import PassphraseAck, PassphraseRequest  # 导入密码短语相关消息类型
-
     # disable passphrase entry dialog for now  # 暂时禁用密码短语输入对话框
     # _entry_dialog()
-
     request = PassphraseRequest()  # 创建密码短语请求
     ack = await ctx.call(request, PassphraseAck)  # 等待主机响应密码短语请求
     if ack.on_device:  # 如果主机请求在设备上输入
         from trezor.ui.layouts import request_passphrase_on_device  # 导入设备上请求密码短语的布局
-
         if ack.passphrase is not None:  # 如果主机同时提供了密码短语
             raise wire.DataError("Passphrase provided when it should not be")  # 抛出错误：不应该提供密码短语
         return await request_passphrase_on_device(ctx, _MAX_PASSPHRASE_LEN)  # 在设备上请求密码短语并返回
-
     if ack.passphrase is None:  # 如果主机没有提供密码短语且不要求在设备上输入
         raise wire.DataError(  # 抛出数据错误
             "Passphrase not provided and on_device is False. Use empty string to set an empty passphrase."  # 错误信息：未提供密码短语且on_device为False，使用空字符串设置空密码短语
         )
-
     # # non-empty passphrase  # 非空密码短语
     if ack.passphrase:  # 如果密码短语非空
         from trezor.ui.layouts import require_confirm_passphrase  # 导入确认密码短语的布局
-
         if not await require_confirm_passphrase(ctx, ack.passphrase):  # 要求用户确认密码短语
             raise wire.ActionCancelled("Passphrase cancelled")  # 如果用户取消，抛出操作取消错误
 
