@@ -1163,8 +1163,8 @@ async def request_pin_on_device(
 
     if attempts_remaining is None or attempts_remaining == device.PIN_MAX_ATTEMPTS:
         subprompt = ""  # 如果是首次尝试或尝试次数未知，则不显示额外提示
-    elif attempts_remaining == 5:
-        await confirm_password_input(ctx)  # 当剩余5次尝试时，显示确认密码输入界面
+    elif attempts_remaining == 2:
+        await confirm_password_input(ctx)  # 
         subprompt = f"{_(i18n_keys.MSG__INCORRECT_PIN_STR_ATTEMPTS_LEFT).format(attempts_remaining)}"  # 显示剩余尝试次数
     elif attempts_remaining == 1:
         subprompt = f"{_(i18n_keys.MSG__INCORRECT_PIN_THIS_IS_YOUR_LAST_ATTEMPT)}"  # 最后一次尝试的特殊提示

@@ -853,7 +853,7 @@ translations = [
     "Approve with OneKey",
     "Authenticate",
     "Slide to unlock",
-    "5 failed tries. Slide to continue",
+    "3 failed tries. Slide to continue",
     "Slide to continue",
     "Back to home",
     "Adding Security Key…",
@@ -943,5 +943,7 @@ translations = [
     "Sign Message",
     "Sign Transaction",
     "Your Fingerprint (SE) needs an update. Please visit https://firmware.onekey.so/ to update it and try again.",
+    "OP_RETURN",
+    "Once confirmed, it cannot be undone. Your funds will be permanently locked.",
 ]
 # fmt: on

@@ -46,7 +46,6 @@ GetFirmwareHash = 88
 FirmwareHash = 89
 UnlockPath = 93
 UnlockedPathRequest = 94
-GetPassphraseState = 95
 FirmwareErase = 6
 FirmwareUpload = 7
 FirmwareRequest = 8
@@ -106,6 +105,8 @@ ListResDir = 10023
 OnekeyGetFeatures = 10025
 OnekeyFeatures = 10026
 if not utils.BITCOIN_ONLY:
+    GetPassphraseState = 95
+    PassphraseState = 96
     SetU2FCounter = 63
     GetNextU2FCounter = 80
     NextU2FCounter = 81

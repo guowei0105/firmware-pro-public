@@ -244,6 +244,7 @@ TITLE__SIGN_STR_TRANSACTION = 110
 BUTTON__HOLD_TO_SIGN = 111
 # Amount
 LIST_KEY__AMOUNT__COLON = 112
+LIST_KEY__AMOUNT = 112
 # Gas Price
 LIST_KEY__GAS_PRICE__COLON = 113
 # Maximum Fee
@@ -1872,7 +1873,7 @@ TIPS_SECURITY_KEYS_AUTHENTICATE_APPROVE = 850
 TIPS_SECURITY_KEYS_AUTHENTICATE_TITLE = 851
 # Slide to unlock
 MISTOUCH_PROTECTION_TITLE = 852
-# 5 failed tries. Slide to continue
+# 3 failed tries. Slide to continue
 MISTOUCH_PROTECTION_DESC = 853
 # Slide to continue
 MISTOUCH_PROTECTION_SLIDE_TEXT = 854
@@ -2069,4 +2070,8 @@ MSG__SIGN_TRANSACTION = 941
 # Your Fingerprint (SE) needs an update. Please visit https://firmware.onekey.
 # so/ to update it and try again.
 CONTENT__YOUR_FINGERPRINT_SE_VERSION_IS_OUTDATED = 942
+# OP_RETURN
+TITLE__OP_RETURN = 943
+# Once confirmed, it cannot be undone. Your funds will be permanently locked.
+TITLE__OP_RETURN_DESC = 944
 # fmt: on

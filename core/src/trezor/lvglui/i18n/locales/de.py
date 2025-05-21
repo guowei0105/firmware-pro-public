@@ -853,7 +853,7 @@ translations = [
     "Genehmigen mit OneKey",
     "Authentifizieren",
     "Zum Entsperren schieben",
-    "5 fehlgeschlagene Versuche. Wischen, um fortzufahren",
+    "3 Fehlversuche. Dia zum Fortfahren",
     "Zum Fortfahren wischen",
     "Zurück zur Startseite",
     "Sicherheitsschlüssel wird hinzugefügt…",
@@ -943,5 +943,7 @@ translations = [
     "Nachricht unterzeichnen",
     "Transaktion signieren",
     "Ihr Fingerabdruck (SE) benötigt ein Update. Bitte besuchen Sie https://firmware.onekey.so/, um es zu aktualisieren und versuchen Sie es erneut.",
+    "OP_RETURN",
+    "Sobald bestätigt, kann dies nicht rückgängig gemacht werden. Ihre Gelder werden dauerhaft gesperrt.",
 ]
 # fmt: on

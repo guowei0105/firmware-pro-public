@@ -147,64 +147,99 @@ async def check_best_try_restcard(self):
 
 
 async def start_import_pin_mnemonicmphrase(self, pin):
+    print(f"Starting import PIN and mnemonic process")
 
     card_num, status = await get_card_num(self)
+    print(f"Card number: {card_num}, status: {status}")
+    
     if status == LITE_CARD_ERROR_REPONSE:
+        print("Error: Failed to get card number")
         return
+        
     card_type = get_card_type(card_num)
+    print(f"Detected card type: {card_type}")
 
     if card_type == "OLD":
+        print("Selecting primary safety for OLD card")
         _, sw1sw2 = nfc.send_recv(CMD_SELECT_PRIMARY_SAFETY)
+        print(f"Select primary safety response: {sw1sw2}")
         if sw1sw2 == LITE_CARD_DISCONECT_STATUS:
+            print("Error: Card disconnected during primary safety selection")
             await handle_sw1sw2_connect_error(self)
             return
     elif card_type == "NEW":
-        pass
+        print("NEW card detected, skipping primary safety selection")
     else:
+        print(f"Error: Unknown card type: {card_type}")
         return LITE_CARD_CONNECT_FAILURE
 
     if card_type == "OLD":
+        print("Checking PIN retry count for OLD card")
         status = await check_best_try_restcard(self)
+        print(f"PIN retry check status: {status}")
         if status == LITE_CARD_ERROR_REPONSE:
+            print("Error: PIN retry check failed")
             return
 
     if card_type == "NEW":
+        print("Selecting applet for NEW card")
         resp, sw1sw2 = nfc.send_recv(CMD_NEW_APPLET)
+        print(f"Select applet response: {sw1sw2}")
         if sw1sw2 == LITE_CARD_DISCONECT_STATUS:
+            print("Error: Card disconnected during applet selection")
             await handle_sw1sw2_connect_error(self)
             return
 
     if card_type == "NEW":
+        print("Checking PIN retry count for NEW card")
         status = await check_best_try_restcard(self)
+        print(f"PIN retry check status: {status}")
         if status == LITE_CARD_ERROR_REPONSE:
+            print("Error: PIN retry check failed")
             return
 
+    print("Checking PIN status")
     pinresp, pinsw1sw2 = nfc.send_recv(CMD_GET_PIN_STATUS)
+    print(f"PIN status response: {pinresp}, status: {pinsw1sw2}")
     if pinsw1sw2 == LITE_CARD_DISCONECT_STATUS:
+        print("Error: Card disconnected during PIN status check")
         await handle_sw1sw2_connect_error(self)
         return
     if pinsw1sw2 == LITE_CARD_SUCCESS_STATUS and pinresp == b"\x02":
+        print("Error: Card has no backup")
         await handle_cleanup(self, LITE_CARD_NO_BACKUP)
         return
+        
     if card_type == "NEW":
+        print("Checking backup status for NEW card")
         resp, sw1sw2 = nfc.send_recv(CMD_GET_BACKUP_STATUS)
         state = resp[0]
+        print(f"Backup status: {state}, response: {sw1sw2}")
         if sw1sw2 == LITE_CARD_DISCONECT_STATUS:
+            print("Error: Card disconnected during backup status check")
             await handle_sw1sw2_connect_error(self)
             return
         elif (state & 0x02) != 0x02:
+            print("Error: Card has no backup (state check)")
             await handle_cleanup(self, LITE_CARD_NO_BACKUP)
             return
+            
     if card_type == "OLD":
+        print("Selecting OLD applet")
         resp, sw1sw2 = nfc.send_recv(CMD_OLD_APPLET)
+        print(f"Select OLD applet response: {sw1sw2}")
         if sw1sw2 == LITE_CARD_DISCONECT_STATUS:
+            print("Error: Card disconnected during OLD applet selection")
             await handle_sw1sw2_connect_error(self)
             return
 
+    print("Verifying PIN")
     pin_bytes = "".join(pin).encode()
     command_data = CMD_VERIFY_PIN + pin_bytes
     resp, sw1sw2 = nfc.send_recv(command_data, True)
+    print(f"PIN verification response: {sw1sw2}")
     if sw1sw2 == LITE_CARD_DISCONECT_STATUS:
+        print("Error: Card disconnected during PIN verification")
         await handle_sw1sw2_connect_error(self)
         return
 
@@ -215,66 +250,102 @@ async def start_import_pin_mnemonicmphrase(self, pin):
         await handle_cleanup(self, pin_status)
         return
 
+    print(f"Exporting data from {card_type} card")
     if card_type == "OLD":
         exportresp, exportsw1sw2 = nfc.send_recv(CMD_EXPORT_DATA)
     else:
         exportresp, exportsw1sw2 = nfc.send_recv(CMD_EXPORT_DATA, True)
+    print(f"Export response length: {len(exportresp) if exportresp else 0}, status: {exportsw1sw2}")
+    
     if exportsw1sw2 == LITE_CARD_DISCONECT_STATUS or len(exportresp) < 8:
+        print("Error: Card disconnected during data export or insufficient data")
         await handle_sw1sw2_connect_error(self)
         return
+        
+    print("Decoding mnemonic data")
     decoder = MnemonicEncoder()
-    encoded_mnemonic_str, _, _ = decoder.parse_card_data(exportresp)
+    encoded_mnemonic_str, version, lang = decoder.parse_card_data(exportresp)
+    print(f"Encoded data version: {version}, language: {lang}")
     decoded_mnemonics = decoder.decode_mnemonics(encoded_mnemonic_str)
     word_count = len(decoded_mnemonics.split())
+    print(f"Decoded mnemonic word count: {word_count}")
+    
     if word_count in [15, 21]:
+        print(f"Error: Unsupported word count: {word_count}")
         await handle_cleanup(self, LITE_CARD_UNSUPPORTED_WORD_COUNT)
         return
+        
+    print("Success: Mnemonic imported successfully")
     await handle_cleanup(self, decoded_mnemonics)
 
 
 async def start_check_pin_mnemonicmphrase(self, pin, mnemonic, card_num):
+    print(f"Starting check PIN and mnemonic process for card: {card_num}")
 
     card_num_again, status = await get_card_num(self)
+    print(f"Card number verification: {card_num_again}, status: {status}")
+    
     if status == LITE_CARD_ERROR_REPONSE:
+        print("Error: Failed to get card number")
         return
+        
     card_type = get_card_type(card_num)
+    print(f"Detected card type: {card_type}")
 
     if card_type == "OLD":
+        print("Selecting primary safety for OLD card")
         _, sw1sw2 = nfc.send_recv(CMD_SELECT_PRIMARY_SAFETY)
+        print(f"Select primary safety response: {sw1sw2}")
         if sw1sw2 == LITE_CARD_DISCONECT_STATUS:
+            print("Error: Card disconnected during primary safety selection")
             await handle_sw1sw2_connect_error(self)
             return
     elif card_type == "NEW":
-        pass
+        print("NEW card detected, skipping primary safety selection")
     else:
+        print(f"Error: Unknown card type: {card_type}")
         return LITE_CARD_CONNECT_FAILURE
 
     if card_num != card_num_again:
+        print(f"Error: Card numbers don't match. Original: {card_num}, Current: {card_num_again}")
         await handle_cleanup(self, LITE_CARD_NOT_SAME)
         return
 
     if card_type == "OLD":
+        print("Checking PIN retry count for OLD card")
         status = await check_best_try_restcard(self)
+        print(f"PIN retry check status: {status}")
         if status == LITE_CARD_ERROR_REPONSE:
+            print("Error: PIN retry check failed")
             return
 
+    print(f"Selecting applet for {card_type} card")
     if card_type == "OLD":
         _, sw1sw2 = nfc.send_recv(CMD_OLD_APPLET)
     else:
         _, sw1sw2 = nfc.send_recv(CMD_NEW_APPLET)
+    print(f"Select applet response: {sw1sw2}")
 
     if card_type == "NEW":
+        print("Checking PIN retry count for NEW card")
         status = await check_best_try_restcard(self)
+        print(f"PIN retry check status: {status}")
         if status == LITE_CARD_ERROR_REPONSE:
+            print("Error: PIN retry check failed")
             return
 
     # verify pin
+    print("Verifying PIN")
     pin_bytes = "".join(pin).encode()
     command_data = CMD_VERIFY_PIN + pin_bytes
     _, sw1sw2 = nfc.send_recv(command_data, True)
+    print(f"PIN verification response: {sw1sw2}")
+    
     if sw1sw2 == LITE_CARD_DISCONECT_STATUS:
+        print("Error: Card disconnected during PIN verification")
         await handle_sw1sw2_connect_error(self)
         return
+        
     if sw1sw2[0] == 0x63 and (sw1sw2[1] & 0xF0) == 0xC0:
         retry_count = sw1sw2[1] & 0x0F
         print(f"PIN verification failed. Remaining retries: {retry_count}")
@@ -284,21 +355,28 @@ async def start_check_pin_mnemonicmphrase(self, pin, mnemonic, card_num):
         return retry_count
 
     if card_type == "NEW":
+        print("Setting up new PIN for NEW card")
         command_data = CMD_SETUP_NEW_PIN + pin_bytes
         _, sw1sw2 = nfc.send_recv(command_data, True)
+        print(f"Set PIN response: {sw1sw2}")
         if sw1sw2 == LITE_CARD_DISCONECT_STATUS:
+            print("Error: Card disconnected during PIN setup")
             await handle_sw1sw2_connect_error(self)
             return
 
-    # verify pin
+    # verify pin again
+    print("Verifying PIN again")
     pin_bytes = "".join(pin).encode()
     command_data = CMD_VERIFY_PIN + pin_bytes
     _, sw1sw2 = nfc.send_recv(command_data, True)
+    print(f"Second PIN verification response: {sw1sw2}")
 
     if sw1sw2 == LITE_CARD_DISCONECT_STATUS:
+        print("Error: Card disconnected during second PIN verification")
         await handle_sw1sw2_connect_error(self)
         return
 
+    print("Encoding mnemonic")
     encoder = MnemonicEncoder()
     encoded_mnemonic_str = encoder.encode_mnemonics(mnemonic)
     version = "01"
@@ -312,16 +390,25 @@ async def start_check_pin_mnemonicmphrase(self, pin, mnemonic, card_num):
     seed_length = len(payload_bytes)
     lc = seed_length.to_bytes(1, "big")
     apdu_command = CMD_BACKUP_DATA + lc + payload_bytes
+    
+    print(f"Backing up data to {card_type} card")
     if card_type == "OLD":
         _, importsw1sw2 = nfc.send_recv(apdu_command)
     else:
         _, importsw1sw2 = nfc.send_recv(apdu_command, True)
+    print(f"Backup response: {importsw1sw2}")
+    
     if importsw1sw2 == LITE_CARD_DISCONECT_STATUS:
+        print("Error: Card disconnected during backup")
         await handle_sw1sw2_connect_error(self)
         return
+        
     if importsw1sw2 == LITE_CARD_SUCCESS_STATUS:
+        print("Success: Mnemonic backup completed successfully")
         await handle_cleanup(self, LITE_CARD_OPERATE_SUCCESS)
         return
+        
+    print(f"Error: Backup failed with response {importsw1sw2}")
     self.channel.publish(LITE_CARD_CONNECT_FAILURE)
     await loop.sleep(180)
     self.clean()
@@ -330,50 +417,78 @@ async def start_check_pin_mnemonicmphrase(self, pin, mnemonic, card_num):
 
 
 async def start_set_pin_mnemonicmphrase(self, pin, mnemonic, card_num):
+    print(f"Starting set PIN and mnemonic process for card: {card_num}")
 
     card_num_again, status = await get_card_num(self)
+    print(f"Card number verification: {card_num_again}, status: {status}")
+    
     if status == LITE_CARD_ERROR_REPONSE:
+        print("Error: Failed to get card number")
         return
+        
     card_type = get_card_type(card_num_again)
+    print(f"Detected card type: {card_type}")
+    
     if card_type == "OLD":
+        print("Resetting OLD card (first attempt)")
         _, restsw1sw2 = nfc.send_recv(CMD_RESET_CARD, True)
+        print(f"Reset response: {restsw1sw2}")
         if restsw1sw2 == LITE_CARD_DISCONECT_STATUS:
+            print("Error: Card disconnected during initial reset")
             await handle_sw1sw2_connect_error(self)
             return
+            
     if card_num != card_num_again:
+        print(f"Error: Card numbers don't match. Original: {card_num}, Current: {card_num_again}")
         await handle_cleanup(self, LITE_CARD_NOT_SAME)
         return
 
     # reset card
     if card_type == "OLD":
+        print("Resetting OLD card (second attempt)")
         _, sw1sw2 = nfc.send_recv(CMD_RESET_CARD, True)
+        print(f"Reset response: {sw1sw2}")
         if sw1sw2 == LITE_CARD_DISCONECT_STATUS:
+            print("Error: Card disconnected during second reset")
             await handle_sw1sw2_connect_error(self)
             return
+            
     # select app
     if card_type == "NEW":
+        print("Selecting applet for NEW card")
         _, sw1sw2 = nfc.send_recv(CMD_NEW_APPLET)
+        print(f"Select applet response: {sw1sw2}")
         if sw1sw2 == LITE_CARD_DISCONECT_STATUS:
+            print("Error: Card disconnected during applet selection")
             await handle_sw1sw2_connect_error(self)
             return
+            
     # set pin
+    print("Setting new PIN")
     pin_bytes = "".join(pin).encode()
     command_data = CMD_SETUP_NEW_PIN + pin_bytes
 
     _, sw1sw2 = nfc.send_recv(command_data, True)
+    print(f"Set PIN response: {sw1sw2}")
     if sw1sw2 == LITE_CARD_DISCONECT_STATUS:
+        print("Error: Card disconnected during PIN setup")
         await handle_sw1sw2_connect_error(self)
         return
 
     if card_type == "OLD":
+        print("Selecting OLD applet")
         _, sw1sw2 = nfc.send_recv(CMD_OLD_APPLET)
+        print(f"Select OLD applet response: {sw1sw2}")
 
     # verify pin
+    print("Verifying PIN")
     pin_bytes = "".join(pin).encode()
     command_data = CMD_VERIFY_PIN + pin_bytes
 
     restsw1sw2, sw1sw2 = nfc.send_recv(command_data, True)
+    print(f"PIN verification response: {sw1sw2}")
 
+    print("Encoding mnemonic")
     encoder = MnemonicEncoder()
     encoded_mnemonic_str = encoder.encode_mnemonics(mnemonic)
     version = "01"
@@ -386,18 +501,24 @@ async def start_set_pin_mnemonicmphrase(self, pin, mnemonic, card_num):
     seed_length = len(payload_bytes)
     lc = seed_length.to_bytes(1, "big")
     apdu_command = CMD_BACKUP_DATA + lc + payload_bytes
+    
+    print(f"Backing up data to {card_type} card")
     if card_type == "OLD":
         _, importsw1sw2 = nfc.send_recv(apdu_command)
     else:
         _, importsw1sw2 = nfc.send_recv(apdu_command, True)
+    print(f"Backup response: {importsw1sw2}")
 
     if importsw1sw2 == LITE_CARD_DISCONECT_STATUS:
+        print("Error: Card disconnected during backup")
         self.stop_animation()
         await handle_sw1sw2_connect_error(self)
         return
     if importsw1sw2 == LITE_CARD_SUCCESS_STATUS:
+        print("Success: Mnemonic backup completed successfully")
         await handle_cleanup(self, LITE_CARD_OPERATE_SUCCESS)
         return
+    print(f"Error: Backup failed with response {importsw1sw2}")
     await handle_cleanup(self, LITE_CARD_CONNECT_FAILURE)
     return
 

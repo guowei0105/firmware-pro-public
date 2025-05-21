@@ -64,6 +64,7 @@ if TYPE_CHECKING:
         UnlockPath = 93
         UnlockedPathRequest = 94
         GetPassphraseState = 95
+        PassphraseState = 96
         SetU2FCounter = 63
         GetNextU2FCounter = 80
         NextU2FCounter = 81

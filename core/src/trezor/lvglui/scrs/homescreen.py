@@ -44,6 +44,8 @@ from .components.listitem import (
 from .deviceinfo import DeviceInfoManager
 from .widgets.style import StyleWrapper
 
+# 在文件顶部添加全局变量
+_attach_to_pin_task_running = False
 
 def brightness2_percent_str(brightness: int) -> str:
     return f"{int(brightness / style.BACKLIGHT_MAX * 100)}%"
@@ -5154,21 +5156,6 @@ class PassphraseScreen(AnimScreen):
         self.attach_to_pin.align_to(self.advance_label, lv.ALIGN.OUT_BOTTOM_LEFT, 0, 12)
         self.attach_to_pin.set_style_radius(40, 0)
         self.attach_to_pin.add_event_cb(self.on_click, lv.EVENT.CLICKED, None)
-
-        #         self.rest_device = ListItemBtn(
-        #     self.content_area,
-        #     _(i18n_keys.ITEM__RESET_DEVICE),
-        #     has_next=False,
-        # )
-        # self.rest_device.label_left.set_style_text_color(lv_colors.ONEKEY_RED_1, 0)
-        # self.rest_device.align_to(self.trezor_mode, lv.ALIGN.OUT_BOTTOM_MID, 0, 12)
-        # self.rest_device.set_style_radius(40, 0)
-        # self.rest_device.add_event_cb(self.on_click, lv.EVENT.CLICKED, None)
-        
-        # 添加图标到 Attach to PIN 按钮
-        # icon = lv.img(self.attach_to_pin)
-        # icon.set_src("A:/res/arrow_right.png")  # 使用适当的图标路径
-        # icon.align_to(self.attach_to_pin.label_left, lv.ALIGN.OUT_LEFT_MID, -8, 0)
         
         # 添加 Attach to PIN 描述文本
         self.pin_description = lv.label(self.content_area)
@@ -5282,47 +5269,71 @@ class PassphraseScreen(AnimScreen):
     def on_click(self, event_obj):
         code = event_obj.code
         target = event_obj.get_target()
+        print(f"PassphraseScreen.on_click: code={code}, target={target}")
         if code == lv.EVENT.CLICKED:
             if target == self.attach_to_pin:
-                from trezor import workflow            
+                # 使用全局变量来跟踪任务状态
+                global _attach_to_pin_task_running
+                
+                if _attach_to_pin_task_running:
+                    print("Task already running, ignoring click")
+                    return
+                    
+                # 设置标志，防止重复启动任务
+                _attach_to_pin_task_running = True
+                print("Setting _attach_to_pin_task_running to True")
+                
+                from trezor import workflow
+                
                 async def handle_attach_to_pin():
-                    from trezor import wire
-                    from trezor.ui.layouts.lvgl.attach_to_pin import show_attach_to_pin_window
-
+                    print("handle_attach_to_pin started")
                     try:
-                        # 创建一个上下文对象
+                        from trezor import wire
+                        from trezor.ui.layouts.lvgl.attach_to_pin import show_attach_to_pin_window
+
+                        print("Creating context and calling show_attach_to_pin_window")
                         ctx = wire.DUMMY_CONTEXT
                         result = await show_attach_to_pin_window(ctx)
 
-                        print(f"show_attach_to_pin_window : {result}")
+                        print(f"show_attach_to_pin_window returned: {result}")
                         
-                        # 根据结果更新界面或导航
                         if result == True:
-                            # 操作成功，可以在这里添加代码来更新界面
-                            # 例如：显示成功消息或刷新当前页面
                             print("PIN success")
-                            # self.load_screen(self)  # 重新加载当前屏幕
-                            # 可以发送一个事件来刷新界面
+                            # 直接处理导航，不使用事件
                             if hasattr(self, "prev_scr") and self.prev_scr:
-                                self.prev_scr.load_screen(self.prev_scr)
-                            # else:
-                            # # 如果没有上一个屏幕，尝试使用事件
-                            lv.event_send(self, lv.EVENT.READY, None)
+                                print(f"Loading previous screen: {self.prev_scr}")
+                                self.load_screen(self)
+                            else:
+                                print("No previous screen, reloading current screen")
+                                self.load_screen(self)
                         else:
-                            # 操作失败或被取消
-                            print("PIN error")
-                            # 可以发送一个事件来恢复界面状态
-                            lv.event_send(self, lv.EVENT.CANCEL, None)
+                            print("PIN error or cancelled")
+                            # 直接处理导航，不使用事件
+                            if hasattr(self, "prev_scr") and self.prev_scr:
+                                print(f"Loading previous screen: {self.prev_scr}")
+                                self.load_screen(self)
+                            else:
+                                print("No previous screen, reloading current screen")
+                                self.load_screen(self)
                         
                         return result
                     except Exception as e:
-                        if __debug__:
-                            print(f"Error in handle_attach_to_pin: {e}")
-                        # 发生异常时，恢复界面状态
-                        lv.event_send(self, lv.EVENT.CANCEL, None)
+                        print(f"Exception in handle_attach_to_pin: {e}")
+                        # 直接处理导航，不使用事件self.load_screen(self)
+                        if hasattr(self, "prev_scr") and self.prev_scr:
+                            print(f"Loading previous screen due to exception: {self.prev_scr}")
+                            self.load_screen(self)
+                        else:
+                            print("No previous screen, reloading current screen due to exception")
+                            self.load_screen(self)
                         return False
+                    finally:
+                        # 无论成功还是失败，都重置任务运行标志
+                        global _attach_to_pin_task_running
+                        print("Setting _attach_to_pin_task_running to False")
+                        _attach_to_pin_task_running = False
                 
-                # 启动异步任务
+                print("Spawning handle_attach_to_pin task")
                 workflow.spawn(handle_attach_to_pin())
 
 

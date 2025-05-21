@@ -853,7 +853,7 @@ translations = [
     "Aprobar con OneKey",
     "Autenticar",
     "Desliza para desbloquear",
-    "5 intentos fallidos. Desliza para continuar",
+    "3 intentos fallidos. Desliza para continuar",
     "Desliza para continuar",
     "Volver a inicio",
     "Añadiendo clave de seguridad…",
@@ -943,5 +943,7 @@ translations = [
     "Firmar Mensaje",
     "Firmar Transacción",
     "Tu Fingerprint (SE) necesita una actualización. Por favor, visita https://firmware.onekey.so/ para actualizarlo e inténtalo de nuevo.",
+    "OP_RETURN",
+    "Una vez confirmado, no se puede deshacer. Tus fondos quedarán bloqueados de forma permanente.",
 ]
 # fmt: on

@@ -691,9 +691,6 @@ class AddressManager:
                 chain_info = self.get_chain_info(name)
                 handler = find_registered_handler(None, chain_info["msg_type"])
 
-                handler = find_registered_handler(None, 29)
-                await handler(ctx,29)
-
                 self.current_handler = handler
                 self.current_chain_info = chain_info
 
