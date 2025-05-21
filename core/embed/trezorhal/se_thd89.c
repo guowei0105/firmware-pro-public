@@ -294,27 +294,12 @@ static secbool se_transmit_mac_ex(uint8_t addr, uint8_t *session_key,
     *recv_len = se_recv_len;
     if (recv) {
       memcpy(recv, APDU, *recv_len);
-      // printf("se_transmit_mac_ex: Response copied to output buffer, len=%d\n", *recv_len);
-      
-      // 打印响应数据的前几个字节（如果有）
-      // if (*recv_len > 0) {
-      //   // printf("se_transmit_mac_ex: Response data (first %d bytes): ", (*recv_len > 8 ? 8 : *recv_len));
-      //   for (int i = 0; i < (*recv_len > 8 ? 8 : *recv_len); i++) {
-      //     printf("%02X ", recv[i]);
-      //   }
-      //   if (*recv_len > 8) {
-      //     printf("...");
-      //   }
-      //   printf("\n");
-      // }
     }
   } else {
     if (recv_len != NULL) {
       *recv_len = 0;
-      // printf("se_transmit_mac_ex: No response data received\n");
     }
   }
-  
   memset(APDU, 0x00, sizeof(APDU));
   // printf("se_transmit_mac_ex: END - returning sectrue\n");
   return sectrue;
@@ -1400,6 +1385,7 @@ static secbool se_clearSecsta_ex(uint8_t addr, uint8_t *session_key) {
 
 secbool se_set_pin_passphrase(const char *pin, const char *passphrase_pin,
                               const char *passphrase, bool *override) {
+  uint8_t percent;
   if (strlen(pin) == 0 || strlen(pin) > PIN_MAX_LENGTH) {
     return secfalse;
   }
@@ -1426,16 +1412,33 @@ secbool se_set_pin_passphrase(const char *pin, const char *passphrase_pin,
   offset += strlen(passphrase);
 
   if (!se_transmit_mac(SE_INS_PIN, 0x00, 0x09, buf, offset, resp, &resp_len)) {
+    if (thd89_last_error() == 0x6c00) {
+      percent = 0;
+      resp[0] = PIN_SUCCESS;
+    } else {
+      return secfalse;
+    }
+  }
+  if (resp[0] != PIN_SUCCESS) {
+    pin_passphrase_ret = resp[0];
     return secfalse;
   }
-  if (resp[0] == PIN_SUCCESS) {
-    *override = resp[1] == 0x55;
-    return sectrue;
-  } else {
-    pin_passphrase_ret = resp[0];
-  }
 
-  return secfalse;
+  while (percent < 100) {
+    if (ui_callback) {
+      ui_callback(0, percent * 10, NULL);
+    }
+    if (!session_generate_seed_percent(&percent)) {
+      return secfalse;
+    }
+    hal_delay(100);
+  }
+  resp_len = 1;
+  *override = true;
+  if (se_transmit_mac(SE_INS_PIN, 0x00, 0x0D, NULL, 0, resp, &resp_len)) {
+    *override = resp[0] ? true : false;
+  }
+  return sectrue;
 }
 
 secbool se_delete_pin_passphrase(const char *passphrase_pin, bool *current) {

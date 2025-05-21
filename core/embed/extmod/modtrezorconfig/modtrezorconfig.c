@@ -135,25 +135,13 @@ STATIC mp_obj_t mod_trezorconfig_unlock(size_t n_args, const mp_obj_t *args) {
   secbool ret = secfalse;
 
   // verify se pin first when not in emulator
-  // ret = se_verifyPin(pin_b.buf, pin_use_type);
-  // if (ret != sectrue) {
-  //   if (!pin_state.pin_unlocked_initialized) {
-  //     pin_state.pin_unlocked = false;
-  //     pin_state.pin_unlocked_initialized = true;
-  //   }
-  //   return mp_const_false;
-  // }
   ret = se_verifyPin(pin_b.buf, pin_use_type);
   if (ret != sectrue) {
     if (!pin_state.pin_unlocked_initialized) {
       pin_state.pin_unlocked = false;
       pin_state.pin_unlocked_initialized = true;
     }
-    // 创建一个包含 (False, 0) 的元组而不是只返回 False
-    mp_obj_tuple_t *tuple = MP_OBJ_TO_PTR(mp_obj_new_tuple(2, NULL));
-    tuple->items[0] = mp_const_false;
-    tuple->items[1] = mp_obj_new_int(0);  // 失败时 pin_type 为 0
-    return MP_OBJ_FROM_PTR(tuple);
+    return mp_const_false;
   }
 
   pin_result_t pin_type = se_get_pin_result_type();
