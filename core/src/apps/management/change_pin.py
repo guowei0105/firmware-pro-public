@@ -31,6 +31,7 @@ async def change_pin(ctx: wire.Context, msg: ChangePin) -> Success:
         ctx, _(i18n_keys.TITLE__ENTER_OLD_PIN), allow_fingerprint=False
     )
 
+
     # if changing pin, pre-check the entered pin before getting new pin
     if curpin and not msg.remove:
         if not config.check_pin(curpin, salt):
@@ -43,6 +44,13 @@ async def change_pin(ctx: wire.Context, msg: ChangePin) -> Success:
         )
     else:
         newpin = ""
+
+
+    if newpin:
+          pinstatus,result = config.check_pin(curpin, salt, 1)
+          if pinstatus != 4:
+            return await error_pin_invalid(ctx)
+
 
     # write into storage
     if not config.change_pin(curpin, newpin, salt, salt):

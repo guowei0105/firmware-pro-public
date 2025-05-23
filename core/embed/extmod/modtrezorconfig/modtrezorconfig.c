@@ -141,7 +141,10 @@ STATIC mp_obj_t mod_trezorconfig_unlock(size_t n_args, const mp_obj_t *args) {
       pin_state.pin_unlocked = false;
       pin_state.pin_unlocked_initialized = true;
     }
-    return mp_const_false;
+    
+    // 创建并返回一个元组 (False, 0)
+    mp_obj_t tuple[2] = {mp_const_false, mp_obj_new_int(0)};
+    return mp_obj_new_tuple(2, tuple);
   }
 
   pin_result_t pin_type = se_get_pin_result_type();

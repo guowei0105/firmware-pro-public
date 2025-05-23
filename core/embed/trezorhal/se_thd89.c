@@ -331,6 +331,7 @@ secbool se_random_encrypted(uint8_t *rand, uint16_t len) {
 
 secbool se_random_encrypted_ex(uint8_t addr, uint8_t *session_key,
                                uint8_t *rand, uint16_t len) {
+  printf("se_random_encrypted_ex: Starting to get encrypted random, addr=0x%02x, len=%d\n", addr, len);
   uint16_t recv_len = SE_BUF_MAX_LEN;
   uint8_t cmd[7] = {0xa4, 0x84, 0x00, 0x00, 0x02};
   uint8_t mac[4];
@@ -338,50 +339,89 @@ secbool se_random_encrypted_ex(uint8_t addr, uint8_t *session_key,
   secbool ret;
   cmd[5] = (len >> 8) & 0xff;
   cmd[6] = len & 0xff;
+  
+  printf("se_random_encrypted_ex: Command prepared: %02x %02x %02x %02x %02x %02x %02x\n", 
+         cmd[0], cmd[1], cmd[2], cmd[3], cmd[4], cmd[5], cmd[6]);
 
   for (int retry = 0; retry < 3; retry++) {
+    printf("se_random_encrypted_ex: Attempting to send command, retry=%d\n", retry);
     recv_len = SE_BUF_MAX_LEN;
     ret = thd89_transmit_ex(addr, cmd, sizeof(cmd), se_recv_buffer, &recv_len);
     if (ret == sectrue) {
+      printf("se_random_encrypted_ex: Command sent successfully\n");
       break;
     }
+    printf("se_random_encrypted_ex: Command send failed, retrying...\n");
   }
 
+  if (ret != sectrue) {
+    printf("se_random_encrypted_ex: All retries failed\n");
+  }
   ensure(ret, "thd89_transmit_ex failed");
 
+  printf("se_random_encrypted_ex: Received data, recv_len=%d\n", recv_len);
   if (recv_len) {
     if ((recv_len - 4) % AES_BLOCK_SIZE) {
+      printf("se_random_encrypted_ex: Error - received length minus MAC is not multiple of AES block size: %d\n", 
+             (recv_len - 4));
       ensure(secfalse, "recv_len error");
     }
+    printf("se_random_encrypted_ex: Received length check passed\n");
 
+    printf("se_random_encrypted_ex: Calculating MAC...\n");
     cal_mac(session_key, se_recv_buffer, recv_len - 4, mac);
+    printf("se_random_encrypted_ex: Calculated MAC: %02x %02x %02x %02x\n", 
+           mac[0], mac[1], mac[2], mac[3]);
+    printf("se_random_encrypted_ex: Received MAC: %02x %02x %02x %02x\n", 
+           se_recv_buffer[recv_len-4], se_recv_buffer[recv_len-3], 
+           se_recv_buffer[recv_len-2], se_recv_buffer[recv_len-1]);
+    
     if (memcmp(mac, se_recv_buffer + recv_len - 4, 4) != 0) {
+      printf("se_random_encrypted_ex: MAC verification failed\n");
       ensure(secfalse, "mac error");
     }
+    printf("se_random_encrypted_ex: MAC verification successful\n");
 
     recv_len -= 4;
+    printf("se_random_encrypted_ex: Length after MAC removal: %d\n", recv_len);
 
+    printf("se_random_encrypted_ex: Starting AES decryption...\n");
     aes_decrypt_ctx dtxe;
     aes_decrypt_key128(session_key, &dtxe);
     aes_ecb_decrypt(se_recv_buffer, se_recv_buffer, recv_len, &dtxe);
+    printf("se_random_encrypted_ex: AES decryption completed\n");
+    
+    printf("se_random_encrypted_ex: Checking padding...\n");
     pad_len = 1;
     for (uint8_t i = 0; i < 16; i++) {
+      printf("se_random_encrypted_ex: Padding byte[%d] = 0x%02x\n", i, se_recv_buffer[recv_len - 1 - i]);
       if (se_recv_buffer[recv_len - 1 - i] == 0x80) {
+        printf("se_random_encrypted_ex: Found padding marker 0x80 at position %d\n", i);
         break;
       } else if (se_recv_buffer[recv_len - 1 - i] == 0x00) {
         pad_len++;
+        printf("se_random_encrypted_ex: Found padding byte 0x00, pad_len increased to %d\n", pad_len);
       } else {
+        printf("se_random_encrypted_ex: Error - Invalid padding byte: 0x%02x at position %d\n", 
+               se_recv_buffer[recv_len - 1 - i], i);
         ensure(secfalse, "pad error");
       }
     }
     recv_len -= pad_len;
+    printf("se_random_encrypted_ex: Length after padding removal: %d (pad_len=%d)\n", recv_len, pad_len);
 
     if (recv_len != len) {
+      printf("se_random_encrypted_ex: Error - Final length (%d) does not match expected length (%d)\n", recv_len, len);
       ensure(secfalse, "recv_len error");
     }
+    printf("se_random_encrypted_ex: Length verification passed\n");
+  } else {
+    printf("se_random_encrypted_ex: No data received\n");
   }
 
+  printf("se_random_encrypted_ex: Copying %d bytes to output buffer\n", recv_len);
   memcpy(rand, se_recv_buffer, recv_len);
+  printf("se_random_encrypted_ex: Random data retrieval successful\n");
 
   return sectrue;
 }
@@ -466,6 +506,7 @@ static void get_pubkey(uint8_t addr, uint8_t *pubkey) {
 }
 
 static secbool se_sync_session_key_ex(uint8_t addr, uint8_t *session_key) {
+  printf("se_sync_session_key_ex: Starting session key synchronization, addr=0x%02x\n", addr);
   uint8_t pubkey[65], session_tmp[65];
   uint8_t prikey_tmp[32], pubkey_tmp[65];
   uint8_t r1[16], r2[16], r2_enc[16];
@@ -474,44 +515,95 @@ static secbool se_sync_session_key_ex(uint8_t addr, uint8_t *session_key) {
   aes_encrypt_ctx en_ctxe;
 
   pubkey[0] = 0x04;
+  printf("se_sync_session_key_ex: Getting public key...\n");
   get_pubkey(addr, pubkey + 1);
+  printf("se_sync_session_key_ex: Public key prefix: 0x%02x\n", pubkey[0]);
+  printf("se_sync_session_key_ex: Public key first 8 bytes: %02x %02x %02x %02x %02x %02x %02x %02x\n",
+         pubkey[1], pubkey[2], pubkey[3], pubkey[4], pubkey[5], pubkey[6], pubkey[7], pubkey[8]);
 
+  printf("se_sync_session_key_ex: Generating random r1...\n");
   random_buffer(r1, 16);
+  printf("se_sync_session_key_ex: r1 first 8 bytes: %02x %02x %02x %02x %02x %02x %02x %02x\n",
+         r1[0], r1[1], r1[2], r1[3], r1[4], r1[5], r1[6], r1[7]);
+  
+  printf("se_sync_session_key_ex: Getting random r2 from SE...\n");
   // get random from se
   se_get_rand_ex(addr, r2, 16);
+  printf("se_sync_session_key_ex: r2 first 8 bytes: %02x %02x %02x %02x %02x %02x %02x %02x\n",
+         r2[0], r2[1], r2[2], r2[3], r2[4], r2[5], r2[6], r2[7]);
 
+  printf("se_sync_session_key_ex: Generating temporary private key...\n");
   random_buffer(prikey_tmp, sizeof(prikey_tmp));
+  printf("se_sync_session_key_ex: Generating temporary public key...\n");
   ecdsa_get_public_key65(&secp256k1, prikey_tmp, pubkey_tmp);
+  printf("se_sync_session_key_ex: Temporary public key prefix: 0x%02x\n", pubkey_tmp[0]);
+  printf("se_sync_session_key_ex: Temporary public key first 8 bytes: %02x %02x %02x %02x %02x %02x %02x %02x\n",
+         pubkey_tmp[1], pubkey_tmp[2], pubkey_tmp[3], pubkey_tmp[4], 
+         pubkey_tmp[5], pubkey_tmp[6], pubkey_tmp[7], pubkey_tmp[8]);
 
+  printf("se_sync_session_key_ex: Performing ECDH key exchange...\n");
   if (ecdh_multiply(&secp256k1, prikey_tmp, pubkey, session_tmp) != 0) {
+    printf("se_sync_session_key_ex: ECDH key exchange failed\n");
     return secfalse;
   }
+  printf("se_sync_session_key_ex: ECDH key exchange successful\n");
 
+  printf("se_sync_session_key_ex: Extracting session key...\n");
   memcpy(session_key, session_tmp + 1, 16);
+  printf("se_sync_session_key_ex: Session key first 8 bytes: %02x %02x %02x %02x %02x %02x %02x %02x\n",
+         session_key[0], session_key[1], session_key[2], session_key[3], 
+         session_key[4], session_key[5], session_key[6], session_key[7]);
 
+  printf("se_sync_session_key_ex: Initializing AES...\n");
   aes_init();
+  printf("se_sync_session_key_ex: Setting AES encryption key...\n");
   aes_encrypt_key128(session_key, &en_ctxe);
+  printf("se_sync_session_key_ex: Encrypting r2...\n");
   aes_ecb_encrypt(r2, r2_enc, sizeof(r2), &en_ctxe);
+  printf("se_sync_session_key_ex: Encrypted r2 first 8 bytes: %02x %02x %02x %02x %02x %02x %02x %02x\n",
+         r2_enc[0], r2_enc[1], r2_enc[2], r2_enc[3], 
+         r2_enc[4], r2_enc[5], r2_enc[6], r2_enc[7]);
 
+  printf("se_sync_session_key_ex: Preparing sync command...\n");
   uint8_t sync_cmd[5 + 16 + 16 + 64] = {0x00, 0xfa, 0x00, 0x00, 0x60};
   uint8_t signature[64];
 
+  printf("se_sync_session_key_ex: Assembling command data...\n");
   memcpy(sync_cmd + 5, r1, 16);
   memcpy(sync_cmd + 5 + 16, r2_enc, 16);
   memcpy(sync_cmd + 5 + 32, pubkey_tmp + 1, 64);
+  printf("se_sync_session_key_ex: Command header: %02x %02x %02x %02x %02x\n",
+         sync_cmd[0], sync_cmd[1], sync_cmd[2], sync_cmd[3], sync_cmd[4]);
+  
+  printf("se_sync_session_key_ex: Sending sync command...\n");
   if (!thd89_transmit_ex(addr, sync_cmd, sizeof(sync_cmd), signature,
                          &recv_len)) {
+    printf("se_sync_session_key_ex: Command send failed\n");
     memset(session_key, 0x00, SESSION_KEYLEN);
     return secfalse;
   }
+  printf("se_sync_session_key_ex: Command sent successfully, received length=%d\n", recv_len);
+  
   if (recv_len != 64) {
+    printf("se_sync_session_key_ex: Error - Received length (%d) is not expected 64 bytes\n", recv_len);
     memset(session_key, 0x00, SESSION_KEYLEN);
     return secfalse;
   }
+  printf("se_sync_session_key_ex: Received length verification passed\n");
+  
+  printf("se_sync_session_key_ex: Calculating SHA256 digest of r1...\n");
   sha256_Raw(r1, 16, digest);
+  printf("se_sync_session_key_ex: Digest first 8 bytes: %02x %02x %02x %02x %02x %02x %02x %02x\n",
+         digest[0], digest[1], digest[2], digest[3], 
+         digest[4], digest[5], digest[6], digest[7]);
+  
+  printf("se_sync_session_key_ex: Verifying signature...\n");
   if (ecdsa_verify_digest(&secp256k1, pubkey, signature, digest) != 0) {
+    printf("se_sync_session_key_ex: Signature verification failed\n");
     return secfalse;
   }
+  printf("se_sync_session_key_ex: Signature verification successful\n");
+  printf("se_sync_session_key_ex: Session key synchronization completed successfully\n");
 
   return sectrue;
 }
@@ -1238,10 +1330,10 @@ static secbool se_verifyPin_ex(uint8_t addr, uint8_t *session_key,
   }
 
   if (resp_len == 1) {
-    if (pin_type == PIN_TYPE_USER ||
-        pin_type == PIN_TYPE_USER_AND_PASSPHRASE_PIN) {
+    // if (pin_type == PIN_TYPE_USER ||
+    //     pin_type == PIN_TYPE_USER_AND_PASSPHRASE_PIN) {
       pin_result_type = resp[0];
-    }
+    // }
   }
   memset(pin_buf, 0, sizeof(pin_buf));
   return sectrue;

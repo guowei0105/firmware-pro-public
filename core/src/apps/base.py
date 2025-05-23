@@ -9,7 +9,6 @@ from trezor.crypto import se_thd89
 
 from . import workflow_handlers
 
-
 if TYPE_CHECKING:
     from trezor.messages import (
         Features,
@@ -537,14 +536,13 @@ def shutdown_device() -> None:
             uart.ctrl_power_off()
 
 
-async def unlock_device(ctx: wire.GenericContext = wire.DUMMY_CONTEXT, pin_use_type: int = 1) -> None:
+async def unlock_device(ctx: wire.GenericContext = wire.DUMMY_CONTEXT, pin_use_type: int = 2) -> None:
     """Ensure the device is in unlocked state.
 
     If the storage is locked, attempt to unlock it. Reset the homescreen and the wire
     handler.
     Args:
         ctx: The wire context.
-        pin_use_type: PIN使用类型：0=只校验用户PIN，1=校验用户PIN和pass-PIN，2=只校验pass-PIN且错误不增加错误次数
     """
     from apps.common.request_pin import verify_user_pin, verify_user_fingerprint  # 导入PIN验证和指纹验证功能
     pin_use_type_int = int(pin_use_type)
@@ -555,7 +553,7 @@ async def unlock_device(ctx: wire.GenericContext = wire.DUMMY_CONTEXT, pin_use_t
         await verify_user_pin(ctx, allow_fingerprint=False, pin_use_type=pin_use_type_int)  
     else: 
         from trezor.lvglui.scrs import fingerprints  
-
+        
         if not fingerprints.is_unlocked():  
             if __debug__:  
                 print(f"fingerprint is locked, using pin_use_type: {pin_use_type_int}")
@@ -727,7 +725,7 @@ async def handle_GetPassphraseState(ctx: wire.Context, msg: GetPassphraseState) 
         if is_valid:
             lock_device()
             try:
-                await unlock_device(ctx, pin_use_type=1)
+                await unlock_device(ctx, pin_use_type=2)
                 if not config.is_unlocked():
                     return PassphraseState(btc_test="Device unlock failed, user interaction required")
                 session_id = handle_session_management(msg)
@@ -739,7 +737,7 @@ async def handle_GetPassphraseState(ctx: wire.Context, msg: GetPassphraseState) 
                 return PassphraseState(btc_test=f"Unlock error: {e}")
         else:
             await unlock_device(ctx)
-            session_id = handle_session_management(msg)
+            session_id = handle_session_management(msg)     
             print("session_id:",session_id)
 
     try:
@@ -764,7 +762,6 @@ async def handle_GetPassphraseState(ctx: wire.Context, msg: GetPassphraseState) 
         if is_valid and config.is_unlocked():
             print("Device locked again due to error")
         
-
         return PassphraseState(btc_test=f"Error getting address: {error_msg}")
 
 

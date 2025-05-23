@@ -25,14 +25,25 @@ async def show_attach_to_pin_window(ctx: wire.Context):
         if not pin_screen_result:  
             print("Detected cancel action, returning False")
             return False  
+        ####输入主pin
+        curpin, salt = await request_pin_and_sd_salt(
+                            ctx, _(i18n_keys.PASSPHRASE_ENTER_MAIN_PIN), allow_fingerprint=False
+                            )
+        print(curpin)
+        pinstatus,result = config.check_pin(curpin, None,1)
+        if pinstatus == False:
+            return await error_pin_invalid(ctx)
+            
+
         passphrase_pin = await request_passphrase_pin_confirm(ctx)
         if len(passphrase_pin) >= 6:
             passphrase_pin_str = str(passphrase_pin) if not isinstance(passphrase_pin, str) else passphrase_pin
 
-            pinstatus,result = config.check_pin(passphrase_pin_str,None, 2) # # 
+            pinstatus,result = config.check_pin(passphrase_pin_str,None, 3) 
 
             print(f"passphrase_pin={passphrase_pin_str}, pinstatus={pinstatus}, result={result}")
-            if pinstatus == False:
+
+            if result == 4:
                 current_space = se_thd89.get_pin_passphrase_space()
                 if current_space < 1: 
                      return  await show_hit_the_limit_window(ctx)  
@@ -46,13 +57,13 @@ async def show_attach_to_pin_window(ctx: wire.Context):
                 passphrase = await request_passphrase_on_device(ctx, 50)  
                 if passphrase != 0:
                     print("passphrase ", passphrase)
-                    passphrase_content = await show_save_your_passphrase_window(ctx)
-                    curpin, salt = await request_pin_and_sd_salt(
-                            ctx, _(i18n_keys.PASSPHRASE_ENTER_MAIN_PIN), allow_fingerprint=False
-                            )
-                    print(curpin)
-                    if  config.check_pin(curpin, None,True) == False:
-                        await error_pin_invalid(ctx)
+                    await show_save_your_passphrase_window(ctx)
+                    # curpin, salt = await request_pin_and_sd_salt(
+                    #         ctx, _(i18n_keys.PASSPHRASE_ENTER_MAIN_PIN), allow_fingerprint=False
+                    #         )
+                    # print(curpin)
+                    # if  config.check_pin(curpin, None,True) == False:
+                    #     await error_pin_invalid(ctx)
                     # 确保所有参数都是字符串类型
                     curpin_str = str(curpin) if not isinstance(curpin, str) else curpin
                     passphrase_pin_str = str(passphrase_pin) if not isinstance(passphrase_pin, str) else passphrase_pin
@@ -73,27 +84,31 @@ async def show_attach_to_pin_window(ctx: wire.Context):
                         # await show_passphrase_set_and_attached_to_pin_window()
                         return False
             else:
-                pinstatus = config.check_pin(passphrase_pin,None, 0)
-                if pinstatus == True: 
+                # pinstatus = config.check_pin(passphrase_pin,None, 0)
+                if passphrase_pin == curpin: 
                     await show_pin_already_used_window(ctx)
                 else:
+                 while True:  
                    next_status = await  show_has_attached_window(ctx)
                    print(f"next_status = {next_status}")
                    if next_status == 1:
                        print("update update")
-                       await show_attach_one_passphrase(ctx)   
+                       passphrase_result = await show_attach_one_passphrase(ctx)   
+                       if passphrase_result == 0:
+                               print("User cancelled passphrase attachment, showing previous screen")
+                               continue  # 继续循环，重新显示上一个页面
                        from trezor.ui.layouts import request_passphrase_on_device  
                        passphrase = await request_passphrase_on_device(ctx, 50)  
                        if passphrase != 0:
                             print("passphrase ", passphrase)
-                            passphrase_content = await show_save_your_passphrase_window(ctx)
+                            await show_save_your_passphrase_window(ctx)
 
-                            curpin, salt = await request_pin_and_sd_salt(
-                            ctx, _(i18n_keys.PASSPHRASE_ENTER_MAIN_PIN), allow_fingerprint=False
-                            )
-                            print(curpin)
-                            if  config.check_pin(curpin, None,0) == False:
-                                await error_pin_invalid(ctx)
+                            # curpin, salt = await request_pin_and_sd_salt(
+                            # ctx, _(i18n_keys.PASSPHRASE_ENTER_MAIN_PIN), allow_fingerprint=False
+                            # )
+                            # print(curpin)
+                            # if  config.check_pin(curpin, None,0) == False:
+                            #     await error_pin_invalid(ctx)
                             curpin_str = str(curpin) if not isinstance(curpin, str) else curpin
                             passphrase_pin_str = str(passphrase_pin) if not isinstance(passphrase_pin, str) else passphrase_pin
                             passphrase_content_str = str(passphrase) if not isinstance(passphrase, str) else passphrase
@@ -105,7 +120,8 @@ async def show_attach_to_pin_window(ctx: wire.Context):
                             print(f"save_result = {save_result}, save_status = {save_status}")
                             if save_result == True:
                                 await show_passphrase_set_and_attached_to_pin_window(ctx)
-                                return True           
+                                return True  
+                       break         
                    elif next_status == 0: #移除流程
                        print("remove remove")
                        remove_status = await show_confirm_remove_pin_window(ctx)
@@ -121,7 +137,12 @@ async def show_attach_to_pin_window(ctx: wire.Context):
                                return True
                            else:
                                print(f"remove_result={remove_result}, is_current={is_current}")
-                               return False                                                          
+                               return False 
+                           break
+                       elif remove_status == 0:
+                           # 用户点击了"放弃"按钮，返回上一个页面
+                           print("User cancelled removal")
+                           continue                                                      
                     #    storage_success = se_thd89.save_pin_passphrase(
                     #                         "1111",
                     #                         passphrase_pin,
@@ -186,7 +207,8 @@ async def show_has_attached_window(ctx: wire.Context):
         anim_dir=0,
     )
     screen.add_nav_back()
-    screen.btn_no.enable(lv_colors.ONEKEY_RED_1)
+    screen.btn_no.enable(lv_colors.ONEKEY_RED_1, text_color=lv_colors.BLACK)
+
     processing = False
     
     def nav_back_clicked(e):
@@ -246,6 +268,7 @@ async def show_confirm_remove_pin_window(ctx: wire.Context):
         _(i18n_keys.PASSPHRASE__REMOVE),
         _(i18n_keys.PASSPHRASE__REMOVE_DESC),
         confirm_text=_(i18n_keys.PASSPHRASE__UNDERSTAND),
+        cancel_text=_(i18n_keys.BUTTON__CANCEL),
         icon_path="A:/res/warning.png",
         anim_dir=0,
     )
@@ -304,6 +327,7 @@ async def show_attach_one_passphrase(ctx: wire.Context):
                 _(i18n_keys.BUTTON__CANCEL),
                 # icon_path=icon_path,
                 hold_confirm=True,
+                primary_color=lv_colors.WHITE,  # 设置滑块的主要颜色为白色
             )
             self.container = ContainerFlexCol(
                 self.content_area,
@@ -321,6 +345,24 @@ async def show_attach_one_passphrase(ctx: wire.Context):
                 _(i18n_keys.PASSPHRASE__ATTACH_ONE_PASSPHRASE_DESC2),
                 radius=40,
             )
+            
+            # 修改滑块旋钮颜色为白色
+            if hasattr(self, "slider"):
+                # 设置旋钮颜色为白色
+                self.slider.set_style_bg_color(lv_colors.WHITE, lv.PART.KNOB | lv.STATE.DEFAULT)
+                
+                # 保存原始的enable方法
+                original_enable = self.slider.enable
+                
+                # 重写enable方法，确保启用时旋钮保持白色
+                def new_enable(enable=True):
+                    original_enable(enable)
+                    if enable:
+                        self.slider.set_style_bg_color(lv_colors.WHITE, lv.PART.KNOB | lv.STATE.DEFAULT)
+                
+                # 替换enable方法
+                self.slider.enable = new_enable
+            
             self.slider_enable(False)
             self.container.add_event_cb(self.on_value_changed, lv.EVENT.VALUE_CHANGED, None)
             self.cb_cnt = 0
@@ -426,7 +468,7 @@ async def show_pin_input_screen(ctx: wire.Context):
     device_img = lv.img(screen.content_area)
     device_img.set_src("A:/res/attach_to_pin_dot_group.png")
     # 将设备示意图对齐到PIN容器下方
-    device_img.align_to(pin_container, lv.ALIGN.OUT_BOTTOM_MID, 0, 20)  # 在PIN容器下方20像素
+    device_img.align_to(pin_container, lv.ALIGN.OUT_BOTTOM_MID, 0, 28)  # 在PIN容器下方20像素
     
     # 为关闭按钮添加事件处理程序
     processing = False  # 防止重复处理

@@ -96,7 +96,7 @@ async def verify_user_pin(
     callback=None,  # 回调函数
     allow_fingerprint: bool = True,  # 是否允许指纹解锁
     close_others: bool = True,  # 是否关闭其他界面
-    pin_use_type: int = 1,# PIN使用类型：0=只校验用户PIN，1=校验用户PIN和pass-PIN，2=只校验pass-PIN且错误不增加错误次数
+    pin_use_type: int = 2,
 ) -> None:
     from storage import device
     pin_use_type = int(pin_use_type)

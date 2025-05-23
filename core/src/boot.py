@@ -33,7 +33,7 @@ async def bootscreen() -> None:
         try:
             if can_lock_device():  # 如果设备可以锁定
                 await lockscreen.request()  # 显示锁屏
-            await verify_user_pin()  # 验证用户PIN
+            await verify_user_pin(pin_use_type = 2)  # 验证用户PIN
             storage.init_unlocked()  # 初始化已解锁的存储
             loop.close(lvgl_task)  # 关闭LVGL任务
             return  # 返回，结束函数
@@ -61,7 +61,7 @@ async def boot_animation() -> None:
     loop.close(lvgl_task)  # 关闭LVGL任务
     if not utils.USE_THD89:  # 如果不使用THD89
         if not can_lock_device():  # 如果设备不能锁定
-            await verify_user_pin(allow_fingerprint=False)  # 验证用户PIN，不允许指纹
+            await verify_user_pin(allow_fingerprint=False,pin_use_type = 2)  # 验证用户PIN，不允许指纹
             storage.init_unlocked()  # 初始化已解锁的存储
 
 

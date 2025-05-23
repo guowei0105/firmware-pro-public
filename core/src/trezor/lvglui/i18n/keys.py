@@ -152,7 +152,7 @@ TITLE__ENTER_OLD_PIN = 67
 BUTTON__CLOSE = 68
 # The PIN you entered is incorrect.
 SUBTITLE__SET_PIN_WRONG_PIN = 69
-# Wrong PIN
+# Incorrect PIN
 TITLE__WRONG_PIN = 70
 # PIN Changed
 TITLE__PIN_CHANGED = 71

@@ -70,7 +70,7 @@ translations = [
     "Enter Old PIN",
     "Close",
     "The PIN you entered is incorrect.",
-    "Wrong PIN",
+    "Incorrect PIN",
     "PIN Changed",
     "You have successfully changed your PIN.",
     "Done",

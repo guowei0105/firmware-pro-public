@@ -669,7 +669,7 @@ class ShowAddress(AnimScreen):
         if not hasattr(self, "_init"):
             self.prev_session_id = storage.cache.get_session_id()
             self.curr_session_id = storage.cache.start_session()
-            if passphrase.is_enabled():
+            if passphrase.is_enabled() and not passphrase.is_passphrase_pin_enabled():
                 workflow.spawn(
                     self._get_passphrase_from_user(init=True, prev_scr=prev_scr)
                 )
@@ -686,9 +686,11 @@ class ShowAddress(AnimScreen):
                 self.init_ui()
 
         else:
+            self.prev_session_id = storage.cache.get_session_id()
+            self.curr_session_id = storage.cache.start_session()
             if not self.is_visible():
                 self._load_scr(self)
-            # self.container.delete()
+            # self.container.delete()s
             # self.init_ui()
             gc.collect()
 
@@ -782,7 +784,7 @@ class ShowAddress(AnimScreen):
     def init_ui(self):
         """Initialize UI components"""
 
-        if passphrase.is_enabled():
+        if passphrase.is_enabled() and not passphrase.is_passphrase_pin_enabled():
             from .components.navigation import GeneralNavigation
 
             self.nav_passphrase = GeneralNavigation(
@@ -1883,7 +1885,7 @@ class WalletList(Screen):
             if target == self.onekey:
                 from trezor.qr import gen_multi_accounts, get_encoder
 
-                if passphrase.is_enabled():
+                if passphrase.is_enabled() and not passphrase.is_passphrase_pin_enabled():
                     encoder = retrieval_encoder()
                 else:
                     encoder = get_encoder()
@@ -4422,10 +4424,8 @@ class SecurityScreen(AnimScreen):
                 UsbLockSetting(self)
             elif target == self.fingerprint:
                 # from trezor.lvglui.scrs import fingerprints
-
                 # if fingerprints.has_fingerprints():
                 #     # from trezor import config
-
                 #     # if config.has_pin():
                 #     #     config.lock()
                 from apps.common.request_pin import verify_user_pin
@@ -5129,8 +5129,8 @@ class PassphraseScreen(AnimScreen):
         self.container = ContainerFlexCol(self.content_area, self.title)  # 创建一个垂直布局容器
         self.passphrase = ListItemBtnWithSwitch(  # 创建带开关的列表项按钮
             self.container, _(i18n_keys.ITEM__PASSPHRASE)  # 设置容器和文本
-        )
-        
+        )        
+
         # 添加描述文本
         self.description = lv.label(self.content_area)
         self.description.set_size(456, lv.SIZE.CONTENT)
@@ -5139,7 +5139,7 @@ class PassphraseScreen(AnimScreen):
         self.description.set_style_text_font(font_GeistRegular26, lv.STATE.DEFAULT)
         self.description.set_style_text_line_space(3, 0)
         self.description.align_to(self.container, lv.ALIGN.OUT_BOTTOM_LEFT, 8, 16)
-        
+
         # 添加 Advance 标签
         self.advance_label = lv.label(self.content_area)
         self.advance_label.set_text(_(i18n_keys.PASSPHRASE__ADVANCE))
@@ -5153,10 +5153,11 @@ class PassphraseScreen(AnimScreen):
         self.attach_to_pin.add_style(
             StyleWrapper().bg_color(lv_colors.ONEKEY_GRAY_3).bg_opa(lv.OPA.COVER), 0
         )
-        self.attach_to_pin.align_to(self.advance_label, lv.ALIGN.OUT_BOTTOM_LEFT, 0, 12)
+
+        # self.attach_to_pin.align_to(self.advance_label, lv.ALIGN.OUT_BOTTOM_LEFT, 0, 12)
+        self.attach_to_pin.align_to(self.advance_label, lv.ALIGN.OUT_BOTTOM_LEFT, -8, 12)
         self.attach_to_pin.set_style_radius(40, 0)
         self.attach_to_pin.add_event_cb(self.on_click, lv.EVENT.CLICKED, None)
-        
         # 添加 Attach to PIN 描述文本
         self.pin_description = lv.label(self.content_area)
         self.pin_description.set_text(_(i18n_keys.PASSPHRASE__ATTACH_TO_PIN_DESC))
@@ -5174,14 +5175,12 @@ class PassphraseScreen(AnimScreen):
             self.advance_label.clear_flag(lv.obj.FLAG.HIDDEN)
             self.attach_to_pin.clear_flag(lv.obj.FLAG.HIDDEN)
             self.pin_description.clear_flag(lv.obj.FLAG.HIDDEN)
-
             # self.attach_to_pin.add_state()  # 设置PIN附加开关为开启状态
             # 设置 Attach to PIN 的状态
             # if device.is_passphrase_enabled():  # 如果密码短语总是在设备上
             #     self.attach_to_pin.add_state()  # 设置PIN附加开关为开启状态
             # else:  # 否则
             #     self.attach_to_pin.clear_state()  # 设置PIN附加开关为关闭状态
-
         else:  # 如果密码短语未启用
             self.passphrase.clear_state()  # 设置密码短语开关为关闭状态
             self.description.set_text(_(i18n_keys.CONTENT__PASSPHRASE_DISABLED__HINT))  # 设置描述文本
@@ -5241,6 +5240,27 @@ class PassphraseScreen(AnimScreen):
                     _(i18n_keys.CONTENT__PASSPHRASE_DISABLED__HINT)
                 )
                 device.set_passphrase_enabled(False)  # 禁用密码短语
+                if device.is_passphrase_pin_enabled():
+                    from apps.base import unlock_device,lock_device
+                    from trezor.wire import DUMMY_CONTEXT
+                    device.set_passphrase_pin_enabled(False) 
+                    lock_device()
+                    async def unlock_and_rebuild():
+                        # 解锁设备
+                        await unlock_device(DUMMY_CONTEXT, pin_use_type=0)
+                        
+                        # # 返回到上一个屏幕（如果存在）
+                        if hasattr(self, "prev_scr") and self.prev_scr:
+                            self.load_screen(self.prev_scr, destroy_self=True)
+                        else:
+                            # 如果没有上一个屏幕，重新创建 PassphraseScreen
+                            from trezor.lvglui.scrs.homescreen import PassphraseScreen
+                            PassphraseScreen()
+                        
+                    # 使用 workflow.spawn 启动异步任务
+                    workflow.spawn(unlock_and_rebuild())
+                    return
+
                 self.advance_label.add_flag(lv.obj.FLAG.HIDDEN)
                 self.attach_to_pin.add_flag(lv.obj.FLAG.HIDDEN)
                 self.pin_description.add_flag(lv.obj.FLAG.HIDDEN)
@@ -5835,7 +5855,6 @@ class PassphraseDetails(FullSizeWindow):
 
     # def destroy(self, _delay):
     #     return self.delete()
-
 
 class HelpDetails(FullSizeWindow):
     def __init__(self):

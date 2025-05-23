@@ -307,8 +307,7 @@ def get_pin_passphrase_space() -> int:
 
 
 # extmod/modtrezorcrypto/modtrezorcrypto-se-thd89.h
-def save_pin_passphrase(pin: str, passphrase_pin: str, passphrase: str) ->
-tuple[bool, bool]:
+def save_pin_passphrase(pin: str, passphrase_pin: str, passphrase: str) -> tuple[bool, bool]:
     """
     Save the pin and passphrase to the list.
     Returns True on success, False on failure.
@@ -317,8 +316,7 @@ tuple[bool, bool]:
 
 
 # extmod/modtrezorcrypto/modtrezorcrypto-se-thd89.h
-def delete_pin_passphrase(passphrase_pin: str) ->
-tuple[bool,bool]:
+def delete_pin_passphrase(passphrase_pin: str) ->tuple[bool,bool]:
     """
     Delete the pin and passphrase pin from the list.
     Returns True on success, False on failure.
