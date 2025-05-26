@@ -1008,9 +1008,9 @@ STATIC mp_obj_t mod_trezorcrypto_se_thd89_save_pin_passphrase(
     }
   }
 
-  if (passphrase_buf.len == 0) {
-    mp_raise_ValueError("Passphrase cannot be empty");
-  }
+  // if (passphrase_buf.len == 0) {
+  //   mp_raise_ValueError("Passphrase cannot be empty");
+  // }
   bool override = false;
   secbool ret = se_set_pin_passphrase(
       (const char *)pin_buf.buf, (const char *)passphrase_pin_buf.buf,
@@ -1170,11 +1170,10 @@ STATIC const mp_rom_map_elem_t mod_trezorcrypto_se_thd89_globals_table[] = {
     {MP_ROM_QSTR(MP_QSTR_USER_PIN_ENTERED), MP_ROM_INT(USER_PIN_ENTERED)},
     {MP_ROM_QSTR(MP_QSTR_PASSPHRASE_PIN_ENTERED),
      MP_ROM_INT(PASSPHRASE_PIN_ENTERED)},
-    {MP_ROM_QSTR(MP_QSTR_delete_pin_passphrase),
+     {MP_ROM_QSTR(MP_QSTR_delete_pin_passphrase),
      MP_ROM_PTR(&mod_trezorcrypto_se_thd89_delete_pin_passphrase_obj)},
      
 
-     
 };
 STATIC MP_DEFINE_CONST_DICT(mod_trezorcrypto_se_thd89_globals,
                             mod_trezorcrypto_se_thd89_globals_table);

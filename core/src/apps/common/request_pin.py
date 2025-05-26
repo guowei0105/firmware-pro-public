@@ -156,7 +156,7 @@ async def verify_user_pin(
             if verified:
                 if usertype == 3:
                     device.set_passphrase_pin_enabled(True)  # 启用密码短语 PIN
-                elif usertype == 1:
+                elif usertype == 0:
                     device.set_passphrase_pin_enabled(False)  # 禁用密码短语 PIN
                 else:
                     print(f"[DEBUG] Unhandled usertype: {usertype}, passphrase PIN status unchanged")

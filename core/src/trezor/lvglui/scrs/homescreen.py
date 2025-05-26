@@ -4139,6 +4139,7 @@ class PowerOff(FullSizeWindow):
                             allow_cancel=False,
                             callback=self.back,
                             allow_fingerprint=False,
+                            pin_use_type = 1,
                         )
                     )
                 else:
@@ -4436,6 +4437,7 @@ class SecurityScreen(AnimScreen):
                         allow_cancel=True,
                         callback=lambda: FingerprintSetting(self),
                         allow_fingerprint=False,
+                        pin_use_type =1,
                     )
                 )
                 # else:
@@ -5243,22 +5245,12 @@ class PassphraseScreen(AnimScreen):
                 if device.is_passphrase_pin_enabled():
                     from apps.base import unlock_device,lock_device
                     from trezor.wire import DUMMY_CONTEXT
+                    from apps.base import lock_device_if_unlocked
+
+                    
+                    
                     device.set_passphrase_pin_enabled(False) 
-                    lock_device()
-                    async def unlock_and_rebuild():
-                        # 解锁设备
-                        await unlock_device(DUMMY_CONTEXT, pin_use_type=0)
-                        
-                        # # 返回到上一个屏幕（如果存在）
-                        if hasattr(self, "prev_scr") and self.prev_scr:
-                            self.load_screen(self.prev_scr, destroy_self=True)
-                        else:
-                            # 如果没有上一个屏幕，重新创建 PassphraseScreen
-                            from trezor.lvglui.scrs.homescreen import PassphraseScreen
-                            PassphraseScreen()
-                        
-                    # 使用 workflow.spawn 启动异步任务
-                    workflow.spawn(unlock_and_rebuild())
+                    lock_device_if_unlocked()
                     return
 
                 self.advance_label.add_flag(lv.obj.FLAG.HIDDEN)
@@ -5281,10 +5273,10 @@ class PassphraseScreen(AnimScreen):
                 self.advance_label.clear_flag(lv.obj.FLAG.HIDDEN)
                 self.attach_to_pin.clear_flag(lv.obj.FLAG.HIDDEN)
                 self.pin_description.clear_flag(lv.obj.FLAG.HIDDEN)
-                if device.is_passphrase_always_on_device():  # 如果密码短语总是在设备上
-                    self.attach_to_pin.add_state()  # 设置PIN附加开关为开启状态
-                else:  # 否则
-                    self.attach_to_pin.clear_state()  # 设置PIN附加开关为关闭状态
+                # if device.is_passphrase_always_on_device():  # 如果密码短语总是在设备上
+                #     self.attach_to_pin.add_state()  # 设置PIN附加开关为开启状态
+                # else:  # 否则
+                #     self.attach_to_pin.clear_state()  # 设置PIN附加开关为关闭状态
 
     def on_click(self, event_obj):
         code = event_obj.code
@@ -5678,6 +5670,9 @@ class SecurityProtection(AnimScreen):
             self.container,
             _(i18n_keys.ITEM__PASSPHRASE_ACCESS_HIDDEN_WALLETS),
         )
+        self.attach_to_pin = ListItemBtn(
+            self.container, _(i18n_keys.PASSPHRASE__ATTACH_TO_PIN)
+        )
         self.passkeys = ListItemBtn(
             self.container,
             _(i18n_keys.FIDO_FIDO_KEYS_LABEL),
@@ -5697,6 +5692,10 @@ class SecurityProtection(AnimScreen):
         self.passphrase.label_left.set_text(
             _(i18n_keys.ITEM__PASSPHRASE_ACCESS_HIDDEN_WALLETS)
         )
+
+        self.attach_to_pin.label_left.set_text(
+            _(i18n_keys.PASSPHRASE__ATTACH_TO_PIN)
+        )
         self.passkeys.label_left.set_text(_(i18n_keys.FIDO_FIDO_KEYS_LABEL))
 
     def on_click(self, event_obj):
@@ -5713,6 +5712,8 @@ class SecurityProtection(AnimScreen):
                 PassphraseDetails()
             elif target == self.fingerprint:
                 FingerprintDetails()
+            elif target == self.attach_to_pin:
+                AttachToPinDetails()
             elif target == self.passkeys:
                 from .app_passkeys import PasskeysRegister
 
@@ -5829,6 +5830,29 @@ class HardwareWalletDetails(FullSizeWindow):
         self.item.label.set_style_text_color(lv_colors.WHITE_2, 0)
         self.item.label.align_to(self.item.label_top, lv.ALIGN.OUT_BOTTOM_LEFT, 0, 16)
         self.item.label.set_long_mode(lv.label.LONG.WRAP)
+
+class AttachToPinDetails(FullSizeWindow):
+    def __init__(self):
+        super().__init__(
+            None,
+            None,
+            cancel_text=_(i18n_keys.BUTTON__CLOSE),
+            icon_path="A:/res/attach-to-pin-guide.png",
+        )
+        self.container = ContainerFlexCol(self.content_area, self.icon, pos=(0, 24))
+        self.item = DisplayItemWithFont_30(
+            self.container,
+            _(i18n_keys.PASSPHRASE__ATTACH_TO_PIN),
+            _(i18n_keys.ITEM__ATTACH_TO_PIN_DESC),
+        )
+        self.item.label_top.set_style_text_color(lv_colors.WHITE, 0)
+        self.item.label.set_style_text_color(lv_colors.WHITE_2, 0)
+        self.item.label.align_to(self.item.label_top, lv.ALIGN.OUT_BOTTOM_LEFT, 0, 16)
+        self.item.label.set_long_mode(lv.label.LONG.WRAP)
+
+
+
+
 
     # def destroy(self, _delay):
     #     return self.delete()
