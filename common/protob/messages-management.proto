@@ -805,5 +805,17 @@ message UnlockPath {
  * @next GetAddress
  */
 message UnlockedPathRequest {
-    optional bytes mac = 1;            // authentication code for future UnlockPath calls
+    optional bytes mac = 1;   
+}
+
+message GetPassphraseState {
+    optional string btc_test = 1;
+    optional bool only_main_pin = 2; 
+    optional bytes session_id = 3; 
+}
+
+message PassphraseState {
+    optional string btc_test = 1;  
+    optional bytes session_id = 2;
+    optional bool attach_to_pin_user = 3;                             
 }

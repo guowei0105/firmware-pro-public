@@ -33,7 +33,7 @@ async def bootscreen() -> None:
         try:
             if can_lock_device():
                 await lockscreen.request()
-            await verify_user_pin()
+            await verify_user_pin(pin_use_type=2)
             storage.init_unlocked()
             loop.close(lvgl_task)
             return

@@ -63,7 +63,8 @@ async def recovery_device(
             curpin, salt = await request_pin_and_sd_salt(
                 ctx, _(i18n_keys.TITLE__ENTER_PIN), allow_fingerprint=False
             )
-            if not config.check_pin(curpin, salt):
+            verified, usertype =  config.check_pin(curpin, salt,1)
+            if not verified:
                 await error_pin_invalid(ctx)
         newpin = None
 

@@ -23,18 +23,16 @@ if TYPE_CHECKING:
 async def change_pin(ctx: wire.Context, msg: ChangePin) -> Success:
     if not is_initialized():
         raise wire.NotInitialized("Device is not initialized")
-
     # confirm that user wants to change the pin
     await require_confirm_change_pin(ctx, msg)
-
     # get old pin
     curpin, salt = await request_pin_and_sd_salt(
         ctx, _(i18n_keys.TITLE__ENTER_OLD_PIN), allow_fingerprint=False
     )
-
     # if changing pin, pre-check the entered pin before getting new pin
     if curpin and not msg.remove:
-        if not config.check_pin(curpin, salt):
+        verified, usertype =  config.check_pin(curpin, salt,1)
+        if not verified:
             await error_pin_invalid(ctx)
 
     # get new pin
@@ -44,6 +42,17 @@ async def change_pin(ctx: wire.Context, msg: ChangePin) -> Success:
         )
     else:
         newpin = ""
+
+    if newpin:
+           verified, usertype = config.check_pin(newpin, salt, 3)
+           print(f"=== PIN CHECK DEBUG ===")
+           print(f"New PIN: {newpin}")
+           print(f"Salt: {salt.hex() if salt else None}")
+           print(f"Check result - Verified: {verified}, UserType: {usertype}")
+           print(f"PIN length: {len(newpin) if newpin else 0}")
+           print(f"======================")
+           if  usertype == 3:
+             return await error_pin_invalid(ctx)
 
     # write into storage
     if not config.change_pin(curpin, newpin, salt, salt):
@@ -89,7 +98,6 @@ def require_confirm_change_pin(ctx: wire.Context, msg: ChangePin) -> Awaitable[N
         )
 
     if not msg.remove:  # changing pin
-
         return confirm_action(
             ctx,
             "set_pin",
@@ -120,6 +128,5 @@ def require_confirm_change_pin(ctx: wire.Context, msg: ChangePin) -> Awaitable[N
     #         reverse=True,
     #         anim_dir=2,
     #     )
-
     # removing non-existing PIN
     raise wire.ProcessError("PIN protection already disabled")

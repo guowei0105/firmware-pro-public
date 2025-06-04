@@ -94,7 +94,6 @@ async def get_card_num(self):
         card_num_str = card_num.decode("utf-8")
     else:
         card_num_str = str(card_num)
-
     return card_num_str, LITE_CARD_SUCCESS_REPONSE
 
 
@@ -407,17 +406,105 @@ async def start_set_pin_mnemonicmphrase(self, pin, mnemonic, card_num):
 
 class MnemonicEncoder:
     def encode_mnemonics(self, seed):
-        n = 2048
+        """将助记词转换为熵+校验和的十六进制字符串"""
         words = seed.split()
-        i = 0
-        while words:
-            w = words.pop()
-            k = bip39.find(w)
-            i = i * n + k
-        result_str = str(i)
-        if len(result_str) % 2 != 0:
-            result_str = "0" + result_str
-        return result_str
+        word_count = len(words)
+        
+        # 验证词数量
+        if word_count not in [12, 15, 18, 21, 24]:
+            raise ValueError("Invalid mnemonic length")
+        
+        # 将每个词转换为11位二进制
+        binary_str = ""
+        for word in words:
+            index = bip39.find(word)
+            if index == -1:
+                raise ValueError(f"Invalid word: {word}")
+            binary_str += format(index, '011b')
+        
+        # 计算熵和校验和的长度
+        total_bits = len(binary_str)
+        checksum_bits = total_bits // 33  # 每33位中有1位校验和
+        entropy_bits = total_bits - checksum_bits
+        
+        # 分离熵和校验和
+        entropy_binary = binary_str[:entropy_bits]
+        checksum_binary = binary_str[entropy_bits:]
+        
+        # 将二进制转换为字节
+        entropy_checksum_bytes = bytearray()
+        
+        # 处理熵部分
+        for i in range(0, len(entropy_binary), 8):
+            byte_str = entropy_binary[i:i+8]
+            if len(byte_str) == 8:
+                entropy_checksum_bytes.append(int(byte_str, 2))
+        
+        # 处理校验和部分（补齐到字节边界）
+        if checksum_binary:
+            # 将校验和补齐到8位
+            checksum_padded = checksum_binary.ljust(8, '0')
+            entropy_checksum_bytes.append(int(checksum_padded, 2))
+        
+        # 转换为十六进制字符串
+        hex_str = self.bytes_to_hex_str(entropy_checksum_bytes)
+        return hex_str
+
+    def decode_mnemonics(self, encoded_hex_str):
+        """从熵+校验和的十六进制字符串恢复助记词"""
+        # 将十六进制转换为字节
+        data_bytes = self.fromhex(encoded_hex_str)
+        
+        # 转换为二进制字符串
+        binary_str = ""
+        for byte in data_bytes:
+            binary_str += format(byte, '08b')
+        
+        # 根据二进制长度推断助记词数量
+        # 12词=132位, 15词=165位, 18词=198位, 21词=231位, 24词=264位
+        word_counts = {132: 12, 165: 15, 198: 18, 231: 21, 264: 24}
+        
+        # 找到最接近的有效长度
+        target_bits = 0
+        for bits, count in word_counts.items():
+            if len(binary_str) * 8 >= bits:
+                target_bits = bits
+                word_count = count
+                break
+        
+        if target_bits == 0:
+            raise ValueError("Invalid encoded data length")
+        
+        # 截取有效位数
+        binary_str = binary_str[:target_bits]
+        
+        # 按11位分组转换为助记词
+        words = []
+        for i in range(0, len(binary_str), 11):
+            if i + 11 <= len(binary_str):
+                word_bits = binary_str[i:i+11]
+                index = int(word_bits, 2)
+                words.append(bip39.get_word(index))
+        
+        return " ".join(words)
+
+    def mnemonic_to_entropy_checksum(self, seed):
+        """提取助记词的熵和校验和（用于验证）"""
+        words = seed.split()
+        binary_str = ""
+        
+        for word in words:
+            index = bip39.find(word)
+            binary_str += format(index, '011b')
+        
+        total_bits = len(binary_str)
+        checksum_bits = total_bits // 33
+        entropy_bits = total_bits - checksum_bits
+        
+        entropy_binary = binary_str[:entropy_bits]
+        checksum_binary = binary_str[entropy_bits:]
+        
+        return entropy_binary, checksum_binary
 
     def int_to_hex_str(self, num):
         """Convert an integer to a hexadecimal string."""
@@ -432,28 +519,6 @@ class MnemonicEncoder:
 
     def bytes_to_hex_str(self, byte_data):
         return "".join(f"{byte:02x}" for byte in byte_data)
-
-    def decode_mnemonics(self, encoded_mnemonic_str):
-        n = 2048
-        encoded_int = int(encoded_mnemonic_str, 10)
-        words = []
-
-        while encoded_int > 0:
-            index = int(encoded_int % n)
-            encoded_int = encoded_int // n
-            words.append(bip39.get_word(index))
-        # v1 fix
-        fix_fill_count = 0
-        supported_mnemonic_length = [12, 15, 18, 21, 24]
-        for length in supported_mnemonic_length:
-            if len(words) == length:
-                break
-            if len(words) < length:
-                fix_fill_count = length - len(words)
-                break
-        words.extend([bip39.get_word(0)] * fix_fill_count)
-
-        return " ".join(words)
 
     def parse_card_data(self, data):
 

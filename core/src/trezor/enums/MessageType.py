@@ -423,3 +423,5 @@ if not utils.BITCOIN_ONLY:
     ResourceAck = 10021
     FileInfoList = 10024
     WriteSEPrivateKey = 10027
+    GetPassphraseState = 10028
+    PassphraseState = 10029

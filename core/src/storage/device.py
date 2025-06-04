@@ -29,6 +29,7 @@ _BRIGHTNESS_VALUE: int | None = None
 _LANGUAGE_VALUE: str | None = None
 _LABEL_VALUE: str | None = None
 _USE_PASSPHRASE_VALUE: bool | None = None
+_USE_PASSPHRASE_PIN_VALUE: bool | None = None
 _PASSPHRASE_ALWAYS_ON_DEVICE_VALUE: bool | None = None
 _AUTOLOCK_DELAY_MS_VALUE: int | None = None
 _HOMESCREEN_VALUE: str | None = None
@@ -242,6 +243,8 @@ if utils.USE_THD89:
     offset += uctypes.sizeof(struct_bool, uctypes.LITTLE_ENDIAN)
     struct_public["fido_enabled"] = (offset, struct_bool)
     offset += uctypes.sizeof(struct_bool, uctypes.LITTLE_ENDIAN)
+    struct_public["use_passphrase_pin"] = (offset, struct_bool)
+    offset += uctypes.sizeof(struct_bool, uctypes.LITTLE_ENDIAN)
 
     # public_field = uctypes.struct(0, struct_public, uctypes.LITTLE_ENDIAN)
     assert (
@@ -277,6 +280,7 @@ if utils.USE_THD89:
     _LABEL_DEPRECATED = struct_public["label_deprecated"][0]
     _LABEL = struct_public["label"][0]
     _USE_PASSPHRASE = struct_public["use_passphrase"][0]
+    _USE_PASSPHRASE_PIN = struct_public["use_passphrase_pin"][0]
     _PASSPHRASE_ALWAYS_ON_DEVICE = struct_public["passphrase_always_on_device"][0]
     _AUTOLOCK_DELAY_MS = struct_public["autolock_delay_ms"][0]
     _HOMESCREEN = struct_public["homescreen"][0]
@@ -346,6 +350,7 @@ else:
     INITIALIZED                = (0x13)  # bool (0x01 or empty)
     _SAFETY_CHECK_LEVEL        = (0x14)  # int
     _EXPERIMENTAL_FEATURES     = (0x15)  # bool (0x01 or empty)
+    _USE_PASSPHRASE_PIN        = (0x16)  # bool (0x01 or empty)
 
     _BLE_NAME = (0x80)  # bytes
     _BLE_VERSION = (0x81)  # bytes
@@ -394,7 +399,7 @@ AUTOSHUTDOWN_DELAY_MAXIMUM = AUTOLOCK_DELAY_MAXIMUM = 0x1000_0000  # ~3 days
 # Other SD-salt-related constants are in sd_salt.py
 SD_SALT_AUTH_KEY_LEN_BYTES = const(16)
 
-PIN_MAX_ATTEMPTS = 10
+PIN_MAX_ATTEMPTS = 5
 
 
 def is_version_stored() -> bool:
@@ -1378,10 +1383,38 @@ def get_se04_boot_version() -> str:
     return _SE04_BOOT_VERSION_VALUE
 
 
+def is_passphrase_pin_enabled() -> bool:
+    """
+    Returns True if the device is currently in passphrase pin mode.
+    In this mode, a separate PIN is used to access the passphrase.
+    """
+    global _USE_PASSPHRASE_PIN_VALUE
+    if _USE_PASSPHRASE_PIN_VALUE is None:
+        _USE_PASSPHRASE_PIN_VALUE = common.get_bool(_NAMESPACE, _USE_PASSPHRASE_PIN)
+    return _USE_PASSPHRASE_PIN_VALUE
+
+
+def set_passphrase_pin_enabled(enable: bool) -> None:
+    """
+    Enable or disable the passphrase pin mode.
+    When enabled, a separate PIN is used to access the passphrase.
+    
+    Note: This requires passphrase to be enabled first.
+    """
+    global _USE_PASSPHRASE_PIN_VALUE
+
+    if enable and not is_passphrase_enabled():
+        raise ValueError("Cannot enable passphrase PIN without enabling passphrase first")
+
+    common.set_bool(_NAMESPACE, _USE_PASSPHRASE_PIN, enable)
+    _USE_PASSPHRASE_PIN_VALUE = enable
+
+
 def clear_global_cache() -> None:
     global _LANGUAGE_VALUE
     global _LABEL_VALUE
     global _USE_PASSPHRASE_VALUE
+    global _USE_PASSPHRASE_PIN_VALUE
     global _PASSPHRASE_ALWAYS_ON_DEVICE_VALUE
     global _AUTOLOCK_DELAY_MS_VALUE
     global _HOMESCREEN_VALUE
@@ -1420,6 +1453,7 @@ def clear_global_cache() -> None:
     _LANGUAGE_VALUE = None
     _LABEL_VALUE = None
     _USE_PASSPHRASE_VALUE = None
+    _USE_PASSPHRASE_PIN_VALUE = None
     _PASSPHRASE_ALWAYS_ON_DEVICE_VALUE = None
     _AUTOLOCK_DELAY_MS_VALUE = None
     _HOMESCREEN_VALUE = None

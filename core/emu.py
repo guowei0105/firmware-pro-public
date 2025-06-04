@@ -281,7 +281,6 @@ def cli(
         trezorlib.debuglink.record_screen(
             emulator.client, record_dir, report_func=print
         )
-
     if run_command:
         ret = run_command_with_emulator(emulator, command)
     elif watch:

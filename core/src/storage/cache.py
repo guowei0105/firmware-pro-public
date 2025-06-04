@@ -97,53 +97,53 @@ class DataCache:
             self.delete(i)
 
 
-class SessionCache(DataCache):
-    def __init__(self) -> None:
-        self.session_id = bytearray(_SESSION_ID_LENGTH)
-        if utils.BITCOIN_ONLY:
-            self.fields = (
-                64,  # APP_COMMON_SEED
-                2,  # APP_COMMON_AUTHORIZATION_TYPE
-                128,  # APP_COMMON_AUTHORIZATION_DATA
-                32,  # APP_COMMON_NONCE
+class SessionCache(DataCache):  # 会话缓存类，继承自DataCache
+    def __init__(self) -> None:  # 初始化方法
+        self.session_id = bytearray(_SESSION_ID_LENGTH)  # 创建会话ID字节数组
+        if utils.BITCOIN_ONLY:  # 如果只支持比特币
+            self.fields = (  # 定义字段大小元组
+                64,  # APP_COMMON_SEED - 通用种子，64字节
+                2,  # APP_COMMON_AUTHORIZATION_TYPE - 授权类型，2字节
+                128,  # APP_COMMON_AUTHORIZATION_DATA - 授权数据，128字节
+                32,  # APP_COMMON_NONCE - 随机数，32字节
             )
-        else:
-            self.fields = (
-                64,  # APP_COMMON_SEED
-                2,  # APP_COMMON_AUTHORIZATION_TYPE
-                128,  # APP_COMMON_AUTHORIZATION_DATA
-                32,  # APP_COMMON_NONCE
-                1,  # APP_COMMON_DERIVE_CARDANO
-                96,  # APP_CARDANO_ICARUS_SECRET
-                96,  # APP_CARDANO_ICARUS_TREZOR_SECRET
-                1,  # APP_MONERO_LIVE_REFRESH
+        else:  # 如果支持多种币种
+            self.fields = (  # 定义字段大小元组
+                64,  # APP_COMMON_SEED - 通用种子，64字节
+                2,  # APP_COMMON_AUTHORIZATION_TYPE - 授权类型，2字节
+                128,  # APP_COMMON_AUTHORIZATION_DATA - 授权数据，128字节
+                32,  # APP_COMMON_NONCE - 随机数，32字节
+                1,  # APP_COMMON_DERIVE_CARDANO - Cardano派生标志，1字节
+                96,  # APP_CARDANO_ICARUS_SECRET - Cardano Icarus密钥，96字节
+                96,  # APP_CARDANO_ICARUS_TREZOR_SECRET - Cardano Trezor密钥，96字节
+                1,  # APP_MONERO_LIVE_REFRESH - Monero实时刷新标志，1字节
             )
-        self.last_usage = 0
-        super().__init__()
+        self.last_usage = 0  # 最后使用时间戳，初始化为0
+        super().__init__()  # 调用父类初始化方法
 
-    def export_session_id(self) -> bytes:
+    def export_session_id(self) -> bytes:  # 导出会话ID方法
         # generate a new session id if we don't have it yet
-        if not self.session_id:
-            self.session_id[:] = random.bytes(_SESSION_ID_LENGTH)
+        if not self.session_id:  # 如果还没有会话ID
+            self.session_id[:] = random.bytes(_SESSION_ID_LENGTH)  # 生成新的随机会话ID
         # export it as immutable bytes
-        return bytes(self.session_id)
+        return bytes(self.session_id)  # 返回不可变的字节对象
 
-    def clear(self) -> None:
-        super().clear()
-        self.last_usage = 0
-        self.session_id[:] = b""
+    def clear(self) -> None:  # 清空缓存方法
+        super().clear()  # 调用父类清空方法
+        self.last_usage = 0  # 重置最后使用时间
+        self.session_id[:] = b""  # 清空会话ID
 
 
-class SessionlessCache(DataCache):
-    def __init__(self) -> None:
-        self.fields = (
-            64,  # APP_COMMON_SEED_WITHOUT_PASSPHRASE
-            1,  # APP_COMMON_SAFETY_CHECKS_TEMPORARY
-            1,  # STORAGE_DEVICE_EXPERIMENTAL_FEATURES
-            8,  # APP_COMMON_REQUEST_PIN_LAST_UNLOCK
-            8,  # APP_COMMON_BUSY_DEADLINE_MS
+class SessionlessCache(DataCache):  # 无会话缓存类，继承自DataCache
+    def __init__(self) -> None:  # 初始化方法
+        self.fields = (  # 定义字段大小元组
+            64,  # APP_COMMON_SEED_WITHOUT_PASSPHRASE - 无密码种子，64字节
+            1,  # APP_COMMON_SAFETY_CHECKS_TEMPORARY - 临时安全检查，1字节
+            1,  # STORAGE_DEVICE_EXPERIMENTAL_FEATURES - 实验性功能，1字节
+            8,  # APP_COMMON_REQUEST_PIN_LAST_UNLOCK - 最后PIN解锁请求，8字节
+            8,  # APP_COMMON_BUSY_DEADLINE_MS - 忙碌截止时间(毫秒)，8字节
         )
-        super().__init__()
+        super().__init__()  # 调用父类初始化方法
 
 
 # XXX
@@ -154,31 +154,32 @@ class SessionlessCache(DataCache):
 # bytearrays, then later call `clear()` on all the existing objects, which resets them
 # to zero length. This is producing some trash - `b[:]` allocates a slice.
 
-_SESSIONS: list[SessionCache] = []
-for _ in range(_MAX_SESSIONS_COUNT):
-    _SESSIONS.append(SessionCache())
+_SESSIONS: list[SessionCache] = []  # 会话列表，存储所有会话缓存对象
+for _ in range(_MAX_SESSIONS_COUNT):  # 循环创建最大会话数量的会话对象
+    _SESSIONS.append(SessionCache())  # 添加新的会话缓存到列表
 
-_SESSIONLESS_CACHE = SessionlessCache()
+_SESSIONLESS_CACHE = SessionlessCache()  # 创建无会话缓存实例
 
-for session in _SESSIONS:
-    session.clear()
-_SESSIONLESS_CACHE.clear()
+for session in _SESSIONS:  # 遍历所有会话
+    session.clear()  # 清空每个会话
+_SESSIONLESS_CACHE.clear()  # 清空无会话缓存
 
-_SESSION_ID = bytearray(_SESSION_ID_LENGTH)
+_SESSION_ID = bytearray(_SESSION_ID_LENGTH)  # 创建全局会话ID字节数组
 
-gc.collect()
-
-
-_active_session_idx: int | None = None
-_session_usage_counter = 0
+gc.collect()  # 执行垃圾回收
 
 
-def start_session(received_session_id: bytes | None = None) -> bytes | None:
-    if not utils.USE_THD89:
-        global _active_session_idx
-        global _session_usage_counter
+_active_session_idx: int | None = None  # 当前活跃会话索引，初始为None
+_session_usage_counter = 0  # 会话使用计数器
 
-        if (
+
+def start_session(received_session_id: bytes | None = None) -> bytes | None:  # 启动会话函数
+    print("start_session start_session start_session start_session")
+    if not utils.USE_THD89:  # 如果不使用THD89安全元件
+        global _active_session_idx  # 声明全局变量
+        global _session_usage_counter  # 声明全局变量
+
+        if (  # 如果接收到的会话ID不为空且长度不正确
             received_session_id is not None
             and len(received_session_id) != _SESSION_ID_LENGTH
         ):
@@ -187,153 +188,155 @@ def start_session(received_session_id: bytes | None = None) -> bytes | None:
             # that wrong-length session ids should not be in cache.
             # Reduce to "session id not provided" case because that's what we do when
             # caller supplies an id that is not found.
-            received_session_id = None
+            received_session_id = None  # 将接收到的会话ID设为None
 
-        _session_usage_counter += 1
+        _session_usage_counter += 1  # 增加会话使用计数
 
         # attempt to find specified session id
-        if received_session_id:
-            for i in range(_MAX_SESSIONS_COUNT):
-                if _SESSIONS[i].session_id == received_session_id:
-                    _active_session_idx = i
-                    _SESSIONS[i].last_usage = _session_usage_counter
-                    return received_session_id
+        if received_session_id:  # 如果有指定的会话ID
+            for i in range(_MAX_SESSIONS_COUNT):  # 遍历所有会话
+                if _SESSIONS[i].session_id == received_session_id:  # 如果找到匹配的会话ID
+                    _active_session_idx = i  # 设置活跃会话索引
+                    _SESSIONS[i].last_usage = _session_usage_counter  # 更新最后使用时间
+                    return received_session_id  # 返回会话ID
 
         # allocate least recently used session
-        lru_counter = _session_usage_counter
-        lru_session_idx = 0
-        for i in range(_MAX_SESSIONS_COUNT):
-            if _SESSIONS[i].last_usage < lru_counter:
-                lru_counter = _SESSIONS[i].last_usage
-                lru_session_idx = i
+        lru_counter = _session_usage_counter  # 最近最少使用计数器
+        lru_session_idx = 0  # 最近最少使用会话索引
+        for i in range(_MAX_SESSIONS_COUNT):  # 遍历所有会话
+            if _SESSIONS[i].last_usage < lru_counter:  # 如果找到更少使用的会话
+                lru_counter = _SESSIONS[i].last_usage  # 更新最少使用计数
+                lru_session_idx = i  # 更新最少使用会话索引
 
-        _active_session_idx = lru_session_idx
-        selected_session = _SESSIONS[lru_session_idx]
-        selected_session.clear()
-        selected_session.last_usage = _session_usage_counter
-        return selected_session.export_session_id()
-    else:
-        received_session_id = se_thd89.start_session(received_session_id)
-        if received_session_id is not None:
-            _SESSION_ID[:] = received_session_id
-        return received_session_id
-
-
-def end_current_session() -> None:
-    if not utils.USE_THD89:
-        global _active_session_idx
-
-        if _active_session_idx is None:
-            return
-
-        _SESSIONS[_active_session_idx].clear()
-        _active_session_idx = None
-    else:
-        _SESSION_ID[:] = b""
-        se_thd89.end_session()
+        _active_session_idx = lru_session_idx  # 设置活跃会话为最少使用的会话
+        selected_session = _SESSIONS[lru_session_idx]  # 获取选中的会话
+        selected_session.clear()  # 清空选中的会话
+        selected_session.last_usage = _session_usage_counter  # 设置最后使用时间
+        return selected_session.export_session_id()  # 返回导出的会话ID
+    else:  # 如果使用THD89安全元件
+        received_session_id = se_thd89.start_session(received_session_id)  # 通过安全元件启动会话
+        if received_session_id is not None:  # 如果收到有效的会话ID
+            _SESSION_ID[:] = received_session_id  # 将会话ID复制到全局变量
+        return received_session_id  # 返回会话ID
 
 
-def get_session_id() -> bytes:
-    return bytes(_SESSION_ID)
+def end_current_session() -> None:  # 结束当前会话函数
+    print("end_current_session end_current_session end_current_session end_current_session")
+    if not utils.USE_THD89:  # 如果不使用THD89安全元件
+        global _active_session_idx  # 声明全局变量
+
+        if _active_session_idx is None:  # 如果没有活跃会话
+            return  # 直接返回
+
+        _SESSIONS[_active_session_idx].clear()  # 清空当前活跃会话
+        _active_session_idx = None  # 重置活跃会话索引
+    else:  # 如果使用THD89安全元件
+        _SESSION_ID[:] = b""  # 清空全局会话ID
+        se_thd89.end_session()  # 通过安全元件结束会话
 
 
-def is_session_started() -> bool:
-    if not utils.USE_THD89:
-        return _active_session_idx is not None
-    else:
-        return se_thd89.session_is_open()
+def get_session_id() -> bytes:  # 获取会话ID函数
+    print(f"_SESSION_ID: {_SESSION_ID}") 
+    return bytes(_SESSION_ID)  # 返回全局会话ID的副本
 
 
-def set(key: int, value: bytes) -> None:
-    if key & _SESSIONLESS_FLAG:
-        _SESSIONLESS_CACHE.set(key ^ _SESSIONLESS_FLAG, value)
-        return
-    if not utils.USE_THD89:
-        if _active_session_idx is None:
-            raise InvalidSessionError
-        _SESSIONS[_active_session_idx].set(key, value)
-    else:
-        if key == APP_COMMON_NONCE:
-            _NONCE_CACHE[:] = value
-        return
+def is_session_started() -> bool:  # 检查会话是否已启动函数
+    if not utils.USE_THD89:  # 如果不使用THD89安全元件
+        return _active_session_idx is not None  # 返回是否有活跃会话
+    else:  # 如果使用THD89安全元件
+        return se_thd89.session_is_open()  # 通过安全元件检查会话状态
 
 
-def set_int(key: int, value: int) -> None:
-    if key & _SESSIONLESS_FLAG:
-        length = _SESSIONLESS_CACHE.fields[key ^ _SESSIONLESS_FLAG]
-    elif _active_session_idx is None:
-        raise InvalidSessionError
-    else:
-        length = _SESSIONS[_active_session_idx].fields[key]
+def set(key: int, value: bytes) -> None:  # 设置缓存值函数
+    if key & _SESSIONLESS_FLAG:  # 如果是无会话标志
+        _SESSIONLESS_CACHE.set(key ^ _SESSIONLESS_FLAG, value)  # 在无会话缓存中设置值
+        return  # 返回
+    if not utils.USE_THD89:  # 如果不使用THD89安全元件
+        if _active_session_idx is None:  # 如果没有活跃会话
+            raise InvalidSessionError  # 抛出无效会话错误
+        _SESSIONS[_active_session_idx].set(key, value)  # 在当前会话中设置值
+    else:  # 如果使用THD89安全元件
+        if key == APP_COMMON_NONCE:  # 如果是随机数键
+            _NONCE_CACHE[:] = value  # 将值复制到随机数缓存
+        return  # 返回
 
-    encoded = value.to_bytes(length, "big")
+
+def set_int(key: int, value: int) -> None:  # 设置整数值函数
+    if key & _SESSIONLESS_FLAG:  # 如果是无会话标志
+        length = _SESSIONLESS_CACHE.fields[key ^ _SESSIONLESS_FLAG]  # 获取字段长度
+    elif _active_session_idx is None:  # 如果没有活跃会话
+        raise InvalidSessionError  # 抛出无效会话错误
+    else:  # 否则
+        length = _SESSIONS[_active_session_idx].fields[key]  # 获取当前会话的字段长度
+
+    encoded = value.to_bytes(length, "big")  # 将整数编码为大端字节
 
     # Ensure that the value fits within the length. Micropython's int.to_bytes()
     # doesn't raise OverflowError.
-    assert int.from_bytes(encoded, "big") == value
+    assert int.from_bytes(encoded, "big") == value  # 确保值在长度范围内
 
-    set(key, encoded)
+    set(key, encoded)  # 设置编码后的值
 
 
-if TYPE_CHECKING:
+if TYPE_CHECKING:  # 如果在类型检查模式
 
-    @overload
-    def get(key: int) -> bytes | None:
+    @overload  # 重载装饰器
+    def get(key: int) -> bytes | None:  # 获取函数重载1
         ...
 
-    @overload
-    def get(key: int, default: T) -> bytes | T:  # noqa: F811
+    @overload  # 重载装饰器
+    def get(key: int, default: T) -> bytes | T:  # noqa: F811  # 获取函数重载2
         ...
 
 
-def get(key: int, default: T | None = None) -> bytes | T | None:  # noqa: F811
-    if key & _SESSIONLESS_FLAG:
-        return _SESSIONLESS_CACHE.get(key ^ _SESSIONLESS_FLAG, default)
-    if not utils.USE_THD89:
-        if _active_session_idx is None:
-            raise InvalidSessionError
-        return _SESSIONS[_active_session_idx].get(key, default)
-    else:
-        if key == APP_COMMON_NONCE:
-            return bytes(_NONCE_CACHE)
-        return None
+def get(key: int, default: T | None = None) -> bytes | T | None:  # noqa: F811  # 获取缓存值函数
+    if key & _SESSIONLESS_FLAG:  # 如果是无会话标志
+        return _SESSIONLESS_CACHE.get(key ^ _SESSIONLESS_FLAG, default)  # 从无会话缓存获取值
+    if not utils.USE_THD89:  # 如果不使用THD89安全元件
+        if _active_session_idx is None:  # 如果没有活跃会话
+            raise InvalidSessionError  # 抛出无效会话错误
+        return _SESSIONS[_active_session_idx].get(key, default)  # 从当前会话获取值
+    else:  # 如果使用THD89安全元件
+        if key == APP_COMMON_NONCE:  # 如果是随机数键
+            return bytes(_NONCE_CACHE)  # 返回随机数缓存的副本
+        return None  # 返回None
 
 
-def get_int(key: int, default: T | None = None) -> int | T | None:  # noqa: F811
-    encoded = get(key)
-    if encoded is None:
-        return default
-    else:
-        return int.from_bytes(encoded, "big")
+def get_int(key: int, default: T | None = None) -> int | T | None:  # noqa: F811  # 获取整数值函数
+    encoded = get(key)  # 获取编码的值
+    if encoded is None:  # 如果值为None
+        return default  # 返回默认值
+    else:  # 否则
+        return int.from_bytes(encoded, "big")  # 从大端字节解码为整数
 
 
-def is_set(key: int) -> bool:
-    if key & _SESSIONLESS_FLAG:
-        return _SESSIONLESS_CACHE.is_set(key ^ _SESSIONLESS_FLAG)
-    if _active_session_idx is None:
-        raise InvalidSessionError
-    return _SESSIONS[_active_session_idx].is_set(key)
+def is_set(key: int) -> bool:  # 检查键是否已设置函数
+    if key & _SESSIONLESS_FLAG:  # 如果是无会话标志
+        return _SESSIONLESS_CACHE.is_set(key ^ _SESSIONLESS_FLAG)  # 检查无会话缓存中是否设置
+    if _active_session_idx is None:  # 如果没有活跃会话
+        raise InvalidSessionError  # 抛出无效会话错误
+    return _SESSIONS[_active_session_idx].is_set(key)  # 检查当前会话中是否设置
 
 
-def delete(key: int) -> None:
-    if key & _SESSIONLESS_FLAG:
-        return _SESSIONLESS_CACHE.delete(key ^ _SESSIONLESS_FLAG)
-    if not utils.USE_THD89:
-        if _active_session_idx is None:
-            raise InvalidSessionError
-        return _SESSIONS[_active_session_idx].delete(key)
-    else:
-        if key == APP_COMMON_NONCE:
-            _NONCE_CACHE[:] = b""
-    return None
+def delete(key: int) -> None:  # 删除缓存值函数
+    if key & _SESSIONLESS_FLAG:  # 如果是无会话标志
+        return _SESSIONLESS_CACHE.delete(key ^ _SESSIONLESS_FLAG)  # 从无会话缓存删除
+    if not utils.USE_THD89:  # 如果不使用THD89安全元件
+        if _active_session_idx is None:  # 如果没有活跃会话
+            raise InvalidSessionError  # 抛出无效会话错误
+        return _SESSIONS[_active_session_idx].delete(key)  # 从当前会话删除
+    else:  # 如果使用THD89安全元件
+        if key == APP_COMMON_NONCE:  # 如果是随机数键
+            _NONCE_CACHE[:] = b""  # 清空随机数缓存
+    return None  # 返回None
 
 
-if TYPE_CHECKING:
-    from typing import Awaitable, Callable, TypeVar, ParamSpec
+if TYPE_CHECKING:  # 如果在类型检查模式
+    from typing import Awaitable, Callable, TypeVar, ParamSpec  # 导入类型注解
 
-    P = ParamSpec("P")
-    ByteFunc = Callable[P, bytes]
-    AsyncByteFunc = Callable[P, Awaitable[bytes]]
+    P = ParamSpec("P")  # 参数规范类型变量
+    ByteFunc = Callable[P, bytes]  # 字节函数类型别名
+    AsyncByteFunc = Callable[P, Awaitable[bytes]]  # 异步字节函数类型别名
 
 
 def stored(key: int) -> Callable[[ByteFunc[P]], ByteFunc[P]]:

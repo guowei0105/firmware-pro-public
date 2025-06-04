@@ -1119,7 +1119,7 @@ def draw_simple_text(
 
 
 async def request_passphrase_on_device(
-    ctx: wire.GenericContext, max_len: int, result: str | None = None
+    ctx: wire.GenericContext, max_len: int, result: str | None = None, min_len: int = 0
 ) -> str:
     await button_request(
         ctx, "passphrase_device", code=ButtonRequestType.PassphraseEntry
@@ -1127,12 +1127,16 @@ async def request_passphrase_on_device(
     from trezor.lvglui.scrs.passphrase import PassphraseRequest
 
     while True:
-        screen = PassphraseRequest(max_len, result)
+        screen = PassphraseRequest(max_len, result, min_len)  # 传入最小长度参数
         result = await ctx.wait(screen.request())
         if result is None:
             raise wire.ActionCancelled("Passphrase entry cancelled")
 
         assert isinstance(result, str)
+        
+        # # 额外的长度检查（双重保险）
+        # if len(result) < min_len:
+        #     continue  # 重新输入
 
         if await require_confirm_passphrase(ctx, result, from_device=True):
             break

@@ -441,6 +441,8 @@ if TYPE_CHECKING:
         OnekeyGetFeatures = 10025
         OnekeyFeatures = 10026
         WriteSEPrivateKey = 10027
+        GetPassphraseState = 10028
+        PassphraseState = 10029
 
     class FailureType(IntEnum):
         UnexpectedMessage = 1

@@ -442,3 +442,133 @@ class SetupComplete(FullSizeWindow):
                 from apps.base import set_homescreen
 
                 set_homescreen()
+
+
+class InputPassphrasePinConfirm(FullSizeWindow):
+    def __init__(self, title):
+        super().__init__(
+            title=title,
+            subtitle=None,
+            anim_dir=0,
+        )
+        self.title.add_style(
+            StyleWrapper()
+            .text_font(font_GeistSemiBold48)
+            .text_align_center()
+            .text_letter_space(0),
+            0,
+        )
+        self.title.align(lv.ALIGN.TOP_MID, 0, 24)
+        self.clear_flag(lv.obj.FLAG.SCROLLABLE)
+        self.keyboard = NumberKeyboard(self, max_len=50, min_len=6)
+        self.keyboard.add_event_cb(self.on_event, lv.EVENT.READY, None)
+        self.keyboard.add_event_cb(self.on_event, lv.EVENT.CANCEL, None)
+        self.keyboard.add_event_cb(self.on_event, lv.EVENT.VALUE_CHANGED, None)
+        self.input_result = None
+
+    def on_event(self, event_obj):
+        code = event_obj.code
+        if code == lv.EVENT.VALUE_CHANGED:
+            utils.lcd_resume()
+            return
+        elif code == lv.EVENT.READY:
+            input = self.keyboard.ta.get_text()
+            if len(input) < 6:
+                return
+            self.input_result = input
+            self.channel.publish(self.input_result)
+        elif code == lv.EVENT.CANCEL:
+            self.channel.publish(0)
+
+        self.clean()
+        self.destroy()
+
+
+async def pin_mismatch(ctx) -> None:
+    from trezor.ui.layouts import show_warning
+
+    await show_warning(
+        ctx=ctx,
+        br_type="pin_not_match",
+        header=_(i18n_keys.TITLE__NOT_MATCH),
+        content=_(
+            i18n_keys.CONTENT__THE_TWO_ONEKEY_LITE_USED_FOR_CONNECTION_ARE_NOT_THE_SAME
+        ),
+        icon="A:/res/danger.png",
+        btn_yes_bg_color=lv_colors.ONEKEY_BLACK,
+    )
+
+
+async def request_passphrase_pin(ctx, prompt: str) -> str:
+    pin_screen = InputPassphrasePinConfirm(prompt)
+    pin = await ctx.wait(pin_screen.request())
+    return pin
+
+
+async def request_passphrase_pin_confirm(ctx) -> str:
+    while True:
+        pin1 = await request_passphrase_pin(ctx, _(i18n_keys.PASSPHRASE__SET_PASSPHRASE_PIN))
+        if pin1 == 0:
+            return pin1
+
+
+        pin2 = await request_passphrase_pin(ctx, _(i18n_keys.PASSPHRASE__RE_ENTER_PIN))
+        if pin2 == 0:
+            return pin2
+        if pin1 == pin2:
+            return pin1
+        await passphrase_pin_mismatch(ctx)
+
+async def passphrase_pin_mismatch(ctx) -> None:
+    from trezor.ui.layouts import show_warning
+
+    await show_warning(
+        ctx=ctx,
+        br_type="pin_not_match",
+        header=_(i18n_keys.TITLE__NOT_MATCH),
+        content=_(
+            i18n_keys.SUBTITLE__SETUP_SET_PIN_PIN_NOT_MATCH
+        ),
+        icon="A:/res/danger.png",
+        btn_yes_bg_color=lv_colors.ONEKEY_BLACK,
+    )
+
+
+class InputMainPin(FullSizeWindow):
+    def __init__(self):
+        super().__init__(
+            title=_(i18n_keys.PASSPHRASE_ENTER_MAIN_PIN),
+            subtitle=None,
+            anim_dir=0,
+        )
+        self.title.add_style(
+            StyleWrapper()
+            .text_font(font_GeistSemiBold48)
+            .text_align_center()
+            .text_letter_space(0),
+            0,
+        )
+        self.title.align(lv.ALIGN.TOP_MID, 0, 24)
+        self.clear_flag(lv.obj.FLAG.SCROLLABLE)
+        self.keyboard = NumberKeyboard(self, max_len=50, min_len=4)
+        self.keyboard.add_event_cb(self.on_event, lv.EVENT.READY, None)
+        self.keyboard.add_event_cb(self.on_event, lv.EVENT.CANCEL, None)
+        self.keyboard.add_event_cb(self.on_event, lv.EVENT.VALUE_CHANGED, None)
+
+    def on_event(self, event_obj):
+        code = event_obj.code
+        if code == lv.EVENT.VALUE_CHANGED:
+            utils.lcd_resume()
+            return
+        elif code == lv.EVENT.READY:
+            input = self.keyboard.ta.get_text()
+            if len(input) < 6:
+                return
+            self.channel.publish(input)
+        elif code == lv.EVENT.CANCEL:
+            self.channel.publish(0)
+
+        self.clean()
+        self.destroy()
+
+

@@ -201,6 +201,41 @@ def recover(
         dry_run=dry_run,
     )
 
+# @cli.command()
+# @click.option("-t", "--btc-test", help="Bitcoin test address", type=str)
+# @with_client
+# def get_passphrase_state(client: "TrezorClient", btc_test: Optional[str]) -> None:
+#     """Get current passphrase state of the device.
+#     Shows whether passphrase protection is enabled and returns the current passphrase address.
+#     """
+#     print(f"BTC test address: {btc_test}")
+#     # if btc_test is not None and isinstance(btc_test, str):
+#     #     btc_test = btc_test.encode('utf-8')
+#     # 直接传递字符串，不进行十六进制转换
+#     return device.get_passphrasestate(client, btc_test=btc_test)
+
+
+@cli.command()
+@click.option("-t", "--btc-test", help="Bitcoin test address", type=str)
+@click.option("-m", "--only-main-pin", is_flag=True, help="Only verify main PIN, not passphrase PIN")
+@click.option("-s", "--session-id", help="Session ID for the request", type=str)
+@with_client
+def get_passphrase_state(client: "TrezorClient", btc_test: Optional[str], only_main_pin: bool = False, session_id: Optional[str] = None) -> None:
+    """Get current passphrase state of the device.
+    Shows whether passphrase protection is enabled and returns the current passphrase address.
+    
+    If --only-main-pin is specified, only the main PIN will be verified, not the passphrase PIN.
+    Session ID can be provided to identify the session.
+    """
+    print(f"BTC test address: {btc_test}")
+    print(f"Only verify main PIN: {only_main_pin}")
+    print(f"Session ID: {session_id}")
+
+    # 调用 device.get_passphrasestate 函数，传递参数
+    return device.get_passphrasestate(client, btc_test=btc_test, only_main_pin=only_main_pin, session_id=session_id)
+
+
+
 
 @cli.command()
 @click.option("-e", "--show-entropy", is_flag=True)
