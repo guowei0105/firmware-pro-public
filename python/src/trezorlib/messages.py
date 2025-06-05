@@ -8,6 +8,11 @@ from typing import Sequence, Optional
 from . import protobuf
 
 
+class AptosTransactionType(IntEnum):
+    STANDARD = 0
+    WITH_DATA = 1
+
+
 class BinanceOrderType(IntEnum):
     OT_UNKNOWN = 0
     MARKET = 1
@@ -1115,6 +1120,7 @@ class AptosSignTx(protobuf.MessageType):
     FIELDS = {
         1: protobuf.Field("address_n", "uint32", repeated=True, required=False),
         2: protobuf.Field("raw_tx", "bytes", repeated=False, required=True),
+        3: protobuf.Field("tx_type", "AptosTransactionType", repeated=False, required=False),
     }
 
     def __init__(
@@ -1122,9 +1128,11 @@ class AptosSignTx(protobuf.MessageType):
         *,
         raw_tx: "bytes",
         address_n: Optional[Sequence["int"]] = None,
+        tx_type: Optional["AptosTransactionType"] = AptosTransactionType.STANDARD,
     ) -> None:
         self.address_n: Sequence["int"] = address_n if address_n is not None else []
         self.raw_tx = raw_tx
+        self.tx_type = tx_type
 
 
 class AptosSignedTx(protobuf.MessageType):
@@ -4260,6 +4268,7 @@ class BatchGetPublickeys(protobuf.MessageType):
     FIELDS = {
         1: protobuf.Field("ecdsa_curve_name", "string", repeated=False, required=False),
         2: protobuf.Field("paths", "Path", repeated=True, required=False),
+        3: protobuf.Field("include_node", "bool", repeated=False, required=False),
     }
 
     def __init__(
@@ -4267,23 +4276,31 @@ class BatchGetPublickeys(protobuf.MessageType):
         *,
         paths: Optional[Sequence["Path"]] = None,
         ecdsa_curve_name: Optional["str"] = 'ed25519',
+        include_node: Optional["bool"] = False,
     ) -> None:
         self.paths: Sequence["Path"] = paths if paths is not None else []
         self.ecdsa_curve_name = ecdsa_curve_name
+        self.include_node = include_node
 
 
 class EcdsaPublicKeys(protobuf.MessageType):
     MESSAGE_WIRE_TYPE = 10017
     FIELDS = {
         1: protobuf.Field("public_keys", "bytes", repeated=True, required=False),
+        2: protobuf.Field("hd_nodes", "HDNodeType", repeated=True, required=False),
+        3: protobuf.Field("root_fingerprint", "uint32", repeated=False, required=False),
     }
 
     def __init__(
         self,
         *,
         public_keys: Optional[Sequence["bytes"]] = None,
+        hd_nodes: Optional[Sequence["HDNodeType"]] = None,
+        root_fingerprint: Optional["int"] = None,
     ) -> None:
         self.public_keys: Sequence["bytes"] = public_keys if public_keys is not None else []
+        self.hd_nodes: Sequence["HDNodeType"] = hd_nodes if hd_nodes is not None else []
+        self.root_fingerprint = root_fingerprint
 
 
 class Path(protobuf.MessageType):
@@ -7622,6 +7639,7 @@ class KaspaGetAddress(protobuf.MessageType):
         2: protobuf.Field("show_display", "bool", repeated=False, required=False),
         3: protobuf.Field("prefix", "string", repeated=False, required=False),
         4: protobuf.Field("scheme", "string", repeated=False, required=False),
+        5: protobuf.Field("use_tweak", "bool", repeated=False, required=False),
     }
 
     def __init__(
@@ -7631,11 +7649,13 @@ class KaspaGetAddress(protobuf.MessageType):
         show_display: Optional["bool"] = None,
         prefix: Optional["str"] = 'kaspa',
         scheme: Optional["str"] = 'schnorr',
+        use_tweak: Optional["bool"] = True,
     ) -> None:
         self.address_n: Sequence["int"] = address_n if address_n is not None else []
         self.show_display = show_display
         self.prefix = prefix
         self.scheme = scheme
+        self.use_tweak = use_tweak
 
 
 class KaspaAddress(protobuf.MessageType):
@@ -7660,6 +7680,7 @@ class KaspaSignTx(protobuf.MessageType):
         3: protobuf.Field("scheme", "string", repeated=False, required=False),
         4: protobuf.Field("prefix", "string", repeated=False, required=False),
         5: protobuf.Field("input_count", "uint32", repeated=False, required=False),
+        6: protobuf.Field("use_tweak", "bool", repeated=False, required=False),
     }
 
     def __init__(
@@ -7670,12 +7691,14 @@ class KaspaSignTx(protobuf.MessageType):
         scheme: Optional["str"] = 'schnorr',
         prefix: Optional["str"] = 'kaspa',
         input_count: Optional["int"] = 1,
+        use_tweak: Optional["bool"] = True,
     ) -> None:
         self.address_n: Sequence["int"] = address_n if address_n is not None else []
         self.raw_message = raw_message
         self.scheme = scheme
         self.prefix = prefix
         self.input_count = input_count
+        self.use_tweak = use_tweak
 
 
 class KaspaTxInputRequest(protobuf.MessageType):
