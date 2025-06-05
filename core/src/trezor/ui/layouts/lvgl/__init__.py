@@ -719,6 +719,9 @@ async def confirm_blob(
     icon: str | None = "A:/res/warning.png",  # TODO cleanup @ redesign
     icon_color: int = ui.GREEN,  # TODO cleanup @ redesign
     ask_pagination: bool = False,
+    subtitle: str | None = None,
+    item_key: str | None = None,
+    item_value: str | None = None,
 ) -> None:
     """Confirm data blob.
 
@@ -744,6 +747,9 @@ async def confirm_blob(
         data_str,
         icon_path=icon,
         primary_color=ctx.primary_color,
+        subtitle=subtitle,
+        item_key=item_key,
+        item_value=item_value,
     )
     return await raise_if_cancelled(interact(ctx, blob, br_type, br_code))
 
@@ -935,10 +941,8 @@ async def confirm_metadata(
     description: str | None = None,
     hide_continue: bool = False,
     hold: bool = False,
-    param_font: int = ui.BOLD,
-    icon: str = ui.ICON_SEND,  # TODO cleanup @ redesign
-    icon_color: int = ui.GREEN,  # TODO cleanup @ redesign
-    larger_vspace: bool = False,  # TODO cleanup @ redesign
+    icon: str | None = None,
+    icon_color: int | None = None,
 ) -> None:
     from trezor.lvglui.scrs.template import ConfirmMetaData
 
@@ -1900,6 +1904,7 @@ async def cosmos_require_show_more(
     value: str | None,
     address: str | None,
     amount: str | None,
+    chain_name: str | None = None,
     br_code: ButtonRequestType = ButtonRequestType.ConfirmOutput,
 ) -> bool:
     from trezor.lvglui.scrs.template import CosmosTransactionOverview
@@ -1911,7 +1916,7 @@ async def cosmos_require_show_more(
         striped_amount, striped = strip_amount(amount)
         title = _(i18n_keys.TITLE__SEND_MULTILINE).format(striped_amount)
     else:
-        title = _(i18n_keys.TITLE__SIGN_STR_TRANSACTION).format("Cosmos")
+        title = _(i18n_keys.TITLE__SIGN_STR_TRANSACTION).format(chain_name or "Cosmos")
     res = await interact(
         ctx,
         CosmosTransactionOverview(
@@ -2027,8 +2032,8 @@ async def confirm_cosmos_sign_common(
     )
 
     for key, value in msgs_item.items():
-        if len(value) > 80:
-            screen = CosmosLongValue(key, value, ctx.primary_color)
+        if len(str(value)) > 80:
+            screen = CosmosLongValue(key, str(value), ctx.primary_color)
             await raise_if_cancelled(
                 interact(
                     ctx, screen, "cosmos_sign_common", ButtonRequestType.ProtectCall
