@@ -4119,6 +4119,9 @@ class PowerOff(FullSizeWindow):
             # else:
             #     config.lock()
             config.lock()
+            from apps.common import passphrase
+            if passphrase.is_passphrase_pin_enabled():
+                storage.cache.end_current_session()
 
     def back(self):
         PowerOff.IS_ACTIVE = False
@@ -4823,10 +4826,12 @@ class PassphraseScreen(AnimScreen):
                             # 直接处理导航，不使用事件
                             if hasattr(self, "prev_scr") and self.prev_scr:
                                 print(f"Loading previous screen: {self.prev_scr}")
-                                self.load_screen(self)
+                                self._load_scr(self)
+                                # self.load_screen(self)
                             else:
                                 print("No previous screen, reloading current screen")
-                                self.load_screen(self)
+                                self._load_scr(self)
+                                # self.load_screen(self)
                         
                         return result
                     except Exception as e:

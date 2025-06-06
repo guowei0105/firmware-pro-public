@@ -22,12 +22,15 @@ async def request_pin(
     attempts_remaining: int | None = None,
     allow_cancel: bool = True,
     allow_fingerprint: bool = True,
+    standy_wall_only: bool = False,
     **kwargs: Any,
 ) -> str:
     from trezor.ui.layouts import request_pin_on_device
 
+    print("request_pin,standy_wall_only", standy_wall_only)
+
     return await request_pin_on_device(
-        ctx, prompt, attempts_remaining, allow_cancel, allow_fingerprint
+        ctx, prompt, attempts_remaining, allow_cancel, allow_fingerprint, standy_wall_only=standy_wall_only
     )
 
 
@@ -66,10 +69,12 @@ async def request_pin_and_sd_salt(
     prompt: str = "",
     allow_cancel: bool = True,
     allow_fingerprint: bool = True,
+    standy_wall_only: bool = False,
 ) -> tuple[str, bytearray | None]:
     if config.has_pin():
+        print("request_pin_and_sd_salt,standy_wall_only", standy_wall_only)
         pin = await request_pin(
-            ctx, prompt, config.get_pin_rem(), allow_cancel, allow_fingerprint
+            ctx, prompt, config.get_pin_rem(), allow_cancel, allow_fingerprint,standy_wall_only
         )
         config.ensure_not_wipe_code(pin)
     else:
@@ -100,6 +105,7 @@ async def verify_user_pin(
     allow_fingerprint: bool = True,  # 是否允许指纹解锁
     close_others: bool = True,  # 是否关闭其他界面
     pin_use_type: int = 2,
+    standy_wall_only: bool=False,
 ) -> None:
     from storage import device
     pin_use_type = int(pin_use_type)
@@ -130,6 +136,7 @@ async def verify_user_pin(
                 allow_cancel,
                 allow_fingerprint,
                 close_others=close_others,
+                standy_wall_only = standy_wall_only,
             )
             config.ensure_not_wipe_code(pin)  # 确保输入的不是擦除码
         except Exception as e:
@@ -207,6 +214,7 @@ async def verify_user_pin(
                 allow_cancel,
                 allow_fingerprint,
                 close_others=close_others,
+                standy_wall_only = standy_wall_only,
             )
             print("[DEBUG] Retry PIN input received")
         except Exception as e:

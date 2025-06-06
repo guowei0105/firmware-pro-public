@@ -1159,14 +1159,20 @@ async def request_pin_on_device(
     allow_cancel: bool,
     allow_fingerprint: bool,
     close_others: bool = True,
+    standy_wall_only: bool = False
 ) -> str:
+    
+    print("standy_wall_only standy_wall_only standy_wall_only1111",standy_wall_only)
     await button_request(
         ctx, "pin_device", code=ButtonRequestType.PinEntry, close_others=close_others
     )
+    print("standy_wall_only standy_wall_only standy_wall_only",standy_wall_only)
     from storage import device
 
     if attempts_remaining is None or attempts_remaining == device.PIN_MAX_ATTEMPTS:
-        subprompt = ""
+        if standy_wall_only:
+            subprompt = f"{_(i18n_keys.CONTENT__PIN_FOR_STANDARD_WALLET)}"
+        else:subprompt = ""
     elif attempts_remaining == 5:
         await confirm_password_input(ctx)
         subprompt = f"{_(i18n_keys.MSG__INCORRECT_PIN_STR_ATTEMPTS_LEFT).format(attempts_remaining)}"
@@ -1177,7 +1183,7 @@ async def request_pin_on_device(
     from trezor.lvglui.scrs.pinscreen import InputPin
 
     pinscreen = InputPin(
-        title=prompt, subtitle=subprompt, allow_fingerprint=allow_fingerprint
+        title=prompt, subtitle=subprompt, allow_fingerprint=allow_fingerprint,standy_wall_only=standy_wall_only
     )
     result = await ctx.wait(pinscreen.request())
     if not result:

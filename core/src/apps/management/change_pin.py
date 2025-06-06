@@ -27,7 +27,7 @@ async def change_pin(ctx: wire.Context, msg: ChangePin) -> Success:
     await require_confirm_change_pin(ctx, msg)
     # get old pin
     curpin, salt = await request_pin_and_sd_salt(
-        ctx, _(i18n_keys.TITLE__ENTER_OLD_PIN), allow_fingerprint=False
+        ctx, _(i18n_keys.TITLE__ENTER_OLD_PIN), allow_fingerprint=False,standy_wall_only=True
     )
     # if changing pin, pre-check the entered pin before getting new pin
     if curpin and not msg.remove:

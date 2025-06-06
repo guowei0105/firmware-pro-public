@@ -26,13 +26,26 @@ async def show_attach_to_pin_window(ctx: wire.Context):
             print("Detected cancel action, returning False")
             return False  
         ####输入主pin
+        # from trezor.ui.layouts import request_pin_on_device
         curpin, salt = await request_pin_and_sd_salt(
-                            ctx, _(i18n_keys.PASSPHRASE_ENTER_MAIN_PIN), allow_fingerprint=False
+                            ctx, _(i18n_keys.TITLE__ENTER_PIN), allow_fingerprint=False,standy_wall_only = True
                             )
+        # curpin = await request_pin_on_device(  # 在设备上请求PIN码
+        #         ctx,
+        #          _(i18n_keys.TITLE__ENTER_PIN),
+        #         config.get_pin_rem(),  # 获取剩余尝试次数
+        #         True,
+        #         False,
+        #         close_others=False,
+        #         standy_wall_only=True
+        #     )
+
+
         print(curpin)
         pinstatus,result = config.check_pin(curpin, None,1)
         if pinstatus == False:
             return await error_pin_invalid(ctx)
+
 
         passphrase_pin = await request_passphrase_pin_confirm(ctx)        
         if curpin == passphrase_pin:
@@ -252,7 +265,7 @@ async def show_not_attached_window(ctx: wire.Context):
         nonlocal processing
         if e.code == lv.EVENT.CLICKED and not processing:
             processing = True  
-            screen.show_dismiss_anim()
+            screen.show_dismiss_anim() ###
             screen.channel.publish(0)
     if hasattr(screen, "nav_back"):
         screen.nav_back.add_flag(lv.obj.FLAG.CLICKABLE)
@@ -376,8 +389,6 @@ async def show_passphrase_set_and_attached_to_pin_window(ctx: wire.Context):
         icon_path="A:/res/success.png",
         anim_dir=0,
     )
-    if hasattr(screen, 'title'):
-        screen.title.set_style_text_letter_space(0, 0)  
     result = await ctx.wait(screen.request())
     return result
 
@@ -482,7 +493,7 @@ async def show_pin_input_screen(ctx: wire.Context):
     # 添加关闭按钮
     close_btn = lv.btn(screen)
     close_btn.set_size(48, 48)
-    close_btn.align(lv.ALIGN.TOP_RIGHT, -16, 61)
+    close_btn.align(lv.ALIGN.TOP_RIGHT, -12, 56)
     close_btn.set_style_bg_color(lv_colors.BLACK, 0)
     close_btn.set_style_bg_opa(0, 0)
     close_btn.set_style_border_width(0, 0)
@@ -502,7 +513,8 @@ async def show_pin_input_screen(ctx: wire.Context):
     title_label.set_style_text_line_space(-8, 0)
     title_label.set_long_mode(lv.label.LONG.WRAP)
     title_label.set_size(456, lv.SIZE.CONTENT)
-    title_label.align(lv.ALIGN.TOP_MID, 0, 90)
+    title_label.align(lv.ALIGN.TOP_LEFT, 12, 72)  # 水平方向相对屏幕左边缘32像素
+    # title_label.set_y(104) 
 
     # 如果已经有副标题，先移除它
     if hasattr(screen, "subtitle"):
@@ -522,7 +534,7 @@ async def show_pin_input_screen(ctx: wire.Context):
     # 创建 PIN 输入字段容器 - 位于副标题下方
     pin_container = lv.obj(screen.content_area)
     pin_container.set_size(lv.pct(100), lv.SIZE.CONTENT)
-    pin_container.align_to(subtitle_label, lv.ALIGN.OUT_BOTTOM_MID, 0, 40)  # 位于副标题下方
+    pin_container.align_to(subtitle_label, lv.ALIGN.OUT_BOTTOM_MID, 0, 24)  # 位于副标题下方
     pin_container.set_style_bg_opa(0, 0)
     pin_container.set_style_border_width(0, 0)
     pin_container.set_style_pad_all(0, 0)
@@ -536,7 +548,7 @@ async def show_pin_input_screen(ctx: wire.Context):
     device_img = lv.img(screen.content_area)
     device_img.set_src("A:/res/attach_to_pin_dot_group.png")
     # 将设备示意图对齐到PIN容器下方
-    device_img.align_to(pin_container, lv.ALIGN.OUT_BOTTOM_MID, 0, 28)  # 在PIN容器下方20像素
+    device_img.align_to(pin_container, lv.ALIGN.OUT_BOTTOM_MID, 0, 24)  # 在PIN容器下方20像素
 
     # 为关闭按钮添加事件处理程序
     processing = False  # 防止重复处理

@@ -268,9 +268,7 @@ def set_int(key: int, value: int) -> None:  # 设置整数值函数
         raise InvalidSessionError  # 抛出无效会话错误
     else:  # 否则
         length = _SESSIONS[_active_session_idx].fields[key]  # 获取当前会话的字段长度
-
     encoded = value.to_bytes(length, "big")  # 将整数编码为大端字节
-
     # Ensure that the value fits within the length. Micropython's int.to_bytes()
     # doesn't raise OverflowError.
     assert int.from_bytes(encoded, "big") == value  # 确保值在长度范围内

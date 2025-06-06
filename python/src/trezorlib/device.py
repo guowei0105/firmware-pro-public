@@ -354,6 +354,39 @@ def set_busy(client: "TrezorClient", expiry_ms: Optional[int]) -> "MessageType":
     client.refresh_features()
     return ret
 
+
+
+# @expect(messages.PassphraseState)
+# def get_passphrasestate(client: "TrezorClient",btc_test: Optional[bytes] = None) -> "MessageType":
+#     print("device.py")
+#     return client.call(messages.GetPassphraseState(btc_test=btc_test))
+
+
+@expect(messages.PassphraseState)
+def get_passphrasestate(client: "TrezorClient", btc_test: Optional[bytes] = None, only_main_pin: bool = False, session_id: Optional[str] = None) -> "MessageType":
+    print("device.py")
+    print(f"only_main_pin: {only_main_pin}")  
+    print(f"session_id: {session_id}") 
+
+
+    session_id_bytes = bytes.fromhex(session_id) if session_id else None
+
+
+    msg = messages.GetPassphraseState(
+        btc_test=btc_test, 
+        onlyMainPin=only_main_pin,
+        session_id=session_id_bytes
+    )
+    print(f"Message: {msg}") 
+    print(f"Message attributes: {dir(msg)}") 
+    print(f"onlyMainPin value: {getattr(msg, 'onlyMainPin', None)}")  
+    print(f"session_id value: {getattr(msg, 'session_id', None)}")  
+
+    return client.call(msg)
+
+
+
+
 # new feautres
 # Reboot
 @session

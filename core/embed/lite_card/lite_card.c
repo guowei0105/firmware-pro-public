@@ -208,18 +208,47 @@ bool lite_card_data_exchange_test(void) {
 
 bool lite_card_apdu(uint8_t* apdu, uint16_t apdu_len, uint8_t* response,
                     uint16_t* response_len, uint8_t* sw1sw2, bool safe) {
+  // 打印输入参数
+  printf("lite_card_apdu: apdu_len=%d, safe=%s\n", apdu_len, safe ? "true" : "false");
+  
+  // 打印APDU命令（前几个字节）
+  if (apdu_len >= 4) {
+    printf("APDU command: %02X %02X %02X %02X", apdu[0], apdu[1], apdu[2], apdu[3]);
+    if (apdu_len > 4) {
+      printf(" (+ %d more bytes)", apdu_len - 4);
+    }
+    printf("\n");
+  }
+
   if (memcmp(apdu, "\x00\xa4\x04\x00", 4) == 0) {
+    printf("Detected SELECT command, closing secure channel\n");
     scp11_close_secure_channel(&scp11_ctx);
   }
 
   if (safe) {
+    printf("Using safe mode, opening secure channel\n");
     if (!lite_card_open_secure_channel()) {
+      printf("Failed to open secure channel\n");
       return false;
     }
-    return lite_card_send_safeapdu(apdu, apdu_len, response, response_len,
-                                   sw1sw2);
+    printf("Sending safe APDU\n");
+    bool result = lite_card_send_safeapdu(apdu, apdu_len, response, response_len, sw1sw2);
+    printf("Safe APDU result: %s, response_len=%d, sw1sw2=%02X%02X\n", 
+           result ? "success" : "failed", 
+           response_len ? *response_len : 0,
+           sw1sw2 ? sw1sw2[0] : 0, 
+           sw1sw2 ? sw1sw2[1] : 0);
+    return result;
   }
-  return nfc_send_recv(apdu, apdu_len, response, response_len, sw1sw2);
+  
+  printf("Using normal mode, sending direct APDU\n");
+  bool result = nfc_send_recv(apdu, apdu_len, response, response_len, sw1sw2);
+  printf("Direct APDU result: %s, response_len=%d, sw1sw2=%02X%02X\n", 
+         result ? "success" : "failed", 
+         response_len ? *response_len : 0,
+         sw1sw2 ? sw1sw2[0] : 0, 
+         sw1sw2 ? sw1sw2[1] : 0);
+  return result;
 }
 
 bool lite_card_safe_apdu_test(void) {

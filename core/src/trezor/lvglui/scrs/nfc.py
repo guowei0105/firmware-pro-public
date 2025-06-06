@@ -31,8 +31,8 @@ CMD_GET_PIN_RETRY_COUNT = b"\x80\xcb\x80\x00\x05\xdf\xff\x02\x81\x02"
 CMD_RESET_CARD = b"\x80\xcb\x80\x00\x05\xdf\xfe\x02\x82\x05"
 CMD_GET_PIN_STATUS = b"\x80\xcb\x80\x00\x05\xdf\xff\x02\x81\x05"
 CMD_SELECT_PRIMARY_SAFETY = b"\x00\xa4\x04\x00"
-CMD_EXPORT_DATA = b"\x80\x4b\x00\x00"
-CMD_BACKUP_DATA = b"\x80\x3b\x00\x00"
+CMD_EXPORT_DATA = b"\x80\x4c\x00\x00"
+CMD_BACKUP_DATA = b"\x80\x3c\x00\x00"
 CMD_SETUP_NEW_PIN = b"\x80\xcb\x80\x00\x0e\xdf\xfe\x0b\x82\x04\x08\x00\x06"
 CMD_GET_BACKUP_STATUS = b"\x80\x6A\x00\x00"
 CMD_VERIFY_PIN = b"\x80\x20\x00\x00\x07\x06"
@@ -81,7 +81,7 @@ async def get_card_num(self):
     elif sw1sw2 == LITE_CARD_SUCCESS_STATUS:
         pass
     else:
-        _, sw1sw2 = nfc.send_recv(CMD_SELECT_PRIMARY_SAFETY)
+        _, sw1sw2 = nfc.send_recv(CMD_NEW_APPLET)
         if sw1sw2 == LITE_CARD_DISCONECT_STATUS:
             await handle_sw1sw2_connect_error(self)
             return card_num, LITE_CARD_ERROR_REPONSE

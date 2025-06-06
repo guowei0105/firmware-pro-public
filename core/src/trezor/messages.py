@@ -2891,12 +2891,14 @@ if TYPE_CHECKING:
     class Initialize(protobuf.MessageType):
         session_id: "bytes | None"
         derive_cardano: "bool | None"
+        btc_test: "str | None"
 
         def __init__(
             self,
             *,
             session_id: "bytes | None" = None,
             derive_cardano: "bool | None" = None,
+            btc_test: "str | None" = None,
         ) -> None:
             pass
 
@@ -2999,6 +3001,7 @@ if TYPE_CHECKING:
         onekey_se02_state: "OneKeySEState | None"
         onekey_se03_state: "OneKeySEState | None"
         onekey_se04_state: "OneKeySEState | None"
+        attach_to_pin_user: "bool | None"
 
         def __init__(
             self,
@@ -3085,6 +3088,7 @@ if TYPE_CHECKING:
             onekey_se02_state: "OneKeySEState | None" = None,
             onekey_se03_state: "OneKeySEState | None" = None,
             onekey_se04_state: "OneKeySEState | None" = None,
+            attach_to_pin_user: "bool | None" = None,
         ) -> None:
             pass
 
@@ -3939,14 +3943,12 @@ if TYPE_CHECKING:
     class PassphraseState(protobuf.MessageType):
         btc_test: "str | None"
         session_id: "bytes | None"
-        attach_to_pin_user: "bool | None"
 
         def __init__(
             self,
             *,
             btc_test: "str | None" = None,
             session_id: "bytes | None" = None,
-            attach_to_pin_user: "bool | None" = None,
         ) -> None:
             pass
 

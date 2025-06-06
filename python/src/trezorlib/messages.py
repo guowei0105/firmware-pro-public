@@ -449,6 +449,8 @@ class MessageType(IntEnum):
     OnekeyGetFeatures = 10025
     OnekeyFeatures = 10026
     WriteSEPrivateKey = 10027
+    GetPassphraseState = 10028
+    PassphraseState = 10029
 
 
 class FailureType(IntEnum):
@@ -4306,6 +4308,7 @@ class Initialize(protobuf.MessageType):
         1: protobuf.Field("session_id", "bytes", repeated=False, required=False),
         2: protobuf.Field("_skip_passphrase", "bool", repeated=False, required=False),
         3: protobuf.Field("derive_cardano", "bool", repeated=False, required=False),
+        4: protobuf.Field("btc_test", "string", repeated=False, required=False),
     }
 
     def __init__(
@@ -4314,10 +4317,12 @@ class Initialize(protobuf.MessageType):
         session_id: Optional["bytes"] = None,
         _skip_passphrase: Optional["bool"] = None,
         derive_cardano: Optional["bool"] = None,
+        btc_test: Optional["str"] = None,
     ) -> None:
         self.session_id = session_id
         self._skip_passphrase = _skip_passphrase
         self.derive_cardano = derive_cardano
+        self.btc_test = btc_test
 
 
 class GetFeatures(protobuf.MessageType):
@@ -4414,6 +4419,7 @@ class Features(protobuf.MessageType):
         622: protobuf.Field("onekey_se02_state", "OneKeySEState", repeated=False, required=False),
         623: protobuf.Field("onekey_se03_state", "OneKeySEState", repeated=False, required=False),
         624: protobuf.Field("onekey_se04_state", "OneKeySEState", repeated=False, required=False),
+        625: protobuf.Field("attach_to_pin_user", "bool", repeated=False, required=False),
     }
 
     def __init__(
@@ -4502,6 +4508,7 @@ class Features(protobuf.MessageType):
         onekey_se02_state: Optional["OneKeySEState"] = None,
         onekey_se03_state: Optional["OneKeySEState"] = None,
         onekey_se04_state: Optional["OneKeySEState"] = None,
+        attach_to_pin_user: Optional["bool"] = None,
     ) -> None:
         self.capabilities: Sequence["Capability"] = capabilities if capabilities is not None else []
         self.major_version = major_version
@@ -4586,6 +4593,7 @@ class Features(protobuf.MessageType):
         self.onekey_se02_state = onekey_se02_state
         self.onekey_se03_state = onekey_se03_state
         self.onekey_se04_state = onekey_se04_state
+        self.attach_to_pin_user = attach_to_pin_user
 
 
 class OnekeyFeatures(protobuf.MessageType):
@@ -5477,6 +5485,43 @@ class UnlockedPathRequest(protobuf.MessageType):
         mac: Optional["bytes"] = None,
     ) -> None:
         self.mac = mac
+
+
+class GetPassphraseState(protobuf.MessageType):
+    MESSAGE_WIRE_TYPE = 10028
+    FIELDS = {
+        1: protobuf.Field("btc_test", "string", repeated=False, required=False),
+        2: protobuf.Field("only_main_pin", "bool", repeated=False, required=False),
+        3: protobuf.Field("session_id", "bytes", repeated=False, required=False),
+    }
+
+    def __init__(
+        self,
+        *,
+        btc_test: Optional["str"] = None,
+        only_main_pin: Optional["bool"] = None,
+        session_id: Optional["bytes"] = None,
+    ) -> None:
+        self.btc_test = btc_test
+        self.only_main_pin = only_main_pin
+        self.session_id = session_id
+
+
+class PassphraseState(protobuf.MessageType):
+    MESSAGE_WIRE_TYPE = 10029
+    FIELDS = {
+        1: protobuf.Field("btc_test", "string", repeated=False, required=False),
+        2: protobuf.Field("session_id", "bytes", repeated=False, required=False),
+    }
+
+    def __init__(
+        self,
+        *,
+        btc_test: Optional["str"] = None,
+        session_id: Optional["bytes"] = None,
+    ) -> None:
+        self.btc_test = btc_test
+        self.session_id = session_id
 
 
 class FileInfo(protobuf.MessageType):

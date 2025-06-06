@@ -82,7 +82,6 @@ if not utils.BITCOIN_ONLY:
             from trezor.crypto import se_thd89
 
             state = se_thd89.get_session_state()
-
             if not state[0] & 0x80:
                 passphrase = await get_passphrase(ctx)
                 mnemonic.get_seed(passphrase, progress_bar=False)
