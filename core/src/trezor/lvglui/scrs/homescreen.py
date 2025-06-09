@@ -311,22 +311,21 @@ class MainScreen(Screen):
             cont.add_flag(lv.obj.FLAG.EVENT_BUBBLE)
 
             btn = lv.imgbtn(cont)
-            btn.set_size(216, 216)
-            btn.set_style_bg_img_src(f"A:/res/{img_src}.jpg", 0)
+            btn.set_size(144, 144)
+            btn.set_style_bg_img_src(f"A:/res/{img_src}.png", 0)
             btn.add_style(
                 StyleWrapper()
                 .bg_img_recolor_opa(lv.OPA._30)
                 .bg_img_recolor(lv_colors.BLACK),
                 lv.PART.MAIN | lv.STATE.PRESSED,
             )
-            btn.add_flag(lv.obj.FLAG.EVENT_BUBBLE)
-            btn.align(lv.ALIGN.TOP_MID, 0, 0)
+            btn.center()
 
             label = lv.label(cont)
             label.set_text(_(text_key))
             label.add_style(
                 StyleWrapper()
-                .width(170)
+                .width(144)
                 .text_font(font_GeistSemiBold26)
                 .text_color(lv_colors.WHITE)
                 .text_align_center(),
@@ -667,32 +666,32 @@ class PasskeysManager(AnimScreen):
 
 
 class ShowAddress(AnimScreen):
+
+    device.set_passphrase_auto_status(True)
     def __init__(self, prev_scr=None):
         if not hasattr(self, "_init"):
             self.prev_session_id = storage.cache.get_session_id()
             self.curr_session_id = storage.cache.start_session()
 
-            if passphrase.is_enabled() and not passphrase.is_passphrase_pin_enabled():
-                workflow.spawn(
-                    self._get_passphrase_from_user(init=True, prev_scr=prev_scr)
-                )
-            else:
-                self._init = True
-                self.current_index = 0
-                kwargs = {
+            # if passphrase.is_enabled() and not passphrase.is_passphrase_pin_enabled():
+            #     workflow.spawn(
+            #         self._get_passphrase_from_user(init=True, prev_scr=prev_scr)
+            #     )
+            # else:
+            self._init = True
+            self.current_index = 0
+            kwargs = {
                     "prev_scr": prev_scr,
                     "title": _(i18n_keys.TITLE__SELECT_NETWORK),
                     "nav_back": True,
                 }
-                super().__init__(**kwargs)
+            super().__init__(**kwargs)
 
-                self.addr_manager = AddressManager()
+            self.addr_manager = AddressManager()
 
-                self.init_ui()
+            self.init_ui()
 
         else:
-            self.prev_session_id = storage.cache.get_session_id() ###待确认
-            self.curr_session_id = storage.cache.start_session()
             if not self.is_visible():
                 self._load_scr(self)
             # self.container.delete()
@@ -990,6 +989,7 @@ class ShowAddress(AnimScreen):
                     passphrase.is_enabled() and target == self.nav_passphrase.select_btn
                 ):
                     # enter new passphrase
+                    device.set_passphrase_auto_status(False)
                     storage.cache.end_current_session()
                     self.curr_session_id = storage.cache.start_session()
                     workflow.spawn(self._get_passphrase_from_user(init=False))
@@ -2050,11 +2050,12 @@ class ConnectWallet(FullSizeWindow):
             else subtitle,
             anim_dir=0,
         )
+        device.set_passphrase_auto_status(True)
         self.content_area.set_style_max_height(684, 0)
         self.add_nav_back()
 
         gc.collect()
-        gc.threshold(int(18248 * 1.5))  # type: ignore["threshold" is not a known member of module]
+        gc.threshold(int(19248 * 1.5))
         from trezor.lvglui.scrs.components.qrcode import QRCode
 
         self.encoder = encoder
@@ -2066,6 +2067,36 @@ class ConnectWallet(FullSizeWindow):
             size=440,
         )
         self.qr.align_to(self.subtitle, lv.ALIGN.OUT_BOTTOM_LEFT, 0, 40)
+
+        # Add Enter Passphrase button
+        from apps.common import passphrase
+        self.passphrase_btn = lv.btn(self.content_area)
+        self.passphrase_btn.set_size(456, 64)  # 更宽的按钮尺寸
+        self.passphrase_btn.add_style(
+            StyleWrapper()
+            .bg_color(lv_colors.ONEKEY_GRAY_3)
+            .bg_opa()
+            .radius(32)
+            .border_width(0)
+            .text_color(lv_colors.WHITE)
+            .pad_all(8),
+            0,
+        )
+        self.passphrase_btn_label = lv.label(self.passphrase_btn)
+        self.passphrase_btn_label.set_text(_(i18n_keys.BUTTON__ENTER_PASSPHRASE))
+        self.passphrase_btn_label.add_style(
+            StyleWrapper()
+            .text_font(font_GeistRegular26)
+            .text_color(lv_colors.WHITE_1),
+            0,
+        )
+        self.passphrase_btn_label.center()
+        self.passphrase_btn.align_to(self.qr, lv.ALIGN.OUT_BOTTOM_MID, 0, 32)  # 增加间距
+        self.passphrase_btn.add_event_cb(self.on_passphrase_click, lv.EVENT.CLICKED, None)
+        
+        # Hide button if passphrase PIN is not enabled
+        if  passphrase.is_passphrase_pin_enabled():
+            self.passphrase_btn.add_flag(lv.obj.FLAG.HIDDEN)
 
         if wallet_name and support_chains:
             self.panel = lv.obj(self.content_area)
@@ -2113,12 +2144,36 @@ class ConnectWallet(FullSizeWindow):
         if encoder is not None:
             workflow.spawn(self.update_qr())
 
-    # def on_scroll_begin(self, event_obj):
-    #     self.scrolling = True
+    async def _get_passphrase_from_user(self, init=False, prev_scr=None):
+        try:
+            from apps.bitcoin.get_address import get_address as btc_get_address
+            from trezor import messages
+            from trezor.enums import InputScriptType
 
-    # def on_scroll_end(self, event_obj):
-    #     self.scrolling = False
+            msg = messages.GetAddress(
+                address_n=[0x80000000 + 44, 0x80000000 + 0, 0x80000000 + 0, 0, 0],
+                show_display=False,
+                script_type=InputScriptType.SPENDADDRESS,
+            )
+            # pyright: off
+            await btc_get_address(wire.QRContext(), msg)
+            # pyright: on
 
+        except Exception:
+            pass
+        if self.encoder is not None:
+            workflow.spawn(self.update_qr())
+        self.invalidate()
+
+    def on_passphrase_click(self, event_obj):
+        if event_obj.code == lv.EVENT.CLICKED:
+            # Handle passphrase button click
+            # from trezor.lvglui.scrs.passphrase import PassphraseKeyboard
+            self.prev_session_id = storage.cache.get_session_id()
+            self.curr_session_id = storage.cache.start_session()
+            device.set_passphrase_auto_status(False)
+            workflow.spawn(self._get_passphrase_from_user(init=False))
+    
     def on_nav_back(self, event_obj):
         code = event_obj.code
         target = event_obj.get_target()

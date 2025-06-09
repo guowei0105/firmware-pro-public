@@ -7,14 +7,14 @@ from trezor.lvglui.i18n import gettext as _, keys as i18n_keys
 _MAX_PASSPHRASE_LEN = const(50)
 
 
-
-
 def is_enabled() -> bool:
     return storage.device.is_passphrase_enabled()
 
 def is_passphrase_pin_enabled() -> bool:
     return storage.device.is_passphrase_pin_enabled() 
 
+def is_passphrase_auto_status() -> bool:
+    return storage.device.is_passphrase_auto_status() 
 
 async def get(ctx: wire.Context) -> str:  # 获取密码短语的异步函数
     if is_enabled():  # 如果密码短语功能已启用

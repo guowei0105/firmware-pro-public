@@ -288,6 +288,7 @@ async def start_check_pin_mnemonicmphrase(self, pin, mnemonic, card_num):
     if card_type == "NEW":
         command_data = CMD_SETUP_NEW_PIN + pin_bytes
         _, sw1sw2 = nfc.send_recv(command_data, True)
+        print("start set new pin",sw1sw2)
         if sw1sw2 == LITE_CARD_DISCONECT_STATUS:
             await handle_sw1sw2_connect_error(self)
             return
@@ -355,6 +356,7 @@ async def start_set_pin_mnemonicmphrase(self, pin, mnemonic, card_num):
     # select app
     if card_type == "NEW":
         _, sw1sw2 = nfc.send_recv(CMD_NEW_APPLET)
+        print("start set new pin",sw1sw2)
         if sw1sw2 == LITE_CARD_DISCONECT_STATUS:
             await handle_sw1sw2_connect_error(self)
             return

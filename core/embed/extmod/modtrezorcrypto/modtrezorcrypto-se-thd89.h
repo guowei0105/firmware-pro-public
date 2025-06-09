@@ -1166,7 +1166,7 @@ STATIC const mp_rom_map_elem_t mod_trezorcrypto_se_thd89_globals_table[] = {
      MP_ROM_PTR(&mod_trezorcrypto_se_thd89_save_pin_passphrase_obj)},
     {MP_ROM_QSTR(MP_QSTR_delete_pin_passphrase),
      MP_ROM_PTR(&mod_trezorcrypto_se_thd89_delete_pin_passphrase_obj)},
-    {MP_ROM_QSTR(MP_QSTR_check_passphrase_address),
+    {MP_ROM_QSTR(MP_QSTR_check_passphrase_btc_test_address),
      MP_ROM_PTR(
          &mod_trezorcrypto_se_thd89_check_passphrase_btc_test_address_obj)},
     {MP_ROM_QSTR(MP_QSTR_USER_PIN_ENTERED), MP_ROM_INT(USER_PIN_ENTERED)},

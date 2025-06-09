@@ -30,6 +30,7 @@ _LANGUAGE_VALUE: str | None = None
 _LABEL_VALUE: str | None = None
 _USE_PASSPHRASE_VALUE: bool | None = None
 _USE_PASSPHRASE_PIN_VALUE: bool | None = None
+_AUTO_PASSPHRASE_VALUE: bool | None = None
 _PASSPHRASE_ALWAYS_ON_DEVICE_VALUE: bool | None = None
 _AUTOLOCK_DELAY_MS_VALUE: int | None = None
 _HOMESCREEN_VALUE: str | None = None
@@ -88,6 +89,8 @@ _NEEDS_BACKUP_VALUE: bool | None = None
 _FIDO_SEED_GEN = False
 _FIDO2_COUNTER_VALUE: int | None = None
 _FIDO_ENABLED_VALUE: bool | None = None
+
+
 
 if utils.USE_THD89:
     import uctypes
@@ -245,6 +248,8 @@ if utils.USE_THD89:
     offset += uctypes.sizeof(struct_bool, uctypes.LITTLE_ENDIAN)
     struct_public["use_passphrase_pin"] = (offset, struct_bool)
     offset += uctypes.sizeof(struct_bool, uctypes.LITTLE_ENDIAN)
+    struct_public["auto_passphrase"] = (offset, struct_bool)
+    offset += uctypes.sizeof(struct_bool, uctypes.LITTLE_ENDIAN)
 
     # public_field = uctypes.struct(0, struct_public, uctypes.LITTLE_ENDIAN)
     assert (
@@ -281,6 +286,7 @@ if utils.USE_THD89:
     _LABEL = struct_public["label"][0]
     _USE_PASSPHRASE = struct_public["use_passphrase"][0]
     _USE_PASSPHRASE_PIN = struct_public["use_passphrase_pin"][0]
+    _AUTO_PASSPHRASE = struct_public["auto_passphrase"][0]
     _PASSPHRASE_ALWAYS_ON_DEVICE = struct_public["passphrase_always_on_device"][0]
     _AUTOLOCK_DELAY_MS = struct_public["autolock_delay_ms"][0]
     _HOMESCREEN = struct_public["homescreen"][0]
@@ -351,6 +357,7 @@ else:
     _SAFETY_CHECK_LEVEL        = (0x14)  # int
     _EXPERIMENTAL_FEATURES     = (0x15)  # bool (0x01 or empty)
     _USE_PASSPHRASE_PIN        = (0x16)  # bool (0x01 or empty)
+    _AUTO_PASSPHRASE           = (0X17)
 
     _BLE_NAME = (0x80)  # bytes
     _BLE_VERSION = (0x81)  # bytes
@@ -892,6 +899,10 @@ def set_passphrase_enabled(enable: bool) -> None:
     _USE_PASSPHRASE_VALUE = enable
 
 
+
+
+
+
 def get_homescreen() -> str | None:
     global _HOMESCREEN_VALUE
 
@@ -1410,10 +1421,43 @@ def set_passphrase_pin_enabled(enable: bool) -> None:
     _USE_PASSPHRASE_PIN_VALUE = enable
 
 
+
+def is_passphrase_auto_status() -> bool:
+    """
+    Returns True if the device is currently in passphrase pin mode.
+    In this mode, a separate PIN is used to access the passphrase.
+    """
+    global _AUTO_PASSPHRASE_VALUE
+    if _AUTO_PASSPHRASE_VALUE is None:
+        _AUTO_PASSPHRASE_VALUE = common.get_bool(_NAMESPACE, _AUTO_PASSPHRASE)
+    return _AUTO_PASSPHRASE_VALUE
+
+
+def set_passphrase_auto_status(enable: bool) -> None:
+    """
+    Enable or disable the passphrase pin mode.
+    When enabled, a separate PIN is used to access the passphrase.
+    
+    Note: This requires passphrase to be enabled first.
+    """
+    global _AUTO_PASSPHRASE_VALUE
+
+    # if enable and not is_passphrase_auto_status():
+    #     raise ValueError("Cannot enable passphrase PIN without enabling passphrase first")
+
+    common.set_bool(_NAMESPACE, _AUTO_PASSPHRASE, enable)
+    _AUTO_PASSPHRASE_VALUE = enable
+
+
+
+
+
+
 def clear_global_cache() -> None:
     global _LANGUAGE_VALUE
     global _LABEL_VALUE
     global _USE_PASSPHRASE_VALUE
+    global _AUTO_PASSPHRASE_VALUE
     global _USE_PASSPHRASE_PIN_VALUE
     global _PASSPHRASE_ALWAYS_ON_DEVICE_VALUE
     global _AUTOLOCK_DELAY_MS_VALUE
@@ -1453,6 +1497,7 @@ def clear_global_cache() -> None:
     _LANGUAGE_VALUE = None
     _LABEL_VALUE = None
     _USE_PASSPHRASE_VALUE = None
+    _AUTO_PASSPHRASE_VALUE = None
     _USE_PASSPHRASE_PIN_VALUE = None
     _PASSPHRASE_ALWAYS_ON_DEVICE_VALUE = None
     _AUTOLOCK_DELAY_MS_VALUE = None

@@ -218,12 +218,13 @@ async def handle_Initialize(
             lock_device()
             session_id = None
     else: session_id = storage.cache.start_session(msg.session_id)
+    # session_id = storage.cache.start_session(msg.session_id)
 
     if not utils.BITCOIN_ONLY:
         if utils.USE_THD89:
             if msg.derive_cardano is not None and msg.derive_cardano:
                 # THD89 is not capable of Cardano
-                from trezor.crypto import se_thd89
+                # from trezor.crypto import se_thd89
                 state = se_thd89.get_session_state()
                 if state[0] & 0x80 and not state[0] & 0x40:
                     storage.cache.end_current_session()
@@ -694,7 +695,7 @@ def handle_session_management(msg):
 async def handle_GetPassphraseState(ctx: wire.Context, msg: GetPassphraseState) -> PassphraseState:
     from trezor import  messages, config
     from apps.common import paths
-    from trezor.crypto import se_thd89
+    # from trezor.crypto import se_thd89
     from trezor.messages import PassphraseState
     from apps.common import passphrase
     import utime
