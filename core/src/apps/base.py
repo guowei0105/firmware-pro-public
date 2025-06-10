@@ -213,11 +213,16 @@ def get_onekey_features() -> OnekeyFeatures:
 async def handle_Initialize(
     ctx: wire.Context | wire.QRContext, msg: Initialize
 ) -> Features:
+    
     prev_session_id = storage.cache.get_session_id()
-    if msg.session_id and msg.session_id is not None and prev_session_id != msg.session_id and se_thd89.check_passphrase_btc_test_address(msg.btc_test):  
-            lock_device()
-            session_id = None
-    else: session_id = storage.cache.start_session(msg.session_id)
+    print("handle_Initialize prev_session_id:",prev_session_id)
+    # if msg.session_id and msg.session_id is not None and prev_session_id != msg.session_id and se_thd89.check_passphrase_btc_test_address(msg.btc_test):  
+    #         lock_device()
+    #         session_id = None
+    #         print("handle_Initialize lock_device")
+    # else: 
+    session_id = storage.cache.start_session(msg.session_id)
+    print("handle_Initialize:",session_id)
     # session_id = storage.cache.start_session(msg.session_id)
 
     if not utils.BITCOIN_ONLY:
@@ -699,8 +704,19 @@ async def handle_GetPassphraseState(ctx: wire.Context, msg: GetPassphraseState) 
     from trezor.messages import PassphraseState
     from apps.common import passphrase
     import utime
+    print("handle_GetPassphraseState")
+    
+    # 在一句中打印 GetPassphraseState 消息的三个字段值
+    session_id_hex = ""
+    if hasattr(msg, 'session_id') and msg.session_id:
+        for b in msg.session_id:
+            session_id_hex += "{:02x}".format(b)
+    
+    print(f"GetPassphraseState - btc_test: {getattr(msg, 'btc_test', None)}, only_main_pin: {getattr(msg, 'only_main_pin', None)}, session_id: {getattr(msg, 'session_id', None)}, session_id_hex: {session_id_hex if session_id_hex else 'None'}")
+
     has_only_main_pin = hasattr(msg, 'only_main_pin') and msg.only_main_pin is True
     if has_only_main_pin:
+         print("handle_GetPassphraseState has_only_main_pin true")
          try:    
             if config.is_unlocked() and not passphrase.is_passphrase_pin_enabled(): ##默认主钱包解锁情况下
                 session_id = storage.cache.start_session(msg.session_id)  ###需要再次考虑 case 情况，这里会不会有其他的情况
@@ -716,15 +732,16 @@ async def handle_GetPassphraseState(ctx: wire.Context, msg: GetPassphraseState) 
             if msg.btc_test is None: 
                 pass
             else:           
-                is_valid_attach_to_pin_address = se_thd89.check_passphrase_btc_test_address(msg.btc_test)            
+                is_valid_attach_to_pin_address = se_thd89.check_passphrase_btc_test_address(msg.btc_test) 
+                print("handle_GetPassphraseState is_valid_attach_to_pin_address",is_valid_attach_to_pin_address)           
                 if is_valid_attach_to_pin_address:                    
-                    print("Bitcoin test address validation successful")
+                    print("handle_GetPassphraseState Bitcoin test address validation successful")
                 else:
-                    if passphrase.is_passphrass_pin_enabled() and  config.is_unlocked():  # 默认当前处于attach to pin钱包 ，并且已经是解锁的情况下                     
+                    if passphrase.is_passphrase_pin_enabled() and  config.is_unlocked():  # 默认当前处于attach to pin钱包 ，并且已经是解锁的情况下                     
                         lock_device()
                         await unlock_device(ctx, pin_use_type=2)
                         session_id = storage.cache.start_session()
-                    elif not passphrase.is_passphrass_pin_enabled() and  config.is_unlocked():  #默认是 主钱包并且已经是解锁的情况下
+                    elif not passphrase.is_passphrase_pin_enabled() and  config.is_unlocked():  #默认是 主钱包并且已经是解锁的情况下
                         session_id = storage.cache.start_session(msg.session_id)
                     else:
                         await unlock_device(ctx, pin_use_type=2)
@@ -750,9 +767,11 @@ async def handle_GetPassphraseState(ctx: wire.Context, msg: GetPassphraseState) 
             except Exception as e:
                 print(f"Error unlocking device: {e}")
                 return PassphraseState(btc_test=f"Unlock error: {e}")
-        elif is_valid_attach_to_pin_address and config.is_unlocked() and  passphrase.is_passphrase_pin_enabled: #默认attach to pin 解锁情况
+        elif is_valid_attach_to_pin_address and config.is_unlocked() and passphrase.is_passphrase_pin_enabled(): #默认attach to pin 解锁情况
                 session_id = storage.cache.start_session(msg.session_id)
         # else is_valid_attach_to_pin_address and not  config.is_unlocked(): #默认锁定情况下
+        elif not is_valid_attach_to_pin_address and config.is_unlocked() and  not passphrase.is_passphrase_pin_enabled():
+                session_id = storage.cache.start_session(msg.session_id)
         else:
                 await unlock_device(ctx, pin_use_type=2)
                 session_id = storage.cache.start_session()
@@ -768,6 +787,13 @@ async def handle_GetPassphraseState(ctx: wire.Context, msg: GetPassphraseState) 
         from apps.bitcoin.get_address import get_address as btc_get_address
         try:
             address_obj = await btc_get_address(ctx, address_msg) 
+            end_session_id = storage.cache.get_session_id()
+            print("handle_GetPassphraseState end_session_id:",end_session_id)
+            new_session_id = storage.cache.start_session(end_session_id)
+
+            ###换一个接口 start session_id 
+
+            print("handle_GetPassphraseState new new start :",new_session_id)
             # session_id = storage.cache.start_session(session_id)
             return PassphraseState(btc_test=address_obj.address, session_id=session_id)
         except Exception as e:
