@@ -452,3 +452,30 @@ def emmc_dir_make(client: "TrezorClient", path_dir: str) -> "MessageType":
 def emmc_dir_remove(client: "TrezorClient", path_dir: str) -> "MessageType":
     resp = client.call(messages.EmmcDirRemove(path=path_dir))
     return resp
+
+@expect(messages.Features)
+def initialize(
+    client: "TrezorClient",
+    session_id: Optional[str] = None,
+    derive_cardano: Optional[bool] = None,
+    btc_test: Optional[str] = None,
+) -> "MessageType":
+    print("device.py initialize")
+    print(f"session_id: {session_id}")
+    print(f"derive_cardano: {derive_cardano}")
+    print(f"btc_test: {btc_test}")
+
+    session_id_bytes = bytes.fromhex(session_id) if session_id else None
+
+    msg = messages.Initialize(
+        session_id=session_id_bytes,
+        derive_cardano=derive_cardano,
+        btc_test=btc_test
+    )
+    print(f"Initialize Message: {msg}")
+    print(f"Message attributes: {dir(msg)}")
+    print(f"session_id value: {getattr(msg, 'session_id', None)}")
+    print(f"derive_cardano value: {getattr(msg, 'derive_cardano', None)}")
+    print(f"btc_test value: {getattr(msg, 'btc_test', None)}")
+
+    return client.call(msg)

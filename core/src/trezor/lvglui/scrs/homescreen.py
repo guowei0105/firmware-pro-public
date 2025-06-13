@@ -1,4 +1,5 @@
 import gc
+import gc
 import math
 from micropython import const
 
@@ -30,12 +31,7 @@ from .common import AnimScreen, FullSizeWindow, Screen, lv  # noqa: F401, F403, 
 from .components.anim import Anim
 from .components.banner import LEVEL, Banner
 from .components.button import ListItemBtn, ListItemBtnWithSwitch, NormalButton
-from .components.container import (
-    ContainerFlex,
-    ContainerFlexCol,
-    ContainerFlexRow,
-    ContainerGrid,
-)
+from .components.container import ContainerFlexCol, ContainerFlexRow, ContainerGrid
 from .components.listitem import (
     DisplayItemWithFont_30,
     DisplayItemWithFont_TextPairs,
@@ -232,7 +228,7 @@ class MainScreen(Screen):
             self.text_label = {}
             self.init_ui()
             self.init_items()
-            self.create_down_arrow()
+            # self.create_down_arrow()
             self.init_indicators()
             self.init_anim()
 
@@ -250,19 +246,32 @@ class MainScreen(Screen):
             self.clear_flag(lv.obj.FLAG.GESTURE_BUBBLE)
             self.add_event_cb(self.on_gesture, lv.EVENT.GESTURE, None)
 
-            self.main_cont = ContainerFlex(
-                self,
-                None,
-                padding_col=0,
-                flex_flow=lv.FLEX_FLOW.ROW_WRAP,
-                main_align=lv.FLEX_ALIGN.START,
-                cross_align=lv.FLEX_ALIGN.CENTER,
-                track_align=lv.FLEX_ALIGN.SPACE_BETWEEN,
-            )
-            self.main_cont.set_size(448, 575)
-            self.main_cont.set_pos(16, 200)
-            self.main_cont.set_style_pad_column(16, 0)
+            self.main_cont = lv.obj(self)
+            self.main_cont.set_size(448, 600)
+            # self.main_cont = ContainerFlex(
+            #     self,
+            #     None,
+            #     padding_col=0,
+            #     flex_flow=lv.FLEX_FLOW.ROW_WRAP,
+            #     main_align=lv.FLEX_ALIGN.START,
+            #     cross_align=lv.FLEX_ALIGN.CENTER,
+            #     track_align=lv.FLEX_ALIGN.SPACE_BETWEEN,
+            # )
+            # self.main_cont.set_size(448, 600)
+            
+            # 设置主容器位置
+            self.main_cont.set_pos(64, 120)
+
+            # self.main_cont.set_style_pad_column(16, 0)
+            # 添加事件冒泡标志
             self.main_cont.add_flag(lv.obj.FLAG.EVENT_BUBBLE)
+            # 设置内边距为0
+            self.main_cont.set_style_pad_all(0, 0)
+            # 设置边框宽度为0
+            self.main_cont.set_style_border_width(0, 0)
+            # 设置背景透明
+            self.main_cont.set_style_bg_opa(lv.OPA.TRANSP, 0)
+            # 初始化当前页码为0
             self.current_page = 0
             self.page_items = [[] for _ in range(2)]
 
@@ -288,15 +297,55 @@ class MainScreen(Screen):
                     ("nft", "app-nft", i18n_keys.APP__NFT_GALLERY),
                     ("guide", "app-tips", i18n_keys.APP__TIPS),
                 ]
+            items_per_page = 6
+            cols = 2
+            rows = 3  # Changed from 2 to 3 rows
+            item_width = 144  # Width already 144
+            item_height = 192
+            col_gap = 64
+            row_gap = 16
 
+            # 遍历所有应用项
             for idx, (name, img, text) in enumerate(items):
-                page = 0 if idx < 4 else 1
-                item = self.create_item(name, img, text)
+                # 计算当前项所在页码:
+                # idx=7, items_per_page=6 -> page=1 (第二页)
+                # idx=2, items_per_page=6 -> page=0 (第一页)
+                page = idx // items_per_page
+                
+                # 计算在当前页内的索引:
+                # idx=7, items_per_page=6 -> page_idx=1 (当前页第2个)
+                # idx=2, items_per_page=6 -> page_idx=2 (当前页第3个)
+                page_idx = idx % items_per_page
+                
+                # 计算行号:
+                # page_idx=1, rows=3 -> row=0 (第一行)
+                # page_idx=3, rows=3 -> row=1 (第二行)
+                row = page_idx // cols  # Changed to divide by cols instead of rows
+                
+                # 计算列号:
+                # page_idx=1, cols=2 -> col=1 (第二列)
+                # page_idx=3, cols=2 -> col=1 (第二列)
+                col = page_idx % cols
+                
+                # 计算x坐标:
+                # col=1, item_width=144, col_gap=64 -> x=208 (第二列x坐标)
+                x = col * (item_width + col_gap)
+                
+                # 计算y坐标:
+                # row=1, item_height=192, row_gap=16 -> y=208 (第二行y坐标)
+                y = row * (item_height + row_gap)
+                
+                # 创建应用项并添加到对应页面列表
+                item = self.create_item(name, img, text, x, y)
                 self.page_items[page].append(item)
+
+                # 如果不是第一页,则隐藏该项
                 if page != 0:
                     item.add_flag(lv.obj.FLAG.HIDDEN)
 
-        def create_item(self, name, img_src, text_key):
+        def create_item(self, name, img_src, text_key,x,y):
+            print(f"Creating item {name} at position x:{x}, y:{y}")
+            
             cont = lv.obj(self.main_cont)
             cont.add_style(
                 StyleWrapper()
@@ -307,12 +356,20 @@ class MainScreen(Screen):
                 .pad_all(0),
                 0,
             )
-            cont.set_size(216, 280)
+            cont.set_size(144, 192)
+            cont.set_pos(x, y)
             cont.add_flag(lv.obj.FLAG.EVENT_BUBBLE)
 
             btn = lv.imgbtn(cont)
             btn.set_size(144, 144)
             btn.set_style_bg_img_src(f"A:/res/{img_src}.png", 0)
+
+
+            btn.set_style_pad_all(0, 0)  # 所有方向内边距为0
+            btn.set_style_pad_top(0, 0)  # 如果图片向上偏移，可以增加顶部内边距
+            btn.set_style_pad_bottom(0, 0)
+            btn.set_style_pad_left(0, 0)
+            btn.set_style_pad_right(0, 0)
             btn.add_style(
                 StyleWrapper()
                 .bg_img_recolor_opa(lv.OPA._30)
@@ -321,30 +378,31 @@ class MainScreen(Screen):
             )
             btn.center()
 
-            label = lv.label(cont)
-            label.set_text(_(text_key))
-            label.add_style(
-                StyleWrapper()
-                .width(144)
-                .text_font(font_GeistSemiBold26)
-                .text_color(lv_colors.WHITE)
-                .text_align_center(),
-                0,
-            )
-            label.add_style(
-                StyleWrapper().text_opa(lv.OPA._70), lv.PART.MAIN | lv.STATE.PRESSED
-            )
+            # label = lv.label(cont)
+            # label.set_text("")
+            # label.add_style(
+            #     StyleWrapper()
+            #     .width(144)
+            #     .text_font(font_GeistSemiBold26)
+            #     .text_color(lv_colors.WHITE)
+            #     .text_align_center(),
+            #     0,
+            # )
+            # label.add_style(
+            #     StyleWrapper().text_opa(lv.OPA._70), lv.PART.MAIN | lv.STATE.PRESSED
+            # )
+            # label.add_flag(lv.obj.FLAG.HIDDEN)
 
-            label.align_to(btn, lv.ALIGN.OUT_BOTTOM_MID, 0, 8)
+            # label.align_to(btn, lv.ALIGN.OUT_BOTTOM_MID, 0, 8)
 
-            self.text_label[text_key] = label
+            # self.text_label[text_key] = label
 
-            btn.add_event_cb(
-                lambda e: self.on_pressed(text_key), lv.EVENT.PRESSED, None
-            )
-            btn.add_event_cb(
-                lambda e: self.on_released(text_key), lv.EVENT.RELEASED, None
-            )
+            # btn.add_event_cb(
+            #     lambda e: self.on_pressed(text_key), lv.EVENT.PRESSED, None
+            # )
+            # btn.add_event_cb(
+            #     lambda e: self.on_released(text_key), lv.EVENT.RELEASED, None
+            # )
             btn.add_event_cb(lambda e: self.on_item_click(name), lv.EVENT.CLICKED, None)
             return cont
 
@@ -468,12 +526,14 @@ class MainScreen(Screen):
             self.visible = False
 
         def on_pressed(self, text_key):
-            label = self.text_label[text_key]
-            label.add_state(lv.STATE.PRESSED)
+            pass
+            # label = self.text_label[text_key]
+            # label.add_state(lv.STATE.PRESSED)
 
         def on_released(self, text_key):
-            label = self.text_label[text_key]
-            label.clear_state(lv.STATE.PRESSED)
+            pass
+            # label = self.text_label[text_key]
+            # label.clear_state(lv.STATE.PRESSED)
 
         def on_item_click(self, name):
             handlers = {
@@ -498,8 +558,9 @@ class MainScreen(Screen):
                     return
 
         def refresh_text(self):
-            for text_key, label in self.text_label.items():
-                label.set_text(_(text_key))
+            pass
+            # for text_key, label in self.text_label.items():
+            #     label.set_text(_(text_key))
 
 
 class PasskeysManager(AnimScreen):
@@ -1515,6 +1576,11 @@ class SettingsScreen(AnimScreen):
             if not self.is_visible():
                 self._load_scr(self, lv.scr_act() != self)
             return
+        
+        # 添加手势事件处理
+        self.clear_flag(lv.obj.FLAG.GESTURE_BUBBLE)
+        self.add_event_cb(self.on_gesture, lv.EVENT.GESTURE, None)
+        
         # if __debug__:
         #     self.add_style(StyleWrapper().bg_color(lv_colors.ONEKEY_GREEN_1), 0)
         self.container = ContainerFlexCol(self.content_area, self.title, padding_row=2)
@@ -1600,6 +1666,84 @@ class SettingsScreen(AnimScreen):
                 FidoKeysSetting(self)
             elif not utils.PRODUCTION and target == self.fp_test:
                 FingerprintTest(self)
+
+    def on_gesture(self, event_obj):
+        """处理手势事件"""
+        code = event_obj.code
+        if code == lv.EVENT.GESTURE:
+            indev = lv.indev_get_act()
+            _dir = indev.get_gesture_dir()
+            if _dir == lv.DIR.TOP:  # 从下而上的手势
+                if utils.lcd_resume():
+                    return
+                # 返回到主屏幕并添加简单动画
+                if hasattr(MainScreen, '_instance') and MainScreen._instance:
+                    self._animate_back_to_home_ultra_simple()
+                    return
+
+    def _animate_back_to_home_ultra_simple(self):
+        """主页面从下方划入"""
+        main_screen = MainScreen._instance
+        if not main_screen:
+            return
+        
+        disp = lv.disp_get_default()
+        if disp:
+            # 设置显示器背景为黑色而不是白色
+            disp.set_bg_color(lv_colors.BLACK)
+            disp.set_bg_opa(lv.OPA.COVER)
+
+        print("AirGap begin slide in animation...")
+
+        lv.scr_load(main_screen)
+        
+        # 将主屏幕放到下方（屏幕下方800像素处）
+        main_screen.set_pos(0, 800)
+
+        self.set_parent(main_screen)
+        self.set_size(480, 800)  # 确保覆盖整个屏幕
+        self.set_pos(0, 0)       # 初始位置在屏幕中央
+    
+        def current_screen_animation(value):
+        # 当前屏幕向上滑出
+            self.set_pos(0, value)
+            print(f"AirGap当前屏幕位置: {value}")
+    
+        def main_screen_animation(value):
+            # 主屏幕从下方滑入
+            main_screen.set_pos(0, value)
+            print(f"AirGap主屏幕位置: {value}")
+
+        def animation_complete(_anim):
+            print("AirGap双动画完成")
+            # 确保主屏幕在正确位置
+            main_screen.set_pos(0, 0)
+            # 删除当前屏幕
+            self.delete()
+            if hasattr(self.__class__, '_instance'):
+                del self.__class__._instance
+            gc.collect()
+
+        # 当前屏幕向上滑出动画
+        current_slide_out = Anim(
+            0, -800,  # 从0向上滑到-800
+            current_screen_animation,
+            time=100,
+            path_cb=lv.anim_t.path_ease_in_out
+        )
+    
+        # 主屏幕从下方滑入动画
+        main_slide_in = Anim(
+            800, 0,  # 从800向上滑到0
+            main_screen_animation, 
+            time=100,
+            path_cb=lv.anim_t.path_ease_in_out,
+            del_cb=animation_complete  # 动画完成回调
+        )
+
+        # 同时启动两个动画
+        # current_slide_out.start()
+        main_slide_in.start()
 
 
 class ConnectWalletWays(Screen):
@@ -2937,6 +3081,10 @@ class GeneralScreen(AnimScreen):
             rti_path="A:/res/poweroff-white.png",
         )
 
+        # 添加手势事件处理
+        self.clear_flag(lv.obj.FLAG.GESTURE_BUBBLE)
+        self.add_event_cb(self.on_gesture, lv.EVENT.GESTURE, None)
+
         self.container = ContainerFlexCol(self.content_area, self.title, padding_row=2)
         GeneralScreen.cur_language = langs[langs_keys.index(device.get_language())][1]
         self.language = ListItemBtn(
@@ -2954,18 +3102,153 @@ class GeneralScreen(AnimScreen):
             self.container,
             _(i18n_keys.ITEM__AUTO_LOCK_AND_SHUTDOWN),
         )
-        # self.power = ListItemBtn(
-        #     self.content_area,
-        #     _(i18n_keys.ITEM__POWER_OFF),
-        #     left_img_src="A:/res/poweroff.png",
-        #     has_next=False,
-        # )
-        # self.power.label_left.set_style_text_color(lv_colors.ONEKEY_RED_1, 0)
-        # self.power.align_to(self.container, lv.ALIGN.OUT_BOTTOM_MID, 0, 12)
-        # self.power.set_style_radius(40, 0)
-        # self.container.add_event_cb(self.on_click, lv.EVENT.CLICKED, None)
         self.content_area.add_event_cb(self.on_click_event, lv.EVENT.CLICKED, None)
         self.load_screen(self)
+
+    def on_gesture(self, event_obj):
+        """处理手势事件"""
+        code = event_obj.code
+        if code == lv.EVENT.GESTURE:
+            indev = lv.indev_get_act()
+            _dir = indev.get_gesture_dir()
+            if _dir == lv.DIR.TOP:  # 从下而上的手势
+                if utils.lcd_resume():
+                    return
+                # 返回到主屏幕并添加简单动画
+                if hasattr(MainScreen, '_instance') and MainScreen._instance:
+                    self._animate_back_to_home_ultra_simple()
+                    return
+
+    def _animate_back_to_home_ultra_simple(self):
+        """主页面从下方划入"""
+        main_screen = MainScreen._instance
+        if not main_screen:
+            return
+        
+        disp = lv.disp_get_default()
+        if disp:
+            # 设置显示器背景为黑色而不是白色
+            disp.set_bg_color(lv_colors.BLACK)
+            disp.set_bg_opa(lv.OPA.COVER)
+
+        print("begin slide in animation...")
+
+        lv.scr_load(main_screen)
+        
+        # 将主屏幕放到下方（屏幕下方800像素处）
+        main_screen.set_pos(0, 800)
+
+        self.set_parent(main_screen)
+        self.set_size(480, 800)  # 确保覆盖整个屏幕
+        self.set_pos(0, 0)       # 初始位置在屏幕中央
+    
+        # 先加载主屏幕，但它在下方看不见
+        # lv.scr_load(main_screen)
+    
+        def current_screen_animation(value):
+        # 当前屏幕向上滑出
+            self.set_pos(0, value)
+            print(f"当前屏幕位置: {value}")
+    
+        def main_screen_animation(value):
+            # 主屏幕从下方滑入
+            main_screen.set_pos(0, value)
+            print(f"主屏幕位置: {value}")
+
+        def animation_complete(_anim):
+            print("双动画完成")
+            # 确保主屏幕在正确位置
+            main_screen.set_pos(0, 0)
+            # 删除当前屏幕
+            self.delete()
+            if hasattr(self.__class__, '_instance'):
+                del self.__class__._instance
+            gc.collect()
+
+        # 当前屏幕向上滑出动画
+        current_slide_out = Anim(
+            0, -800,  # 从0向上滑到-800
+            current_screen_animation,
+            time=100,
+            path_cb=lv.anim_t.path_ease_in_out
+        )
+    
+        # 主屏幕从下方滑入动画
+        main_slide_in = Anim(
+            800, 0,  # 从800向上滑到0
+            main_screen_animation, 
+            time=100,
+            path_cb=lv.anim_t.path_ease_in_out,
+            del_cb=animation_complete  # 动画完成回调
+        )
+
+        # 同时启动两个动画
+        # current_slide_out.start()
+        main_slide_in.start()
+
+
+
+    # def _animate_back_to_home_ultra_simple(self):
+    #     """超简单版本 - 在主屏幕上方滑动"""
+    #     main_screen = MainScreen._instance
+    #     if not main_screen:
+    #         return
+
+    #     # 先加载主屏幕作为背景
+    #     lv.scr_load(main_screen)
+    
+    #     # 将当前屏幕作为一个对象添加到主屏幕上
+    #     self.set_parent(main_screen)
+    #     self.set_pos(0, 0)
+    
+    #     # 定义动画完成后的回调函数
+    #     def animation_complete(_anim):
+    #         """动画完成后的回调"""    def _animate_back_to_home_ultra_simple(self):
+        # """测试最简单的动画"""
+        # main_screen = MainScreen._instance
+        # if not main_screen:
+        #     return
+
+        # print("begin anima...")
+    
+        # # 最简单的测试：改变背景颜色
+        # def color_change(value):
+        #     print(f"anima value: {value}")
+        #     # 根据value改变背景色的透明度
+        #     self.set_style_bg_opa(value, 0)
+    
+        # def animation_complete(_anim):
+        #     print("anima compet")
+        #     lv.scr_load(main_screen)
+        #     if hasattr(self.__class__, '_instance'):
+        #         del self.__class__._instance
+        #     gc.collect()
+
+        # # 简单的透明度动画
+        # test_anim = Anim(
+        #     255, 0,  # 从255到0
+        #     color_change,  # 直接传函数，不用lambda
+        #     time=1000,  # 延长时间到1秒，便于观察
+        #     del_cb=animation_complete
+        # )
+
+        # test_anim.start()
+    #         self.delete()
+    #         if hasattr(self.__class__, '_instance'):
+    #             del self.__class__._instance
+    #         gc.collect()
+
+    # # 向上滑出动画
+    #     slide_up_anim = Anim(
+    #         0, -800,
+    #         lambda value: self.set_pos(0, value),
+    #         time=250,
+    #         path_cb=lv.anim_t.path_ease_in_out,
+    #         y_axis=True,
+    #         del_cb=animation_complete
+    #     )
+
+    #     slide_up_anim.start()
 
     def refresh_text(self):
         self.title.set_text(_(i18n_keys.TITLE__GENERAL))
@@ -2977,9 +3260,7 @@ class GeneralScreen(AnimScreen):
         self.autolock_and_shutdown.label_left.set_text(
             _(i18n_keys.ITEM__AUTO_LOCK_AND_SHUTDOWN)
         )
-        # self.power.label_left.set_text(_(i18n_keys.ITEM__POWER_OFF))
         self.container.update_layout()
-        # self.power.align_to(self.container, lv.ALIGN.OUT_BOTTOM_MID, 0, 12)
 
     def on_click_event(self, event_obj):
         target = event_obj.get_target()
@@ -2993,8 +3274,6 @@ class GeneralScreen(AnimScreen):
             TapAwakeSetting(self)
         elif target == self.autolock_and_shutdown:
             Autolock_and_ShutingDown(self)
-        # elif target == self.power:
-        #     PowerOff()
         elif target == self.home_scr:
             HomeScreenSetting(self)
         elif target == self.rti_btn:
@@ -3869,6 +4148,10 @@ class AirGapSetting(AnimScreen):
             prev_scr=prev_scr, title=_(i18n_keys.ITEM__AIR_GAP_MODE), nav_back=True
         )
 
+        # 添加手势事件处理
+        self.clear_flag(lv.obj.FLAG.GESTURE_BUBBLE)
+        self.add_event_cb(self.on_gesture, lv.EVENT.GESTURE, None)
+
         self.container = ContainerFlexCol(self.content_area, self.title)
         self.air_gap = ListItemBtnWithSwitch(self.container, _(i18n_keys.ITEM__AIR_GAP))
 
@@ -3938,6 +4221,91 @@ class AirGapSetting(AnimScreen):
                 self.air_gap.add_state()
             else:
                 self.air_gap.clear_state()
+
+    def on_gesture(self, event_obj):
+        """处理手势事件"""
+        code = event_obj.code
+        if code == lv.EVENT.GESTURE:
+            indev = lv.indev_get_act()
+            _dir = indev.get_gesture_dir()
+            if _dir == lv.DIR.TOP:  # 从下而上的手势
+                if utils.lcd_resume():
+                    return
+                # 返回到主屏幕并添加简单动画
+                if hasattr(MainScreen, '_instance') and MainScreen._instance:
+                    self._animate_back_to_home_ultra_simple()
+                    return
+
+    def _animate_back_to_home_ultra_simple(self):
+        """主页面从下方划入"""
+        main_screen = MainScreen._instance
+        if not main_screen:
+            return
+        
+        disp = lv.disp_get_default()
+        if disp:
+            # 设置显示器背景为黑色而不是白色
+            disp.set_bg_color(lv_colors.BLACK)
+            disp.set_bg_opa(lv.OPA.COVER)
+
+        print("AirGap begin slide in animation...")
+
+        lv.scr_load(main_screen)
+        
+        # 将主屏幕放到下方（屏幕下方800像素处）
+        # main_screen.set_pos(0, 800)
+
+        # self.set_parent(main_screen)
+        # self.set_size(480, 800)  # 确保覆盖整个屏幕
+        # self.set_pos(0, -800)       # 初始位置在屏幕中央
+        main_screen.set_pos(0, 0)
+        self.delete()
+        # self.delete()
+        if hasattr(self.__class__, '_instance'):
+                del self.__class__._instance
+        gc.collect()
+    
+        def current_screen_animation(value):
+        # 当前屏幕向上滑出
+            self.set_pos(0, value)
+            print(f"AirGap当前屏幕位置: {value}")
+    
+        def main_screen_animation(value):
+            # 主屏幕从下方滑入
+            main_screen.set_pos(0, value)
+            print(f"AirGap主屏幕位置: {value}")
+
+        def animation_complete(_anim):
+            print("AirGap双动画完成")
+            # 确保主屏幕在正确位置
+            main_screen.set_pos(0, 0)
+            # 删除当前屏幕
+            self.delete()
+            if hasattr(self.__class__, '_instance'):
+                del self.__class__._instance
+            gc.collect()
+
+        # 当前屏幕向上滑出动画
+        current_slide_out = Anim(
+            0, -800,  # 从0向上滑到-800
+            current_screen_animation,
+            time=100,
+            path_cb=lv.anim_t.path_ease_in_out
+        )
+    
+        # 主屏幕从下方滑入动画
+        main_slide_in = Anim(
+            800, 0,  # 从800向上滑到0
+            main_screen_animation, 
+            time=50,
+            path_cb=lv.anim_t.path_ease_in_out,
+            del_cb=animation_complete  # 动画完成回调
+        )
+
+
+        # 同时启动两个动画
+        # current_slide_out.start()
+        # main_slide_in.start()
 
 
 class AboutSetting(AnimScreen):
@@ -4467,8 +4835,47 @@ class SecurityScreen(AnimScreen):
             _(i18n_keys.ITEM__SAFETY_CHECKS),
         )
         self.add_event_cb(self.on_click, lv.EVENT.CLICKED, None)
+        self.clear_flag(lv.obj.FLAG.GESTURE_BUBBLE)
+        self.add_event_cb(self.on_gesture, lv.EVENT.GESTURE, None)
         self.load_screen(self)
         gc.collect()
+    def on_gesture(self, event_obj):
+        """处理手势事件"""
+        code = event_obj.code
+        if code == lv.EVENT.GESTURE:
+            indev = lv.indev_get_act()
+            _dir = indev.get_gesture_dir()
+            if _dir == lv.DIR.TOP:  # 从下而上的手势
+                if utils.lcd_resume():
+                    return
+                # self._gesture_handling = True
+                # event_obj.stop_processing()
+                # 缩放动画返回主屏幕
+                if hasattr(MainScreen, '_instance') and MainScreen._instance:
+                    self._animate_scale_to_home()
+                    return
+                
+    def _animate_scale_to_home(self):
+        """使用LVGL内置动画，最节省内存"""
+        main_screen = MainScreen._instance
+        if not main_screen:
+            return
+        
+        print("Security screen begin built-in fade...")
+
+        # 直接使用LVGL的屏幕切换动画
+        def cleanup_callback(_anim):
+            print("Security built-in fade complete")
+            if hasattr(self.__class__, '_instance'):
+                del self.__class__._instance
+            gc.collect()
+
+        # 使用LVGL内置的FADE_OUT动画，内存开销最小
+        lv.scr_load_anim(main_screen, lv.SCR_LOAD_ANIM.FADE_OUT, 50, 0, True)
+        
+        # 设置清理定时器
+        cleanup_timer = lv.timer_create(lambda t: cleanup_callback(None), 200, None)
+        cleanup_timer.set_repeat_count(1)
 
     def on_click(self, event_obj):
         code = event_obj.code
@@ -4881,12 +5288,10 @@ class PassphraseScreen(AnimScreen):
                             # 直接处理导航，不使用事件
                             if hasattr(self, "prev_scr") and self.prev_scr:
                                 print(f"Loading previous screen: {self.prev_scr}")
-                                self._load_scr(self)
-                                # self.load_screen(self)
+                                self.load_screen(self)
                             else:
                                 print("No previous screen, reloading current screen")
-                                self._load_scr(self)
-                                # self.load_screen(self)
+                                self.load_screen(self)
                         
                         return result
                     except Exception as e:
@@ -5369,8 +5774,48 @@ class WalletScreen(AnimScreen):
         self.rest_device.align_to(self.trezor_mode, lv.ALIGN.OUT_BOTTOM_MID, 0, 12)
         self.rest_device.set_style_radius(40, 0)
         self.rest_device.add_event_cb(self.on_click, lv.EVENT.CLICKED, None)
+        self.clear_flag(lv.obj.FLAG.GESTURE_BUBBLE)
+        self.add_event_cb(self.on_gesture, lv.EVENT.GESTURE, None)
         self.load_screen(self)
         gc.collect()
+
+    def on_gesture(self, event_obj):
+        """处理手势事件"""
+        code = event_obj.code
+        if code == lv.EVENT.GESTURE:
+            indev = lv.indev_get_act()
+            _dir = indev.get_gesture_dir()
+            if _dir == lv.DIR.TOP:  # 从下而上的手势
+                if utils.lcd_resume():
+                    return
+                # self._gesture_handling = True
+                # event_obj.stop_processing()
+                # 缩放动画返回主屏幕
+                if hasattr(MainScreen, '_instance') and MainScreen._instance:
+                    self._animate_scale_to_home()
+                    return
+                
+    def _animate_scale_to_home(self):
+        """使用LVGL内置动画，最节省内存"""
+        main_screen = MainScreen._instance
+        if not main_screen:
+            return
+        
+        print("Security screen begin built-in fade...")
+
+        # 直接使用LVGL的屏幕切换动画
+        def cleanup_callback(_anim):
+            print("Security built-in fade complete")
+            if hasattr(self.__class__, '_instance'):
+                del self.__class__._instance
+            gc.collect()
+
+        # 使用LVGL内置的FADE_OUT动画，内存开销最小
+        lv.scr_load_anim(main_screen, lv.SCR_LOAD_ANIM.FADE_OUT, 200, 0, True)
+        
+        # 设置清理定时器
+        cleanup_timer = lv.timer_create(lambda t: cleanup_callback(None), 200, None)
+        cleanup_timer.set_repeat_count(1)
 
     def on_click(self, event_obj):
         code = event_obj.code
@@ -5444,10 +5889,50 @@ class FidoKeysSetting(AnimScreen):
         self.description.set_style_text_font(font_GeistRegular26, lv.STATE.DEFAULT)
         self.description.set_style_text_line_space(3, 0)
         self.description.align_to(self.container, lv.ALIGN.OUT_BOTTOM_LEFT, 8, 16)
+        self.clear_flag(lv.obj.FLAG.GESTURE_BUBBLE)
+        self.add_event_cb(self.on_gesture, lv.EVENT.GESTURE, None)
 
         self.reset_state()
         self.container.add_event_cb(self.on_value_changed, lv.EVENT.VALUE_CHANGED, None)
         self.load_screen(self)
+
+    def on_gesture(self, event_obj):
+        """处理手势事件"""
+        code = event_obj.code
+        if code == lv.EVENT.GESTURE:
+            indev = lv.indev_get_act()
+            _dir = indev.get_gesture_dir()
+            if _dir == lv.DIR.TOP:  # 从下而上的手势
+                if utils.lcd_resume():
+                    return
+                # self._gesture_handling = True
+                # event_obj.stop_processing()
+                # 缩放动画返回主屏幕
+                if hasattr(MainScreen, '_instance') and MainScreen._instance:
+                    self._animate_scale_to_home()
+                    return
+                
+    def _animate_scale_to_home(self):
+        """使用LVGL内置动画，最节省内存"""
+        main_screen = MainScreen._instance
+        if not main_screen:
+            return
+        
+        print("Security screen begin built-in fade...")
+
+        # 直接使用LVGL的屏幕切换动画
+        def cleanup_callback(_anim):
+            print("Security built-in fade complete")
+            if hasattr(self.__class__, '_instance'):
+                del self.__class__._instance
+            gc.collect()
+
+        # 使用LVGL内置的FADE_OUT动画，内存开销最小
+        lv.scr_load_anim(main_screen, lv.SCR_LOAD_ANIM.FADE_OUT, 300, 0, True)
+        
+        # 设置清理定时器
+        cleanup_timer = lv.timer_create(lambda t: cleanup_callback(None), 350, None)
+        cleanup_timer.set_repeat_count(1)
 
     def reset_state(self):
         if device.is_fido_enabled():

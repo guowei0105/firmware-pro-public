@@ -88,13 +88,14 @@ if not utils.BITCOIN_ONLY:
             passphrase = ""
             state = se_thd89.get_session_state()
             if not state[0] & 0x80:
-                from apps.common import passphrase
-                if not passphrase.is_passphrase_auto_status():
-                    passphrase = await get_passphrase(ctx)
-                    device.set_passphrase_auto_status(False)
-                else: 
-                    print("set_passphrase_auto_status true")
-                    passphrase = ""
+                # from apps.common import passphrase
+                # if not passphrase.is_passphrase_auto_status():
+                #     passphrase = await get_passphrase(ctx)
+                #     device.set_passphrase_auto_status(False)
+                # else: 
+                #     print("set_passphrase_auto_status true")
+                #     passphrase = ""
+                passphrase = await get_passphrase(ctx)
                 mnemonic.get_seed(passphrase, progress_bar=False)
 
                 if cache.SESSION_DIRIVE_CARDANO:
