@@ -114,6 +114,8 @@ async def verify_user_pin(
         pin_use_type = 0
         # 再次确保是整数类型
         pin_use_type = int(pin_use_type)
+    if pin_use_type is 3:
+       prompt = f"{_(i18n_keys.TITLE__ENTER_HIDDEN_WALLET_PIN)}"
     last_unlock = _get_last_unlock_time()  # 获取上次解锁时间
     if (
         cache_time_ms  # 如果设置了缓存时间

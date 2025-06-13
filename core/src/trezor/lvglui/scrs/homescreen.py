@@ -2195,7 +2195,7 @@ class ConnectWallet(FullSizeWindow):
             anim_dir=0,
         )
         device.set_passphrase_auto_status(True)
-        self.content_area.set_style_max_height(684, 0)
+        self.content_area.set_style_max_height(435, 0)
         self.add_nav_back()
 
         gc.collect()
@@ -2208,14 +2208,14 @@ class ConnectWallet(FullSizeWindow):
             self.content_area,
             data,
             icon_path=icon_path,
-            size=440,
+            size=435,
         )
-        self.qr.align_to(self.subtitle, lv.ALIGN.OUT_BOTTOM_LEFT, 0, 40)
+        self.qr.align_to(self.subtitle, lv.ALIGN.OUT_BOTTOM_LEFT, 0, 0)
 
         # Add Enter Passphrase button
         from apps.common import passphrase
         self.passphrase_btn = lv.btn(self.content_area)
-        self.passphrase_btn.set_size(456, 64)  # 更宽的按钮尺寸
+        self.passphrase_btn.set_size(456, 98)  # 更宽的按钮尺寸
         self.passphrase_btn.add_style(
             StyleWrapper()
             .bg_color(lv_colors.ONEKEY_GRAY_3)

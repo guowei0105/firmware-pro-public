@@ -22,10 +22,21 @@ async def button_request(
     code: ButtonRequestType = ButtonRequestType.Other,
     close_others: bool = True,
 ) -> None:
+    """
+    按钮请求处理函数
+    
+    参数:
+    ctx: wire.GenericContext - 通信上下文
+    br_type: str - 按钮请求类型
+    code: ButtonRequestType - 按钮请求代码,默认为Other类型
+    close_others: bool - 是否关闭其他工作流,默认为True
+    """
     if __debug__:
         log.debug(__name__, "ButtonRequest.type=%s", br_type)
+    # 如果不是虚拟上下文且需要关闭其他工作流
     if not isinstance(ctx, wire.DummyContext) and close_others:
         workflow.close_others()
+    # 发送按钮请求并等待确认
     await ctx.call(ButtonRequest(code=code), ButtonAck)
 
 

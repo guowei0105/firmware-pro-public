@@ -474,7 +474,6 @@ async def _show_modal(
         exc,
     )
 
-
 async def show_error_and_raise(
     ctx: wire.GenericContext,
     br_type: str,

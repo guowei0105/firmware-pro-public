@@ -833,6 +833,14 @@ if TYPE_CHECKING:
             return isinstance(msg, cls)
 
     class PassphraseRequest(protobuf.MessageType):
+        extsis_attach_pin_user: "bool | None"
+
+        def __init__(
+            self,
+            *,
+            extsis_attach_pin_user: "bool | None" = None,
+        ) -> None:
+            pass
 
         @classmethod
         def is_type_of(cls, msg: Any) -> TypeGuard["PassphraseRequest"]:
@@ -841,12 +849,14 @@ if TYPE_CHECKING:
     class PassphraseAck(protobuf.MessageType):
         passphrase: "str | None"
         on_device: "bool | None"
+        on_device_attach_pin: "bool | None"
 
         def __init__(
             self,
             *,
             passphrase: "str | None" = None,
             on_device: "bool | None" = None,
+            on_device_attach_pin: "bool | None" = None,
         ) -> None:
             pass
 
@@ -3925,14 +3935,14 @@ if TYPE_CHECKING:
     class GetPassphraseState(protobuf.MessageType):
         btc_test: "str | None"
         only_main_pin: "bool | None"
-        session_id: "bytes | None"
+        creat_attach_to_pin_user: "bool | None"
 
         def __init__(
             self,
             *,
             btc_test: "str | None" = None,
             only_main_pin: "bool | None" = None,
-            session_id: "bytes | None" = None,
+            creat_attach_to_pin_user: "bool | None" = None,
         ) -> None:
             pass
 
@@ -3943,12 +3953,14 @@ if TYPE_CHECKING:
     class PassphraseState(protobuf.MessageType):
         btc_test: "str | None"
         session_id: "bytes | None"
+        is_attach_to_pin_state: "bool | None"
 
         def __init__(
             self,
             *,
             btc_test: "str | None" = None,
             session_id: "bytes | None" = None,
+            is_attach_to_pin_state: "bool | None" = None,
         ) -> None:
             pass
 

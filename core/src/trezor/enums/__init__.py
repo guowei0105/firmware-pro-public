@@ -482,6 +482,7 @@ if TYPE_CHECKING:
         Warning = 18
         PassphraseEntry = 19
         PinEntry = 20
+        AttachPin = 8000
 
     class PinMatrixRequestType(IntEnum):
         Current = 1

@@ -492,6 +492,7 @@ class ButtonRequestType(IntEnum):
     Warning = 18
     PassphraseEntry = 19
     PinEntry = 20
+    AttachPin = 8000
 
 
 class PinMatrixRequestType(IntEnum):
@@ -1653,14 +1654,17 @@ class PassphraseRequest(protobuf.MessageType):
     MESSAGE_WIRE_TYPE = 41
     FIELDS = {
         1: protobuf.Field("_on_device", "bool", repeated=False, required=False),
+        8000: protobuf.Field("extsis_attach_pin_user", "bool", repeated=False, required=False),
     }
 
     def __init__(
         self,
         *,
         _on_device: Optional["bool"] = None,
+        extsis_attach_pin_user: Optional["bool"] = None,
     ) -> None:
         self._on_device = _on_device
+        self.extsis_attach_pin_user = extsis_attach_pin_user
 
 
 class PassphraseAck(protobuf.MessageType):
@@ -1669,6 +1673,7 @@ class PassphraseAck(protobuf.MessageType):
         1: protobuf.Field("passphrase", "string", repeated=False, required=False),
         2: protobuf.Field("_state", "bytes", repeated=False, required=False),
         3: protobuf.Field("on_device", "bool", repeated=False, required=False),
+        8000: protobuf.Field("on_device_attach_pin", "bool", repeated=False, required=False),
     }
 
     def __init__(
@@ -1677,10 +1682,12 @@ class PassphraseAck(protobuf.MessageType):
         passphrase: Optional["str"] = None,
         _state: Optional["bytes"] = None,
         on_device: Optional["bool"] = None,
+        on_device_attach_pin: Optional["bool"] = None,
     ) -> None:
         self.passphrase = passphrase
         self._state = _state
         self.on_device = on_device
+        self.on_device_attach_pin = on_device_attach_pin
 
 
 class Deprecated_PassphraseStateRequest(protobuf.MessageType):
@@ -4308,7 +4315,7 @@ class Initialize(protobuf.MessageType):
         1: protobuf.Field("session_id", "bytes", repeated=False, required=False),
         2: protobuf.Field("_skip_passphrase", "bool", repeated=False, required=False),
         3: protobuf.Field("derive_cardano", "bool", repeated=False, required=False),
-        4: protobuf.Field("btc_test", "string", repeated=False, required=False),
+        8000: protobuf.Field("btc_test", "string", repeated=False, required=False),
     }
 
     def __init__(
@@ -5492,7 +5499,7 @@ class GetPassphraseState(protobuf.MessageType):
     FIELDS = {
         1: protobuf.Field("btc_test", "string", repeated=False, required=False),
         2: protobuf.Field("only_main_pin", "bool", repeated=False, required=False),
-        3: protobuf.Field("session_id", "bytes", repeated=False, required=False),
+        3: protobuf.Field("creat_attach_to_pin_user", "bool", repeated=False, required=False),
     }
 
     def __init__(
@@ -5500,11 +5507,11 @@ class GetPassphraseState(protobuf.MessageType):
         *,
         btc_test: Optional["str"] = None,
         only_main_pin: Optional["bool"] = None,
-        session_id: Optional["bytes"] = None,
+        creat_attach_to_pin_user: Optional["bool"] = None,
     ) -> None:
         self.btc_test = btc_test
         self.only_main_pin = only_main_pin
-        self.session_id = session_id
+        self.creat_attach_to_pin_user = creat_attach_to_pin_user
 
 
 class PassphraseState(protobuf.MessageType):
@@ -5512,6 +5519,7 @@ class PassphraseState(protobuf.MessageType):
     FIELDS = {
         1: protobuf.Field("btc_test", "string", repeated=False, required=False),
         2: protobuf.Field("session_id", "bytes", repeated=False, required=False),
+        3: protobuf.Field("is_attach_to_pin_state", "bool", repeated=False, required=False),
     }
 
     def __init__(
@@ -5519,9 +5527,11 @@ class PassphraseState(protobuf.MessageType):
         *,
         btc_test: Optional["str"] = None,
         session_id: Optional["bytes"] = None,
+        is_attach_to_pin_state: Optional["bool"] = None,
     ) -> None:
         self.btc_test = btc_test
         self.session_id = session_id
+        self.is_attach_to_pin_state = is_attach_to_pin_state
 
 
 class FileInfo(protobuf.MessageType):
