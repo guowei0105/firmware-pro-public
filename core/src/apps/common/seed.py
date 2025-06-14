@@ -95,6 +95,16 @@ if not utils.BITCOIN_ONLY:
                 # else: 
                 #     print("set_passphrase_auto_status true")
                 #     passphrase = ""
+                import utime
+                import storage.cache
+                session_id = storage.cache.get_session_id()
+                # utime.sleep_ms(1500)
+                print("seedpy session_id:", session_id)
+                session_id = storage.cache.start_session(session_id)
+                print("seedpy next session_id:", session_id)
+                if session_id is None or session_id == b"":
+                    session_id = storage.cache.start_session()
+                    utime.sleep_ms(500)
                 passphrase = await get_passphrase(ctx)
                 mnemonic.get_seed(passphrase, progress_bar=False)
 

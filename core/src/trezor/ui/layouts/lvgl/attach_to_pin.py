@@ -53,7 +53,7 @@ async def show_attach_to_pin_window(ctx: wire.Context):
 
         if len(passphrase_pin) >= 6:
             passphrase_pin_str = str(passphrase_pin) if not isinstance(passphrase_pin, str) else passphrase_pin
-            pinstatus,result = config.check_pin(passphrase_pin_str,None, 3) 
+            pinstatus,result = config.check_pin(passphrase_pin_str,None, 4) 
             print(f"passphrase_pin={passphrase_pin_str}, pinstatus={pinstatus}, result={result}")
             if result == 4:
                 current_space = se_thd89.get_pin_passphrase_space()
@@ -66,7 +66,7 @@ async def show_attach_to_pin_window(ctx: wire.Context):
                          while True:
                             passphrase_pin = await request_passphrase_pin(ctx, _(i18n_keys.TITLE__ENTER_PASSPHRASE))
                             passphrase_pin_str = str(passphrase_pin) if not isinstance(passphrase_pin, str) else passphrase_pin
-                            pinstatus,result = config.check_pin(passphrase_pin_str,None, 3) 
+                            pinstatus,result = config.check_pin(passphrase_pin_str,None, 4) 
 
                             if passphrase_pin_str != curpin and  result == 3:
                                 remove_status = await show_confirm_remove_pin_window(ctx)
@@ -513,8 +513,7 @@ async def show_pin_input_screen(ctx: wire.Context):
     title_label.set_style_text_line_space(-8, 0)
     title_label.set_long_mode(lv.label.LONG.WRAP)
     title_label.set_size(456, lv.SIZE.CONTENT)
-    title_label.align(lv.ALIGN.TOP_LEFT, 12, 72)  # 水平方向相对屏幕左边缘32像素
-    # title_label.set_y(104) 
+    title_label.align(lv.ALIGN.TOP_LEFT, 28, 72)  # 水平方向相对屏幕左边缘32像素
 
     # 如果已经有副标题，先移除它
     if hasattr(screen, "subtitle"):
@@ -531,7 +530,7 @@ async def show_pin_input_screen(ctx: wire.Context):
     subtitle_label.set_size(456, lv.SIZE.CONTENT)
     subtitle_label.align_to(title_label, lv.ALIGN.OUT_BOTTOM_MID, 0, 16)
 
-    # 创建 PIN 输入字段容器 - 位于副标题下方
+    # 创建 PIN 输入字段容器
     pin_container = lv.obj(screen.content_area)
     pin_container.set_size(lv.pct(100), lv.SIZE.CONTENT)
     pin_container.align_to(subtitle_label, lv.ALIGN.OUT_BOTTOM_MID, 0, 24)  # 位于副标题下方
@@ -539,16 +538,17 @@ async def show_pin_input_screen(ctx: wire.Context):
     pin_container.set_style_border_width(0, 0)
     pin_container.set_style_pad_all(0, 0)
 
-    # 使用合并后的单一图片
-    pin_img = lv.img(pin_container)
-    pin_img.set_src("A:/res/attach_to_pin_display.png")  # 使用新的合并图片
-    pin_img.center()  # 居中显示
-
-    # 添加设备示意图 - 调整位置到PIN字段容器下方
+    # 添加设备示意图 - 调整位置到确认按钮上方
     device_img = lv.img(screen.content_area)
     device_img.set_src("A:/res/attach_to_pin_dot_group.png")
-    # 将设备示意图对齐到PIN容器下方
-    device_img.align_to(pin_container, lv.ALIGN.OUT_BOTTOM_MID, 0, 24)  # 在PIN容器下方20像素
+    # 将设备示意图对齐到确认按钮上方
+    if hasattr(screen, "btn_yes"):
+        device_img.align_to(screen.btn_yes, lv.ALIGN.OUT_TOP_MID, 0, 0)  # 紧贴确认按钮顶部
+
+    # 使用合并后的单一图片 - 调整位置到device_img上方24px
+    pin_img = lv.img(pin_container)
+    pin_img.set_src("A:/res/attach_to_pin_display.png")  # 使用新的合并图片
+    pin_img.align_to(device_img, lv.ALIGN.OUT_TOP_MID, 0, -24)  # 在device_img上方24px
 
     # 为关闭按钮添加事件处理程序
     processing = False  # 防止重复处理

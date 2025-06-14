@@ -228,7 +228,7 @@ class MainScreen(Screen):
             self.text_label = {}
             self.init_ui()
             self.init_items()
-            # self.create_down_arrow()
+            self.create_down_arrow()
             self.init_indicators()
             self.init_anim()
 
@@ -248,30 +248,12 @@ class MainScreen(Screen):
 
             self.main_cont = lv.obj(self)
             self.main_cont.set_size(448, 600)
-            # self.main_cont = ContainerFlex(
-            #     self,
-            #     None,
-            #     padding_col=0,
-            #     flex_flow=lv.FLEX_FLOW.ROW_WRAP,
-            #     main_align=lv.FLEX_ALIGN.START,
-            #     cross_align=lv.FLEX_ALIGN.CENTER,
-            #     track_align=lv.FLEX_ALIGN.SPACE_BETWEEN,
-            # )
-            # self.main_cont.set_size(448, 600)
-            
-            # 设置主容器位置
-            self.main_cont.set_pos(64, 120)
-
-            # self.main_cont.set_style_pad_column(16, 0)
-            # 添加事件冒泡标志
+            self.main_cont.set_pos(16, 200)
             self.main_cont.add_flag(lv.obj.FLAG.EVENT_BUBBLE)
-            # 设置内边距为0
             self.main_cont.set_style_pad_all(0, 0)
-            # 设置边框宽度为0
             self.main_cont.set_style_border_width(0, 0)
-            # 设置背景透明
             self.main_cont.set_style_bg_opa(lv.OPA.TRANSP, 0)
-            # 初始化当前页码为0
+
             self.current_page = 0
             self.page_items = [[] for _ in range(2)]
 
@@ -297,55 +279,29 @@ class MainScreen(Screen):
                     ("nft", "app-nft", i18n_keys.APP__NFT_GALLERY),
                     ("guide", "app-tips", i18n_keys.APP__TIPS),
                 ]
-            items_per_page = 6
+
+            items_per_page = 4
             cols = 2
-            rows = 3  # Changed from 2 to 3 rows
-            item_width = 144  # Width already 144
-            item_height = 192
-            col_gap = 64
+            rows = 2
+            item_width = 216
+            item_height = 280
+            col_gap = 16
             row_gap = 16
 
-            # 遍历所有应用项
             for idx, (name, img, text) in enumerate(items):
-                # 计算当前项所在页码:
-                # idx=7, items_per_page=6 -> page=1 (第二页)
-                # idx=2, items_per_page=6 -> page=0 (第一页)
                 page = idx // items_per_page
-                
-                # 计算在当前页内的索引:
-                # idx=7, items_per_page=6 -> page_idx=1 (当前页第2个)
-                # idx=2, items_per_page=6 -> page_idx=2 (当前页第3个)
                 page_idx = idx % items_per_page
-                
-                # 计算行号:
-                # page_idx=1, rows=3 -> row=0 (第一行)
-                # page_idx=3, rows=3 -> row=1 (第二行)
-                row = page_idx // cols  # Changed to divide by cols instead of rows
-                
-                # 计算列号:
-                # page_idx=1, cols=2 -> col=1 (第二列)
-                # page_idx=3, cols=2 -> col=1 (第二列)
+                row = page_idx // rows
                 col = page_idx % cols
-                
-                # 计算x坐标:
-                # col=1, item_width=144, col_gap=64 -> x=208 (第二列x坐标)
                 x = col * (item_width + col_gap)
-                
-                # 计算y坐标:
-                # row=1, item_height=192, row_gap=16 -> y=208 (第二行y坐标)
                 y = row * (item_height + row_gap)
-                
-                # 创建应用项并添加到对应页面列表
+
                 item = self.create_item(name, img, text, x, y)
                 self.page_items[page].append(item)
-
-                # 如果不是第一页,则隐藏该项
                 if page != 0:
                     item.add_flag(lv.obj.FLAG.HIDDEN)
 
-        def create_item(self, name, img_src, text_key,x,y):
-            print(f"Creating item {name} at position x:{x}, y:{y}")
-            
+        def create_item(self, name, img_src, text_key, x, y):
             cont = lv.obj(self.main_cont)
             cont.add_style(
                 StyleWrapper()
@@ -356,53 +312,46 @@ class MainScreen(Screen):
                 .pad_all(0),
                 0,
             )
-            cont.set_size(144, 192)
+            cont.set_size(216, 280)
             cont.set_pos(x, y)
             cont.add_flag(lv.obj.FLAG.EVENT_BUBBLE)
 
             btn = lv.imgbtn(cont)
-            btn.set_size(144, 144)
-            btn.set_style_bg_img_src(f"A:/res/{img_src}.png", 0)
-
-
-            btn.set_style_pad_all(0, 0)  # 所有方向内边距为0
-            btn.set_style_pad_top(0, 0)  # 如果图片向上偏移，可以增加顶部内边距
-            btn.set_style_pad_bottom(0, 0)
-            btn.set_style_pad_left(0, 0)
-            btn.set_style_pad_right(0, 0)
+            btn.set_size(216, 216)
+            btn.set_style_bg_img_src(f"A:/res/{img_src}.jpg", 0)
             btn.add_style(
                 StyleWrapper()
                 .bg_img_recolor_opa(lv.OPA._30)
                 .bg_img_recolor(lv_colors.BLACK),
                 lv.PART.MAIN | lv.STATE.PRESSED,
             )
-            btn.center()
+            btn.add_flag(lv.obj.FLAG.EVENT_BUBBLE)
+            btn.align(lv.ALIGN.TOP_MID, 0, 0)
 
-            # label = lv.label(cont)
-            # label.set_text("")
-            # label.add_style(
-            #     StyleWrapper()
-            #     .width(144)
-            #     .text_font(font_GeistSemiBold26)
-            #     .text_color(lv_colors.WHITE)
-            #     .text_align_center(),
-            #     0,
-            # )
-            # label.add_style(
-            #     StyleWrapper().text_opa(lv.OPA._70), lv.PART.MAIN | lv.STATE.PRESSED
-            # )
-            # label.add_flag(lv.obj.FLAG.HIDDEN)
+            label = lv.label(cont)
+            label.set_text(_(text_key))
+            label.add_style(
+                StyleWrapper()
+                .width(170)
+                .text_font(font_GeistSemiBold26)
+                .text_color(lv_colors.WHITE)
+                .text_align_center(),
+                0,
+            )
+            label.add_style(
+                StyleWrapper().text_opa(lv.OPA._70), lv.PART.MAIN | lv.STATE.PRESSED
+            )
 
-            # label.align_to(btn, lv.ALIGN.OUT_BOTTOM_MID, 0, 8)
+            label.align_to(btn, lv.ALIGN.OUT_BOTTOM_MID, 0, 8)
 
-            # self.text_label[text_key] = label
+            self.text_label[text_key] = label
 
-            # btn.add_event_cb(
-            #     lambda e: self.on_pressed(text_key), lv.EVENT.PRESSED, None
-            # )
-            # btn.add_event_cb(
-            #     lambda e: self.on_released(text_key), lv.EVENT.RELEASED, None
-            # )
+            btn.add_event_cb(
+                lambda e: self.on_pressed(text_key), lv.EVENT.PRESSED, None
+            )
+            btn.add_event_cb(
+                lambda e: self.on_released(text_key), lv.EVENT.RELEASED, None
+            )
             btn.add_event_cb(lambda e: self.on_item_click(name), lv.EVENT.CLICKED, None)
             return cont
 
@@ -526,14 +475,12 @@ class MainScreen(Screen):
             self.visible = False
 
         def on_pressed(self, text_key):
-            pass
-            # label = self.text_label[text_key]
-            # label.add_state(lv.STATE.PRESSED)
+            label = self.text_label[text_key]
+            label.add_state(lv.STATE.PRESSED)
 
         def on_released(self, text_key):
-            pass
-            # label = self.text_label[text_key]
-            # label.clear_state(lv.STATE.PRESSED)
+            label = self.text_label[text_key]
+            label.clear_state(lv.STATE.PRESSED)
 
         def on_item_click(self, name):
             handlers = {
@@ -558,9 +505,8 @@ class MainScreen(Screen):
                     return
 
         def refresh_text(self):
-            pass
-            # for text_key, label in self.text_label.items():
-            #     label.set_text(_(text_key))
+            for text_key, label in self.text_label.items():
+                label.set_text(_(text_key))
 
 
 class PasskeysManager(AnimScreen):
@@ -2371,7 +2317,7 @@ class ConnectWallet(FullSizeWindow):
             else subtitle,
             anim_dir=0,
         )
-        self.content_area.set_style_max_height(484, 0)
+        self.content_area.set_style_max_height(684, 0)
         self.add_nav_back()
 
         gc.collect()
@@ -2386,7 +2332,7 @@ class ConnectWallet(FullSizeWindow):
             icon_path=icon_path,
             size=440,
         )
-        self.qr.align_to(self.subtitle, lv.ALIGN.OUT_BOTTOM_LEFT, 0, 0)
+        self.qr.align_to(self.subtitle, lv.ALIGN.OUT_BOTTOM_LEFT, 0, 40)
 
         if wallet_name and support_chains:
             self.panel = lv.obj(self.content_area)

@@ -500,25 +500,25 @@ void send_user_abort_nocheck(uint8_t iface_num, const char* msg)
 
 // ######## message handlers ########
 
-int version_compare(uint32_t vera, uint32_t verb)
-{
-    int a, b;
-    a = vera & 0xFF;
-    b = verb & 0xFF;
-    if ( a != b )
-        return a - b;
-    a = (vera >> 8) & 0xFF;
-    b = (verb >> 8) & 0xFF;
-    if ( a != b )
-        return a - b;
-    a = (vera >> 16) & 0xFF;
-    b = (verb >> 16) & 0xFF;
-    if ( a != b )
-        return a - b;
-    a = (vera >> 24) & 0xFF;
-    b = (verb >> 24) & 0xFF;
-    return a - b;
-}
+// int version_compare(uint32_t vera, uint32_t verb)
+// {
+//     int a, b;
+//     a = vera & 0xFF;
+//     b = verb & 0xFF;
+//     if ( a != b )
+//         return a - b;
+//     a = (vera >> 8) & 0xFF;
+//     b = (verb >> 8) & 0xFF;
+//     if ( a != b )
+//         return a - b;
+//     a = (vera >> 16) & 0xFF;
+//     b = (verb >> 16) & 0xFF;
+//     if ( a != b )
+//         return a - b;
+//     a = (vera >> 24) & 0xFF;
+//     b = (verb >> 24) & 0xFF;
+//     return a - b;
+// }
 
 // not used since no where to store them
 // static void firmware_headers_store(const uint8_t* const input_buffer, size_t
@@ -652,7 +652,8 @@ static int check_file_contents(uint8_t iface_num, const uint8_t* buffer, uint32_
                         update_info.mcu_update_info.vendor_changed = secfalse;
 
                         // compare version
-                        if ( (version_compare(current_hdr.onekey_version, file_hdr.onekey_version) > 0) )
+                        // if ( (version_compare(current_hdr.onekey_version, file_hdr.onekey_version) > 0) )
+                        if (0)
                         {
                             // new firwmare have lower version
                             char desc[64] = "Firmware downgrade not allowed! Current version is: ";

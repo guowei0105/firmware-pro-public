@@ -138,6 +138,7 @@ async def verify_user_pin(
                 allow_fingerprint,
                 close_others=close_others,
                 standy_wall_only = standy_wall_only,
+                attach_wall_only = attach_wall_only,
             )
             config.ensure_not_wipe_code(pin)  # 确保输入的不是擦除码
         except Exception as e:
@@ -165,7 +166,7 @@ async def verify_user_pin(
             if verified:
                 if usertype == 3:
                     device.set_passphrase_pin_enabled(True)  # 启用密码短语 PIN
-                elif usertype == 0:
+                elif usertype == 1:
                     device.set_passphrase_pin_enabled(False)  # 禁用密码短语 PIN
                 else:
                     print(f"[DEBUG] Unhandled usertype: {usertype}, passphrase PIN status unchanged")
@@ -206,14 +207,17 @@ async def verify_user_pin(
         pin_rem = config.get_pin_rem()  # 获取剩余尝试次数
         print(f"[DEBUG] PIN remaining attempts: {pin_rem}")
         try:
+
             pin = await request_pin_on_device(  # type: ignore ["request_pin_on_device" is possibly unbound]  # 再次请求PIN码
                 ctx,
-                _(i18n_keys.TITLE__ENTER_PIN),  # 使用本地化的"输入PIN"标题
+                # _(i18n_keys.TITLE__ENTER_PIN),  # 使用本地化的"输入PIN"标题
+                prompt,
                 pin_rem,
                 allow_cancel,
                 allow_fingerprint,
                 close_others=close_others,
                 standy_wall_only = standy_wall_only,
+                attach_wall_only = attach_wall_only,
             )
             print("[DEBUG] Retry PIN input received")
         except Exception as e:
@@ -234,6 +238,12 @@ async def verify_user_pin(
             raise
 
         if verified:  # 如果验证成功
+            if usertype == 3:
+                    device.set_passphrase_pin_enabled(True)  # 启用密码短语 PIN
+            elif usertype == 1:
+                    device.set_passphrase_pin_enabled(False)  # 禁用密码短语 PIN
+            else:
+                    print(f"[DEBUG] Unhandled usertype: {usertype}, passphrase PIN status unchanged")
             print("[DEBUG] Retry PIN verification successful")
             if re_loop:  # 如果需要重新循环
                 print("[DEBUG] Clearing loop in retry")

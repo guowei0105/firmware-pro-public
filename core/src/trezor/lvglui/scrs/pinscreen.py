@@ -470,7 +470,8 @@ class SetupComplete(FullSizeWindow):
 
 
 class InputPassphrasePinConfirm(FullSizeWindow):
-    def __init__(self, title):
+    def __init__(self, title, original_input=None):
+        print(f"[InputPassphrasePinConfirm] Initializing with title: {title}, original_input: {original_input}")
         super().__init__(
             title=title,
             subtitle=None,

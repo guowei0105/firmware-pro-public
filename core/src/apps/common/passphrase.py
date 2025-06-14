@@ -18,6 +18,8 @@ def is_passphrase_auto_status() -> bool:
     return storage.device.is_passphrase_auto_status() 
 
 async def get(ctx: wire.Context) -> str:  # 获取密码短语的异步函数
+    print("get current_space current_space current_space")
+
     if is_enabled():  # 如果密码短语功能已启用
         if is_passphrase_pin_enabled():
             return ""  # 或者返回预设的密码短语
@@ -34,6 +36,10 @@ async def _request_from_user(ctx: wire.Context) -> str:  # 从用户请求密码
         ctx.__class__, (wire.DummyContext, wire.QRContext)
     ):
         from trezor.ui.layouts import request_passphrase_on_device  # 导入设备上请求密码短语的布局
+
+        from trezor.crypto import se_thd89
+        current_space = se_thd89.get_pin_passphrase_space()
+        print("get_passphrase_always_on_device current_space current_space current_space",current_space)
 
         passphrase = await request_passphrase_on_device(ctx, _MAX_PASSPHRASE_LEN)  # 在设备上请求密码短语
         if isinstance(ctx, wire.QRContext):  # 如果是QR上下文
@@ -54,6 +60,7 @@ async def _request_on_host(ctx: wire.Context) -> str:  # 在主机上请求密�
     request = PassphraseRequest()  # 创建密码短语请求
     from trezor.crypto import se_thd89
     current_space = se_thd89.get_pin_passphrase_space()
+    print("current_space current_space current_space",current_space)
     if current_space < 30:
         request.exists_attach_pin_user = True
     else:
@@ -72,7 +79,7 @@ async def _request_on_host(ctx: wire.Context) -> str:  # 在主机上请求密�
         ) 
         lock_device()
         try:
-            await unlock_device(ctx, pin_use_type=3) #后面要改成只能输入passphrase pin那种的  需要更改文案
+            await unlock_device(ctx, pin_use_type=3,attach_wall_only=True) #后面要改成只能输入passphrase pin那种的  需要更改文案
             storage.cache.start_session()
             return ""
         except wire.PinCancelled:
