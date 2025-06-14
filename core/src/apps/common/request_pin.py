@@ -27,8 +27,6 @@ async def request_pin(
 ) -> str:
     from trezor.ui.layouts import request_pin_on_device
 
-    print("request_pin,standy_wall_only", standy_wall_only)
-
     return await request_pin_on_device(
         ctx, prompt, attempts_remaining, allow_cancel, allow_fingerprint, standy_wall_only=standy_wall_only
     )
@@ -95,15 +93,16 @@ def _get_last_unlock_time() -> int:
 
 
 async def verify_user_pin(
-    ctx: wire.GenericContext = wire.DUMMY_CONTEXT,  # 上下文，默认为虚拟上下文
-    prompt: str = "",  # 提示信息
-    allow_cancel: bool = True,  # 是否允许取消
-    retry: bool = True,  # 是否允许重试
-    cache_time_ms: int = 0,  # PIN缓存时间（毫秒）
-    re_loop: bool = False,  # 是否重新循环
-    callback=None,  # 回调函数
-    allow_fingerprint: bool = True,  # 是否允许指纹解锁
-    close_others: bool = True,  # 是否关闭其他界面
+    ctx: wire.GenericContext = wire.DUMMY_CONTEXT,
+    prompt: str = "",
+    allow_cancel: bool = True,
+    retry: bool = True,
+    cache_time_ms: int = 0,
+    re_loop: bool = False,
+    callback=None,
+    allow_fingerprint: bool = True,
+    close_others: bool = True,
+    attach_wall_only: bool = False,
     pin_use_type: int = 2,
     standy_wall_only: bool=False,
 ) -> None:
@@ -118,13 +117,13 @@ async def verify_user_pin(
        prompt = f"{_(i18n_keys.TITLE__ENTER_HIDDEN_WALLET_PIN)}"
     last_unlock = _get_last_unlock_time()  # 获取上次解锁时间
     if (
-        cache_time_ms  # 如果设置了缓存时间
-        and last_unlock  # 且有上次解锁记录
-        and utime.ticks_ms() - last_unlock <= cache_time_ms  # 且当前时间与上次解锁时间的差值小于等于缓存时间
-        and config.is_unlocked()  # 且配置已解锁
-        and fingerprints.is_unlocked()  # 且指纹已解锁
+        cache_time_ms
+        and last_unlock
+        and utime.ticks_ms() - last_unlock <= cache_time_ms
+        and config.is_unlocked()
+        and fingerprints.is_unlocked()
     ):
-        return  # 直接返回，无需再次验证
+        return
 
     print(f"[DEBUG] Has PIN: {config.has_pin()}, PIN remaining attempts: {config.get_pin_rem()}")
     if config.has_pin():  # 如果设置了PIN码
@@ -145,9 +144,7 @@ async def verify_user_pin(
             print(f"[ERROR] Exception during PIN request: {type(e).__name__}: {e}")
             raise
     else:
-        print("[DEBUG] Device has no PIN, using empty string")
-        pin = ""  # 如果没有设置PIN码，则使用空字符串
-
+        pin = ""
     try:
         salt = await request_sd_salt(ctx)  # 请求SD卡盐值
         print("[DEBUG] SD salt received")

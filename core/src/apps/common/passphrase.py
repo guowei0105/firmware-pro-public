@@ -55,26 +55,30 @@ async def _request_on_host(ctx: wire.Context) -> str:  # 在主机上请求密�
     from trezor.crypto import se_thd89
     current_space = se_thd89.get_pin_passphrase_space()
     if current_space < 30:
-        request.extsis_attach_pin_user = True
+        request.exists_attach_pin_user = True
     else:
-        request.extsis_attach_pin_user = False
-
+        request.exists_attach_pin_user = False
+    
+    print("PassphraseRequest:", request)
     ack = await ctx.call(request, PassphraseAck)  # 等待主机响应密码短语请求
     
     if ack.on_device_attach_pin: ###如果要求输入attach to pin 
         from apps.base import unlock_device,lock_device
         from trezor.ui.layouts.common import button_request
         from trezor.enums import ButtonRequestType
+        print("button_request:", ctx, "passphrase_device", ButtonRequestType.AttachPin)
         await button_request(
          ctx, "passphrase_device", code=ButtonRequestType.AttachPin
         ) 
         lock_device()
         try:
-            await unlock_device(ctx, pin_use_type=2) #后面要改成只能输入passphrase pin那种的
+            await unlock_device(ctx, pin_use_type=3) #后面要改成只能输入passphrase pin那种的  需要更改文案
             storage.cache.start_session()
+            return ""
         except wire.PinCancelled:
             pass
-        return
+
+        return ""
 
     if ack.on_device:  # 如果主机请求在设备上输入
         from trezor.ui.layouts import request_passphrase_on_device  # 导入设备上请求密码短语的布局

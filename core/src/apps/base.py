@@ -214,7 +214,7 @@ async def handle_Initialize(
     ctx: wire.Context | wire.QRContext, msg: Initialize
 ) -> Features:    
     prev_session_id = storage.cache.get_session_id()
-    if msg.session_id and msg.session_id is not None and prev_session_id != msg.session_id and se_thd89.check_passphrase_btc_test_address(msg.btc_test):  
+    if config.unlock() and msg.session_id and msg.session_id is not None and prev_session_id != msg.session_id and se_thd89.check_passphrase_btc_test_address(msg.btc_test):  
             lock_device()
             session_id = None
             print("handle_Initialize lock_device")
@@ -699,7 +699,13 @@ async def handle_GetPassphraseState(ctx: wire.Context, msg: GetPassphraseState) 
     # from trezor.crypto import se_thd89
     from trezor.messages import PassphraseState
     from apps.common import passphrase
-    # import utime
+
+    if not  config.is_unlocked():
+        await unlock_device(ctx, pin_use_type=2)
+
+
+    import utime
+
     if msg.btc_test is not None  and  se_thd89.check_passphrase_btc_test_address(msg.btc_test):  ###已经连接的attach to pin 钱包
         if not passphrase.is_passphrase_pin_enabled() and  config.is_unlocked(): #目前是主pin解锁情况下# 其他是已经锁定活在attach to pin解锁情况
            lock_device()
@@ -761,29 +767,32 @@ async def handle_GetPassphraseState(ctx: wire.Context, msg: GetPassphraseState) 
     #     else:
     #             await unlock_device(ctx, pin_use_type=2)
     #             session_id = storage.cache.start_session()
-    try:
-        fixed_path = "m/44'/1'/0'/0/0"
-        address_msg = messages.GetAddress(
+    session_id = storage.cache.get_session_id()
+    print("session_id:", session_id)
+    if session_id is None or session_id == b"":
+            session_id = storage.cache.start_session()
+    utime.sleep_ms(500)
+    
+    fixed_path = "m/44'/1'/0'/0/0"
+    address_msg = messages.GetAddress(
             address_n=paths.parse_path(fixed_path), 
             show_display=False,  
             script_type=0,  
             coin_name="Testnet"  
         )
-        from apps.bitcoin.get_address import get_address as btc_get_address
-        try:
+    from apps.bitcoin.get_address import get_address as btc_get_address
+    try:
             address_obj = await btc_get_address(ctx, address_msg) 
             session_id = storage.cache.get_session_id()
             if session_id is None or session_id == b"":
                 session_id = storage.cache.start_session()
             is_attach_to_pin_state = passphrase.is_passphrase_pin_enabled()
             print("handle_GetPassphraseState current :",session_id)
-            return PassphraseState(btc_test=address_obj.address, session_id=session_id,is_attach_to_pin_state = is_attach_to_pin_state)
-        except Exception as e:
+            return PassphraseState(GetPassphraseState=address_obj.address, session_id=session_id,unlocked_attach_pin = is_attach_to_pin_state)
+    except Exception as e:
             error_msg = str(e) if e else "Unknown error in btc_get_address"
             return PassphraseState(btc_test=f"Error in btc_get_address: {error_msg}")
-    except Exception as e:
-        error_msg = str(e) if e else "Unknown error getting Bitcoin address"
-        return PassphraseState(btc_test=f"Error getting address: {error_msg}")
+
 
 
 def boot() -> None:

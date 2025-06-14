@@ -120,7 +120,7 @@ message PinMatrixAck {
  */
 message PassphraseRequest {
     optional bool _on_device = 1 [deprecated=true];  // <2.3.0
-    optional bool extsis_attach_pin_user = 8000;
+    optional bool exists_attach_pin_user = 8000;
 }
 
 /**

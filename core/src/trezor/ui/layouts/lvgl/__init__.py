@@ -1158,13 +1158,14 @@ async def request_pin_on_device(
     allow_cancel: bool,
     allow_fingerprint: bool,
     close_others: bool = True,
-    standy_wall_only: bool = False
+    standy_wall_only: bool = False,
+    attach_wall_only: bool = False,
 ) -> str:
     
     print("standy_wall_only standy_wall_only standy_wall_only1111",standy_wall_only)
     await button_request(
         ctx, "pin_device", code=ButtonRequestType.PinEntry, close_others=close_others
-    )
+        )
     print("standy_wall_only standy_wall_only standy_wall_only",standy_wall_only)
     from storage import device
 

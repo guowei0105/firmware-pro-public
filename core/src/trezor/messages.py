@@ -833,12 +833,12 @@ if TYPE_CHECKING:
             return isinstance(msg, cls)
 
     class PassphraseRequest(protobuf.MessageType):
-        extsis_attach_pin_user: "bool | None"
+        exists_attach_pin_user: "bool | None"
 
         def __init__(
             self,
             *,
-            extsis_attach_pin_user: "bool | None" = None,
+            exists_attach_pin_user: "bool | None" = None,
         ) -> None:
             pass
 
@@ -2901,14 +2901,14 @@ if TYPE_CHECKING:
     class Initialize(protobuf.MessageType):
         session_id: "bytes | None"
         derive_cardano: "bool | None"
-        btc_test: "str | None"
+        passphrase_state: "str | None"
 
         def __init__(
             self,
             *,
             session_id: "bytes | None" = None,
             derive_cardano: "bool | None" = None,
-            btc_test: "str | None" = None,
+            passphrase_state: "str | None" = None,
         ) -> None:
             pass
 
@@ -3012,6 +3012,7 @@ if TYPE_CHECKING:
         onekey_se03_state: "OneKeySEState | None"
         onekey_se04_state: "OneKeySEState | None"
         attach_to_pin_user: "bool | None"
+        unlocked_attach_pin: "bool | None"
 
         def __init__(
             self,
@@ -3099,6 +3100,7 @@ if TYPE_CHECKING:
             onekey_se03_state: "OneKeySEState | None" = None,
             onekey_se04_state: "OneKeySEState | None" = None,
             attach_to_pin_user: "bool | None" = None,
+            unlocked_attach_pin: "bool | None" = None,
         ) -> None:
             pass
 
@@ -3933,16 +3935,16 @@ if TYPE_CHECKING:
             return isinstance(msg, cls)
 
     class GetPassphraseState(protobuf.MessageType):
-        btc_test: "str | None"
-        only_main_pin: "bool | None"
-        creat_attach_to_pin_user: "bool | None"
+        passphrase_state: "str | None"
+        _only_main_pin: "bool | None"
+        allow_create_attach_pin: "bool | None"
 
         def __init__(
             self,
             *,
-            btc_test: "str | None" = None,
-            only_main_pin: "bool | None" = None,
-            creat_attach_to_pin_user: "bool | None" = None,
+            passphrase_state: "str | None" = None,
+            _only_main_pin: "bool | None" = None,
+            allow_create_attach_pin: "bool | None" = None,
         ) -> None:
             pass
 
@@ -3951,16 +3953,16 @@ if TYPE_CHECKING:
             return isinstance(msg, cls)
 
     class PassphraseState(protobuf.MessageType):
-        btc_test: "str | None"
+        passphrase_state: "str | None"
         session_id: "bytes | None"
-        is_attach_to_pin_state: "bool | None"
+        unlocked_attach_pin: "bool | None"
 
         def __init__(
             self,
             *,
-            btc_test: "str | None" = None,
+            passphrase_state: "str | None" = None,
             session_id: "bytes | None" = None,
-            is_attach_to_pin_state: "bool | None" = None,
+            unlocked_attach_pin: "bool | None" = None,
         ) -> None:
             pass
 
