@@ -12,6 +12,7 @@ from apps.common.request_pin import (
     error_pin_matches_wipe_code,
     request_pin_and_sd_salt,
     request_pin_confirm,
+    error_pin_used,
 )
 
 if TYPE_CHECKING:
@@ -52,7 +53,7 @@ async def change_pin(ctx: wire.Context, msg: ChangePin) -> Success:
            print(f"PIN length: {len(newpin) if newpin else 0}")
            print(f"======================")
            if  usertype == 3:
-             return await error_pin_invalid(ctx)
+             return await error_pin_used(ctx)
 
     # write into storage
     if not config.change_pin(curpin, newpin, salt, salt):

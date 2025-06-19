@@ -72,7 +72,7 @@ async def request_pin_and_sd_salt(
     if config.has_pin():
         print("request_pin_and_sd_salt,standy_wall_only", standy_wall_only)
         pin = await request_pin(
-            ctx, prompt, config.get_pin_rem(), allow_cancel, allow_fingerprint,standy_wall_only
+            ctx, prompt, config.get_pin_rem(), allow_cancel, allow_fingerprint, standy_wall_only
         )
         config.ensure_not_wipe_code(pin)
     else:
@@ -289,6 +289,19 @@ async def error_pin_invalid(ctx: wire.Context) -> NoReturn:
         "warning_wrong_pin",
         header=_(i18n_keys.TITLE__WRONG_PIN),
         content=_(i18n_keys.SUBTITLE__SET_PIN_WRONG_PIN),
+        red=True,
+        exc=wire.PinInvalid,
+    )
+    assert False
+
+async def error_pin_used(ctx: wire.Context) -> NoReturn:
+    from trezor.ui.layouts import show_error_and_raise
+
+    await show_error_and_raise(
+        ctx,
+        "warning_wrong_pin",
+        header=_(i18n_keys.PASSPHRASE__PIN_USED),
+        content=_(i18n_keys.PASSPHRASE__PIN_USED_DESC),
         red=True,
         exc=wire.PinInvalid,
     )
