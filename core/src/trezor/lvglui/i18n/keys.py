@@ -2021,7 +2021,7 @@ PASSPHRASE__SET_DESC = 919
 CONTENT__FINGERPRINT_DATA_IS_PROTECTED_BY_SECURITY_CHIPS = 920
 # Once removed, you won’t be able to unlock the device with this PIN.
 PASSPHRASE__REMOVE_DESC = 921
-# Remove PIN successful
+# PIN Removed
 PASSPHRASE__REMOVE_SUCCESSFUL = 922
 # Fingerprint Enrollment Timeout
 TITLE__FINGERPRINT_ENROLLMENT_TIMEOUT = 923
@@ -2107,9 +2107,9 @@ CONTENT__GENERATES_A_SINGLE_20_WORD_RECOVERY_PHRASE_OR_MULTIPLE_20_WORD_SHARES_W
 TITLE__NUMBER_OF_SHARE = 958
 # Threshould
 TITLE__THRESHOLD = 959
-# You have completed verification of Share {num} of {num} Recovery Phrase.
+# You have completed verification of Share {num} of {total} Recovery Phrase.
 CONTENT__YOU_HAVE_COMPLETED_VERIFICATION_OF_SHARE_STR_OF_STR_RECOVERY_PHRASE = 960
-# {num} of {num} Shares Entered
+# {num} of {total} Shares Entered
 TITLE__STR_OF_STR_SHARES_ENTERED = 961
 # {num} more share needed.
 TITLE__STR_OF_STR_SHARES_ENTERED_DESC = 962
@@ -2200,4 +2200,23 @@ TITLE_APPROVE = 998
 TITLE_UNLIMITED = 999
 # Revoke {name}
 TITLE_REVOKE = 1000
+# Reading fingerprint from security chip...
+MSG__READING_FINGERPRINT_FROM_SECURITY_CHIP = 1001
+# Energy Rental
+TITLE_ENERGY_RENTAL = 1002
+# To (Provider)
+TO_PROVIDER = 1003
+# Single-share
+BUTTON__SINGLE_SHARE = 1004
+# Multi-share
+BUTTON__MULTI_SHARE = 1005
+# Enter a Valid Share
+TITLE__ENTER_A_VALID_SHARE = 1006
+# The Recovery Phrase Share you entered is incorrect. Please enter the correct
+# Share.
+TITLE__ENTER_A_VALID_SHARE_DESC = 1007
+# You Have Entered Share {num1} From Group {num2}
+TITLE__YOU_HAVE_ENTERED_SHARE_STR_FROM_GROUP_STR = 1008
+# You need to enter more shares.
+TITLE__YOU_HAVE_ENTERED_SHARE_STR_FROM_GROUP_STR_DESC = 1009
 # fmt: on
