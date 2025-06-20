@@ -1128,6 +1128,9 @@ async def request_passphrase_on_device(
     while True:
         screen = PassphraseRequest(max_len, result, min_len)  # 传入最小长度参数
         result = await ctx.wait(screen.request())
+        print("passphrase back",result)
+        if result is None and  min_len == 1:
+            return None
         if result is None:
             raise wire.ActionCancelled("Passphrase entry cancelled")
 
@@ -1173,9 +1176,10 @@ async def request_pin_on_device(
         )
     print("standy_wall_only standy_wall_only standy_wall_only",standy_wall_only)
     from storage import device
-
+    
     if attempts_remaining is None or attempts_remaining == device.PIN_MAX_ATTEMPTS:
-        if standy_wall_only:
+        from apps.common import passphrase
+        if standy_wall_only and passphrase.is_passphrase_pin_enabled():
             subprompt = f"{_(i18n_keys.CONTENT__PIN_FOR_STANDARD_WALLET)}"
         else:subprompt = ""
     elif attempts_remaining == 5:
@@ -1186,18 +1190,29 @@ async def request_pin_on_device(
     else:
         subprompt = f"{_(i18n_keys.MSG__INCORRECT_PIN_STR_ATTEMPTS_LEFT).format(attempts_remaining)}"
     from trezor.lvglui.scrs.pinscreen import InputPin
-
+    min_len = 4
+    if attach_wall_only:
+        min_len = 6
+    else:
+        min_len = 4
     pinscreen = InputPin(
-        title=prompt, subtitle=subprompt, allow_fingerprint=allow_fingerprint,standy_wall_only=standy_wall_only
+        title=prompt, subtitle=subprompt, allow_fingerprint=allow_fingerprint,standy_wall_only=standy_wall_only,min_len = min_len
     )
     result = await ctx.wait(pinscreen.request())
+    print("not  111 pin calncelled ......",result)
     if not result:
         if not allow_cancel:
+            print("2222pin calncelled ......")
             from trezor import loop
-
+            print("3333pin calncelled ......")
             loop.clear()
+            print("pin calncelled ......")
+        print("pin calncelled ......final")
         raise wire.PinCancelled
+    else: 
+        print("not pin calncelled ......",result)
     assert isinstance(result, str)
+    print("request_pin_on_device final none")
     return result
 
 

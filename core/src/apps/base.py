@@ -702,13 +702,8 @@ async def handle_GetPassphraseState(ctx: wire.Context, msg: GetPassphraseState) 
     from trezor.messages import PassphraseState
     from apps.common import passphrase
 
-
-    
-
     if not  config.is_unlocked():
         await unlock_device(ctx, pin_use_type=2)
-
-
     import utime
 
     # if msg.passphrase_state is not None  and  se_thd89.check_passphrase_btc_test_address(msg.passphrase_state):  ###已经连接的attach to pin 钱包
@@ -772,29 +767,30 @@ async def handle_GetPassphraseState(ctx: wire.Context, msg: GetPassphraseState) 
     #     else:
     #             await unlock_device(ctx, pin_use_type=2)
     #             session_id = storage.cache.start_session()
-    session_id = storage.cache.get_session_id()
-    print("session_id:", session_id)
-    if session_id is None or session_id == b"":
-            session_id = storage.cache.start_session()
-    utime.sleep_ms(500)
+    from apps.bitcoin.get_address import get_address as btc_get_address
+    try:
+        session_id = storage.cache.get_session_id()
+        print("session_id:", session_id)
+        if session_id is None or session_id == b"":
+                session_id = storage.cache.start_session()
+        utime.sleep_ms(500)
     
-    fixed_path = "m/44'/1'/0'/0/0"
-    address_msg = messages.GetAddress(
+        fixed_path = "m/44'/1'/0'/0/0"
+        address_msg = messages.GetAddress(
             address_n=paths.parse_path(fixed_path), 
             show_display=False,  
             script_type=0,  
             coin_name="Testnet"  
-        )
-    from apps.bitcoin.get_address import get_address as btc_get_address
-    try:
-            address_obj = await btc_get_address(ctx, address_msg) 
-            session_id = storage.cache.get_session_id()
-            if session_id is None or session_id == b"":
-                session_id = storage.cache.start_session()
-            is_attach_to_pin_state = passphrase.is_passphrase_pin_enabled()
-            print("handle_GetPassphraseState current :",session_id)
-            print("is_attach_to_pin_state current :",is_attach_to_pin_state)
-            return PassphraseState(passphrase_state=address_obj.address, session_id=session_id,unlocked_attach_pin = is_attach_to_pin_state)
+            )
+
+        address_obj = await btc_get_address(ctx, address_msg) 
+        session_id = storage.cache.get_session_id()
+        if session_id is None or session_id == b"":
+            session_id = storage.cache.start_session()
+        is_attach_to_pin_state = passphrase.is_passphrase_pin_enabled()
+        print("handle_GetPassphraseState current :",session_id)
+        print("is_attach_to_pin_state current :",is_attach_to_pin_state)
+        return PassphraseState(passphrase_state=address_obj.address, session_id=session_id,unlocked_attach_pin = is_attach_to_pin_state)
     except Exception as e:
             error_msg = str(e) if e else "Unknown error in btc_get_address"
             return PassphraseState(btc_test=f"Error in btc_get_address: {error_msg}")

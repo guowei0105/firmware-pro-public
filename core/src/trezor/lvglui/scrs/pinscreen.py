@@ -187,6 +187,7 @@ class InputPin(FullSizeWindow):
         self.__class__._instance = self
         self.allow_fingerprint = kwargs.get("allow_fingerprint", True)
         self.standy_wall_only = kwargs.get("standy_wall_only", False)
+        self.min_len = kwargs.get("min_len", 4)
         self.title.add_style(
             StyleWrapper()
             .text_font(font_GeistSemiBold48)
@@ -236,7 +237,9 @@ class InputPin(FullSizeWindow):
         )
 
     def change_subtitle(self, subtitle: str):
-        if subtitle == _(i18n_keys.CONTENT__PIN_FOR_STANDARD_WALLET):
+        from apps.common import passphrase
+        # if standy_wall_only :
+        if subtitle == _(i18n_keys.CONTENT__PIN_FOR_STANDARD_WALLET) and  passphrase.is_passphrase_pin_enabled():
             # 标准钱包提示不使用红色背景
             self.subtitle.set_style_bg_color(lv_colors.BLACK, 0)
             self.subtitle.align_to(self.title, lv.ALIGN.OUT_BOTTOM_MID, 0, 16)
@@ -316,15 +319,16 @@ class InputPin(FullSizeWindow):
         if code == lv.EVENT.VALUE_CHANGED:
             utils.lcd_resume()
             if self.keyboard.ta.get_text() != "":
-                if self.standy_wall_only:
-                    
+                from apps.common import passphrase
+                if self.standy_wall_only and passphrase.is_passphrase_pin_enabled():
+            
                     self.change_subtitle(_(i18n_keys.CONTENT__PIN_FOR_STANDARD_WALLET))
                 else:
                     self.change_subtitle("")
             return
         elif code == lv.EVENT.READY:
             input_text = self.keyboard.ta.get_text()
-            if len(input_text) < 4:
+            if len(input_text) < self.min_len:
                 return
             self.channel.publish(input_text)
         elif code == lv.EVENT.CANCEL:

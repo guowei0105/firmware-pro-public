@@ -20,6 +20,7 @@ async def show_attach_to_pin_window(ctx: wire.Context):
                         error_pin_invalid,
                         request_pin_and_sd_salt,
                         request_pin_confirm,
+                        error_pin_used,
                     )
         pin_screen_result = await show_pin_input_screen(ctx)
         if not pin_screen_result:  
@@ -44,12 +45,12 @@ async def show_attach_to_pin_window(ctx: wire.Context):
         print(curpin)
         pinstatus,result = config.check_pin(curpin, None,1)
         if pinstatus == False:
-            return await error_pin_invalid(ctx)
+           return  await error_pin_invalid(ctx)
 
 
         passphrase_pin = await request_passphrase_pin_confirm(ctx)        
         if curpin == passphrase_pin:
-            return await error_pin_invalid(ctx)
+            return await error_pin_used(ctx)
 
         if len(passphrase_pin) >= 6:
             passphrase_pin_str = str(passphrase_pin) if not isinstance(passphrase_pin, str) else passphrase_pin
@@ -58,8 +59,6 @@ async def show_attach_to_pin_window(ctx: wire.Context):
             if result == 4:
                 current_space = se_thd89.get_pin_passphrase_space()
                 print(f"DEBUG: current_space = {current_space}")
-
-
                 if current_space < 1: 
                      result =   await show_hit_the_limit_window(ctx)  
                      if result == 1:
@@ -109,83 +108,77 @@ async def show_attach_to_pin_window(ctx: wire.Context):
                 result = await show_not_attached_window(ctx)
                 if result == 0:
                     return False
-                result = await show_attach_one_passphrase(ctx)
-                if result == 0:
-                    return False
-                from trezor.ui.layouts import request_passphrase_on_device  
-                passphrase = await request_passphrase_on_device(ctx, 50, min_len=1)  
-                if passphrase != 0:
-                    print("passphrase ", passphrase)
-                    await show_save_your_passphrase_window(ctx)
-                    # curpin, salt = await request_pin_and_sd_salt(
-                    #         ctx, _(i18n_keys.PASSPHRASE_ENTER_MAIN_PIN), allow_fingerprint=False
-                    #         )
-                    # print(curpin)
-                    # if  config.check_pin(curpin, None,True) == False:
-                    #     await error_pin_invalid(ctx)
-                    # 确保所有参数都是字符串类型
-                    curpin_str = str(curpin) if not isinstance(curpin, str) else curpin
-                    passphrase_pin_str = str(passphrase_pin) if not isinstance(passphrase_pin, str) else passphrase_pin
-                    passphrase_content_str = str(passphrase) if not isinstance(passphrase, str) else passphrase
+                while True:
+                    result = await show_attach_one_passphrase(ctx)
+                    if result == 0:
+                        return False
+                
+                    from trezor.ui.layouts import request_passphrase_on_device  
+                    passphrase = await request_passphrase_on_device(ctx, 50, min_len=1) 
+                    if passphrase is None:
+                        continue
+                    print("111 passphrase passphrase",passphrase) 
+                    if passphrase != 0:
+                        print("passphrase ", passphrase)
+                        await show_save_your_passphrase_window(ctx)
+                        # 确保所有参数都是字符串类型
+                        curpin_str = str(curpin) if not isinstance(curpin, str) else curpin
+                        passphrase_pin_str = str(passphrase_pin) if not isinstance(passphrase_pin, str) else passphrase_pin
+                        passphrase_content_str = str(passphrase) if not isinstance(passphrase, str) else passphrase
 
-                    print(f"save_pin_passphrase: curpin={type(curpin_str)}, passphrase_pin={type(passphrase_pin_str)}, passphrase_content={type(passphrase_content_str)}")
-                    print(f"curpin={curpin_str}, passphrase_pin={passphrase_pin_str}, passphrase_content={passphrase_content_str}")
-                    save_result, save_status = se_thd89.save_pin_passphrase(
+                        print(f"save_pin_passphrase: curpin={type(curpin_str)}, passphrase_pin={type(passphrase_pin_str)}, passphrase_content={type(passphrase_content_str)}")
+                        print(f"curpin={curpin_str}, passphrase_pin={passphrase_pin_str}, passphrase_content={passphrase_content_str}")
+                        save_result, save_status = se_thd89.save_pin_passphrase(
                                             curpin_str,
                                             passphrase_pin_str,
                                             passphrase_content_str)
-                    print(f"save_result = {save_result}, save_status = {save_status}")
-                    if save_result == True:
-                        await show_passphrase_set_and_attached_to_pin_window(ctx)
-                        return True
-                    else:
                         print(f"save_result = {save_result}, save_status = {save_status}")
-                        # await show_passphrase_set_and_attached_to_pin_window()
-                        return False
+                        if save_result == True:
+                            await show_passphrase_set_and_attached_to_pin_window(ctx)
+                            return True
+                        else:
+                            print(f"save_result = {save_result}, save_status = {save_status}")
+                            return False
             else:
-                # pinstatus = config.check_pin(passphrase_pin,None, 0)
                 if passphrase_pin == curpin: 
                     await show_pin_already_used_window(ctx)
                 else:
-                 while True:  
+                #  while True:  
                    next_status = await  show_has_attached_window(ctx)
                    print(f"next_status = {next_status}")
                    if next_status == 1:
                        print("update update")
-                       passphrase_result = await show_attach_one_passphrase(ctx)   
-                       if passphrase_result == 0:
+                       while True:
+                            passphrase_result = await show_attach_one_passphrase(ctx)   
+                            if passphrase_result == 0:
                                print("User cancelled passphrase attachment, showing previous screen")
-                               continue  # 继续循环，重新显示上一个页面
-                       from trezor.ui.layouts import request_passphrase_on_device  
-                       passphrase = await request_passphrase_on_device(ctx, 50, min_len=1)  
-                       if passphrase != 0:
-                            print("passphrase ", passphrase)
-                            await show_save_your_passphrase_window(ctx)
-
-                            # curpin, salt = await request_pin_and_sd_salt(
-                            # ctx, _(i18n_keys.PASSPHRASE_ENTER_MAIN_PIN), allow_fingerprint=False
-                            # )
-                            # print(curpin)
-                            # if  config.check_pin(curpin, None,0) == False:
-                            #     await error_pin_invalid(ctx)
-                            curpin_str = str(curpin) if not isinstance(curpin, str) else curpin
-                            passphrase_pin_str = str(passphrase_pin) if not isinstance(passphrase_pin, str) else passphrase_pin
-                            passphrase_content_str = str(passphrase) if not isinstance(passphrase, str) else passphrase
-                            print("passphrasestr ", passphrase_content_str)
-                            remove_result, is_current =se_thd89.delete_pin_passphrase(passphrase_pin_str)
-                            save_result, save_status = se_thd89.save_pin_passphrase(
+                               return False
+                            #    continue  # 继续循环，重新显示上一个页面
+                            from trezor.ui.layouts import request_passphrase_on_device  
+                            passphrase = await request_passphrase_on_device(ctx, 50, min_len=1)  
+                            if passphrase is None:
+                                continue
+                            if passphrase != 0:
+                                print("passphrase ", passphrase)
+                                await show_save_your_passphrase_window(ctx)
+                                curpin_str = str(curpin) if not isinstance(curpin, str) else curpin
+                                passphrase_pin_str = str(passphrase_pin) if not isinstance(passphrase_pin, str) else passphrase_pin
+                                passphrase_content_str = str(passphrase) if not isinstance(passphrase, str) else passphrase
+                                print("passphrasestr ", passphrase_content_str)
+                                remove_result, is_current =se_thd89.delete_pin_passphrase(passphrase_pin_str)
+                                save_result, save_status = se_thd89.save_pin_passphrase(
                                             curpin_str,
                                             passphrase_pin_str,
                                             passphrase_content_str)
-                            if is_current:
-                                passphrase_pin_str = str(passphrase_pin) if not isinstance(passphrase_pin, str) else passphrase_pin
-                                pinstatus,result = config.check_pin(passphrase_pin_str,None, 2) 
+                                if is_current:
+                                    passphrase_pin_str = str(passphrase_pin) if not isinstance(passphrase_pin, str) else passphrase_pin
+                                    pinstatus,result = config.check_pin(passphrase_pin_str,None, 2) 
 
-                            print(f"save_result = {save_result}, save_status = {save_status}")
-                            if save_result == True:
-                                await show_passphrase_set_and_attached_to_pin_window(ctx)
-                                return True  
-                       break         
+                                print(f"save_result = {save_result}, save_status = {save_status}")
+                                if save_result == True:
+                                    await show_passphrase_set_and_attached_to_pin_window(ctx)
+                                    return True  
+                    #    break         
                    elif next_status == 0: #移除流程
                        print("remove remove")
                        remove_status = await show_confirm_remove_pin_window(ctx)
@@ -202,11 +195,11 @@ async def show_attach_to_pin_window(ctx: wire.Context):
                            else:
                                print(f"remove_result={remove_result}, is_current={is_current}")
                                return False 
-                           break
+                        #    break
                        elif remove_status == 0:
                            # 用户点击了"放弃"按钮，返回上一个页面
                            print("User cancelled removal")
-                           continue     
+                        #    continue     
                    else:                             # 返回
                           return False                                             
                     #    storage_success = se_thd89.save_pin_passphrase(
@@ -253,23 +246,67 @@ async def error_passphrase_pin_invalid(ctx: wire.Context):
 #PIN is not be attached    
 async def show_not_attached_window(ctx: wire.Context):
     screen = FullSizeWindow(
-        _(i18n_keys.PASSPHRASE__PIN_NOT_ATTACHED),
-        _(i18n_keys.PASSPHRASE__PIN_NOT_ATTACHED_DESC),
+        None,  # 不使用自动标题
+        None,  # 不使用自动副标题
         confirm_text=_(i18n_keys.PASSPHRASE__PIN_ATTACHED_ONE),
         # cancel_text=_(i18n_keys.BUTTON__BACK),
         anim_dir=0,
     )
-    screen.add_nav_back()
-    processing = False
-    def nav_back_clicked(e):
+    
+    # 添加关闭按钮
+    close_btn = lv.btn(screen)
+    close_btn.set_size(48, 48)
+    close_btn.align(lv.ALIGN.TOP_RIGHT, -12, 56)
+    close_btn.set_style_bg_color(lv_colors.BLACK, 0)
+    close_btn.set_style_bg_opa(0, 0)
+    close_btn.set_style_border_width(0, 0)
+    close_btn.set_style_shadow_width(0, 0)
+    close_btn.add_flag(lv.obj.FLAG.CLICKABLE) 
+    close_btn.set_ext_click_area(100)
+
+    close_img = lv.img(close_btn)
+    close_img.set_src("A:/res/nav-icon.png")
+    close_img.center()
+
+    # 手动创建标题
+    title_label = lv.label(screen.content_area)
+    title_label.set_text(_(i18n_keys.PASSPHRASE__PIN_NOT_ATTACHED))
+    title_label.set_style_text_font(font_GeistSemiBold64, 0)  # 使用GeistSemiBold64字体
+    title_label.set_style_text_color(lv_colors.WHITE, 0)
+    title_label.set_style_text_letter_space(-6, 0)
+    title_label.set_style_text_line_space(-5, 0)
+    title_label.set_long_mode(lv.label.LONG.WRAP)
+    title_label.set_size(456, lv.SIZE.CONTENT)  # 宽度保持456，但通过对齐方式实现12px边距
+    title_label.align(lv.ALIGN.TOP_MID, 0, 72)  # 水平居中，距离顶部80px（增加8px，从72px到80px）
+
+    # 如果已经有副标题，先移除它
+    if hasattr(screen, "subtitle"):
+        screen.subtitle.delete()
+
+    # 手动创建副标题
+    subtitle_label = lv.label(screen.content_area)
+    subtitle_label.set_text(_(i18n_keys.PASSPHRASE__PIN_NOT_ATTACHED_DESC))
+    subtitle_label.set_style_text_font(font_GeistRegular30, 0)  # 使用GeistRegular30字体
+    subtitle_label.set_style_text_color(lv_colors.LIGHT_GRAY, 0)
+    subtitle_label.set_style_text_letter_space(-1, 0)
+    subtitle_label.set_style_text_line_space(-1, 0)
+    subtitle_label.set_long_mode(lv.label.LONG.WRAP)
+    subtitle_label.set_size(456, lv.SIZE.CONTENT)  # 宽度保持456，但通过对齐方式实现12px边距
+    subtitle_label.align_to(title_label, lv.ALIGN.OUT_BOTTOM_MID, 0, 16)
+
+    # 为关闭按钮添加事件处理程序
+    processing = False  # 防止重复处理
+
+    def on_close_clicked(e):
         nonlocal processing
         if e.code == lv.EVENT.CLICKED and not processing:
-            processing = True  
-            screen.show_dismiss_anim() ###
-            screen.channel.publish(0)
-    if hasattr(screen, "nav_back"):
-        screen.nav_back.add_flag(lv.obj.FLAG.CLICKABLE)
-        screen.nav_back.add_event_cb(nav_back_clicked, lv.EVENT.CLICKED, None)
+            processing = True  # 设置标志防止重复处理
+            print("Close button clicked!")  # 调试输出
+            screen.show_dismiss_anim()
+            screen.channel.publish(0)  # 返回 0 表示取消并返回上一页
+
+    close_btn.add_event_cb(on_close_clicked, lv.EVENT.CLICKED, None)
+    
     screen.btn_layout_ver()
     result = await ctx.wait(screen.request())
     return result
@@ -278,29 +315,68 @@ async def show_not_attached_window(ctx: wire.Context):
 
 async def show_has_attached_window(ctx: wire.Context):
     screen = FullSizeWindow(
-        _(i18n_keys.PASSPHRASE__PIN_ATTACHED),
-        _(i18n_keys.PASSPHRASE__PIN_ATTACHED_DESC),
+        None,  # 不使用自动标题
+        None,  # 不使用自动副标题
         confirm_text=_(i18n_keys.PASSPHRASE__PIN_UPDATE),
         cancel_text=_(i18n_keys.PASSPHRASE__PIN_REMOVE),
         anim_dir=0,
     )
-    screen.add_nav_back()
-    screen.btn_no.enable(lv_colors.ONEKEY_RED_1, text_color=lv_colors.BLACK)
+    
+    # 添加关闭按钮
+    close_btn = lv.btn(screen)
+    close_btn.set_size(48, 48)
+    close_btn.align(lv.ALIGN.TOP_RIGHT, -12, 56)
+    close_btn.set_style_bg_color(lv_colors.BLACK, 0)
+    close_btn.set_style_bg_opa(0, 0)
+    close_btn.set_style_border_width(0, 0)
+    close_btn.set_style_shadow_width(0, 0)
+    close_btn.add_flag(lv.obj.FLAG.CLICKABLE) 
+    close_btn.set_ext_click_area(100)
 
-    processing = False
+    close_img = lv.img(close_btn)
+    close_img.set_src("A:/res/nav-icon.png")
+    close_img.center()
 
-    def nav_back_clicked(e):
+    # 手动创建标题
+    title_label = lv.label(screen.content_area)
+    title_label.set_text(_(i18n_keys.PASSPHRASE__PIN_ATTACHED))
+    title_label.set_style_text_font(font_GeistSemiBold64, 0)  # 使用GeistSemiBold64字体
+    title_label.set_style_text_color(lv_colors.WHITE, 0)
+    title_label.set_style_text_letter_space(-6, 0)
+    title_label.set_style_text_line_space(-5, 0)
+    title_label.set_long_mode(lv.label.LONG.WRAP)
+    title_label.set_size(456, lv.SIZE.CONTENT)  # 宽度保持456，但通过对齐方式实现12px边距
+    title_label.align(lv.ALIGN.TOP_MID, 0, 80)  # 水平居中，距离顶部80px
+
+    # 如果已经有副标题，先移除它
+    if hasattr(screen, "subtitle"):
+        screen.subtitle.delete()
+
+    # 手动创建副标题
+    subtitle_label = lv.label(screen.content_area)
+    subtitle_label.set_text(_(i18n_keys.PASSPHRASE__PIN_ATTACHED_DESC))
+    subtitle_label.set_style_text_font(font_GeistRegular30, 0)  # 使用GeistRegular30字体
+    subtitle_label.set_style_text_color(lv_colors.LIGHT_GRAY, 0)
+    subtitle_label.set_style_text_letter_space(-3, 0)
+    subtitle_label.set_style_text_line_space(4, 0)
+    subtitle_label.set_long_mode(lv.label.LONG.WRAP)
+    subtitle_label.set_size(456, lv.SIZE.CONTENT)  # 宽度保持456，但通过对齐方式实现12px边距
+    subtitle_label.align_to(title_label, lv.ALIGN.OUT_BOTTOM_MID, 0, 16)
+
+    # 为关闭按钮添加事件处理程序
+    processing = False  # 防止重复处理
+
+    def on_close_clicked(e):
         nonlocal processing
         if e.code == lv.EVENT.CLICKED and not processing:
             processing = True  # 设置标志防止重复处理
+            print("Close button clicked!")  # 调试输出
             screen.show_dismiss_anim()
-            screen.channel.publish(-1)
+            screen.channel.publish(-1)  # 返回 -1 表示取消并返回上一页
 
-    if hasattr(screen, "nav_back"):
-        screen.nav_back.add_flag(lv.obj.FLAG.CLICKABLE)
-        screen.nav_back.add_event_cb(nav_back_clicked, lv.EVENT.CLICKED, None)
-
-    # screen.btn_layout_ver()
+    close_btn.add_event_cb(on_close_clicked, lv.EVENT.CLICKED, None)
+    
+    screen.btn_no.enable(lv_colors.ONEKEY_RED_1, text_color=lv_colors.BLACK)
 
     result = await ctx.wait(screen.request())
     return result
@@ -347,11 +423,13 @@ async def show_confirm_remove_pin_window(ctx: wire.Context):
     screen = FullSizeWindow(
         _(i18n_keys.PASSPHRASE__REMOVE),
         _(i18n_keys.PASSPHRASE__REMOVE_DESC),
-        confirm_text=_(i18n_keys.PASSPHRASE__UNDERSTAND),
+        confirm_text=_(i18n_keys.BUTTON__REMOVE),
         cancel_text=_(i18n_keys.BUTTON__CANCEL),
         icon_path="A:/res/warning.png",
         anim_dir=0,
     )
+    # 设置确认按钮为红底黑字
+    screen.btn_yes.enable(lv_colors.ONEKEY_RED_1, text_color=lv_colors.BLACK)
     result = await ctx.wait(screen.request())
     return result
 
@@ -498,7 +576,8 @@ async def show_pin_input_screen(ctx: wire.Context):
     close_btn.set_style_bg_opa(0, 0)
     close_btn.set_style_border_width(0, 0)
     close_btn.set_style_shadow_width(0, 0)
-    close_btn.add_flag(lv.obj.FLAG.CLICKABLE)  # 确保按钮可点击
+    close_btn.add_flag(lv.obj.FLAG.CLICKABLE) 
+    close_btn.set_ext_click_area(100)
 
     close_img = lv.img(close_btn)
     close_img.set_src("A:/res/nav-icon.png")
@@ -509,11 +588,11 @@ async def show_pin_input_screen(ctx: wire.Context):
     title_label.set_text(_(i18n_keys.PASSPHRASE__ATTACH_TO_PIN))
     title_label.set_style_text_font(font_GeistSemiBold64, 0)  # 使用GeistSemiBold64字体
     title_label.set_style_text_color(lv_colors.WHITE, 0)
-    title_label.set_style_text_letter_space(-3, 0)
-    title_label.set_style_text_line_space(-8, 0)
+    title_label.set_style_text_letter_space(-6, 0)
+    title_label.set_style_text_line_space(-5, 0)
     title_label.set_long_mode(lv.label.LONG.WRAP)
-    title_label.set_size(456, lv.SIZE.CONTENT)
-    title_label.align(lv.ALIGN.TOP_LEFT, 28, 72)  # 水平方向相对屏幕左边缘32像素
+    title_label.set_size(456, lv.SIZE.CONTENT)  # 宽度保持456，但通过对齐方式实现12px边距
+    title_label.align(lv.ALIGN.TOP_MID, 0, 72)  # 水平居中，距离顶部72px
 
     # 如果已经有副标题，先移除它
     if hasattr(screen, "subtitle"):
@@ -525,9 +604,9 @@ async def show_pin_input_screen(ctx: wire.Context):
     subtitle_label.set_style_text_font(font_GeistRegular30, 0)  # 使用GeistRegular30字体
     subtitle_label.set_style_text_color(lv_colors.LIGHT_GRAY, 0)
     subtitle_label.set_style_text_letter_space(-1, 0)
-    subtitle_label.set_style_text_line_space(4, 0)
+    subtitle_label.set_style_text_line_space(-1, 0)
     subtitle_label.set_long_mode(lv.label.LONG.WRAP)
-    subtitle_label.set_size(456, lv.SIZE.CONTENT)
+    subtitle_label.set_size(456, lv.SIZE.CONTENT)  # 宽度保持456，但通过对齐方式实现12px边距
     subtitle_label.align_to(title_label, lv.ALIGN.OUT_BOTTOM_MID, 0, 16)
 
     # 创建 PIN 输入字段容器
@@ -538,17 +617,15 @@ async def show_pin_input_screen(ctx: wire.Context):
     pin_container.set_style_border_width(0, 0)
     pin_container.set_style_pad_all(0, 0)
 
-    # 添加设备示意图 - 调整位置到确认按钮上方
-    device_img = lv.img(screen.content_area)
-    device_img.set_src("A:/res/attach_to_pin_dot_group.png")
-    # 将设备示意图对齐到确认按钮上方
-    if hasattr(screen, "btn_yes"):
-        device_img.align_to(screen.btn_yes, lv.ALIGN.OUT_TOP_MID, 0, 0)  # 紧贴确认按钮顶部
-
-    # 使用合并后的单一图片 - 调整位置到device_img上方24px
+    # 使用合并后的单一图片 - 位于副标题下方
     pin_img = lv.img(pin_container)
     pin_img.set_src("A:/res/attach_to_pin_display.png")  # 使用新的合并图片
-    pin_img.align_to(device_img, lv.ALIGN.OUT_TOP_MID, 0, -24)  # 在device_img上方24px
+    pin_img.align_to(subtitle_label, lv.ALIGN.OUT_BOTTOM_MID, 0, 48)  # 在副标题下方24px
+
+    # 添加设备示意图 - 位于pin_img下方
+    device_img = lv.img(screen.content_area)
+    device_img.set_src("A:/res/attach_to_pin_dot_group.png")
+    device_img.align_to(pin_img, lv.ALIGN.OUT_BOTTOM_MID, 0, 24)  # 在pin_img下方24px
 
     # 为关闭按钮添加事件处理程序
     processing = False  # 防止重复处理

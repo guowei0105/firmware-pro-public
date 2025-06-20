@@ -222,7 +222,7 @@ async def verify_user_pin(
             print("[DEBUG] Retry PIN input received")
         except Exception as e:
             print(f"[ERROR] Exception during retry PIN request: {type(e).__name__}: {e}")
-            raise
+            raise wire.PinCancelled("cancle")
 
         try:
             if not config.is_unlocked():  # 如果配置未解锁
@@ -235,7 +235,7 @@ async def verify_user_pin(
                 print(f"[DEBUG] Retry PIN check result: {verified}")
         except Exception as e:
             print(f"[ERROR] Exception during retry verification: {type(e).__name__}: {e}")
-            raise
+            raise wire.PinCancelled("cal cale ..")
 
         if verified:  # 如果验证成功
             if usertype == 3:

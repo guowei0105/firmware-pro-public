@@ -22,6 +22,8 @@ class PassphraseRequest(FullSizeWindow):
         if result is not None:
             self.keyboard.ta.set_text(result)
             self.keyboard.ta.set_cursor_pos(lv.TEXTAREA_CURSOR.LAST)
+            self.keyboard.update_ok_button_state()
+            self.keyboard.update_count_tips()
         self.keyboard.add_event_cb(self.on_ready, lv.EVENT.READY, None)
 
         self.nav_back.add_event_cb(self.on_cancel, lv.EVENT.CLICKED, None)
