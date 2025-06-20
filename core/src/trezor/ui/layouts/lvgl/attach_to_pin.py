@@ -288,8 +288,8 @@ async def show_not_attached_window(ctx: wire.Context):
     subtitle_label.set_text(_(i18n_keys.PASSPHRASE__PIN_NOT_ATTACHED_DESC))
     subtitle_label.set_style_text_font(font_GeistRegular30, 0)  # 使用GeistRegular30字体
     subtitle_label.set_style_text_color(lv_colors.LIGHT_GRAY, 0)
-    subtitle_label.set_style_text_letter_space(-1, 0)
-    subtitle_label.set_style_text_line_space(-1, 0)
+    subtitle_label.set_style_text_letter_space(-2, 0)
+    subtitle_label.set_style_text_line_space(5, 0)
     subtitle_label.set_long_mode(lv.label.LONG.WRAP)
     subtitle_label.set_size(456, lv.SIZE.CONTENT)  # 宽度保持456，但通过对齐方式实现12px边距
     subtitle_label.align_to(title_label, lv.ALIGN.OUT_BOTTOM_MID, 0, 16)
@@ -357,8 +357,8 @@ async def show_has_attached_window(ctx: wire.Context):
     subtitle_label.set_text(_(i18n_keys.PASSPHRASE__PIN_ATTACHED_DESC))
     subtitle_label.set_style_text_font(font_GeistRegular30, 0)  # 使用GeistRegular30字体
     subtitle_label.set_style_text_color(lv_colors.LIGHT_GRAY, 0)
-    subtitle_label.set_style_text_letter_space(-3, 0)
-    subtitle_label.set_style_text_line_space(4, 0)
+    subtitle_label.set_style_text_letter_space(-2, 0)
+    subtitle_label.set_style_text_line_space(5, 0)
     subtitle_label.set_long_mode(lv.label.LONG.WRAP)
     subtitle_label.set_size(456, lv.SIZE.CONTENT)  # 宽度保持456，但通过对齐方式实现12px边距
     subtitle_label.align_to(title_label, lv.ALIGN.OUT_BOTTOM_MID, 0, 16)
@@ -603,8 +603,8 @@ async def show_pin_input_screen(ctx: wire.Context):
     subtitle_label.set_text(_(i18n_keys.ITEM__ATTACH_TO_PIN_DESC))
     subtitle_label.set_style_text_font(font_GeistRegular30, 0)  # 使用GeistRegular30字体
     subtitle_label.set_style_text_color(lv_colors.LIGHT_GRAY, 0)
-    subtitle_label.set_style_text_letter_space(-1, 0)
-    subtitle_label.set_style_text_line_space(-1, 0)
+    subtitle_label.set_style_text_letter_space(-2, 0)
+    subtitle_label.set_style_text_line_space(5, 0)
     subtitle_label.set_long_mode(lv.label.LONG.WRAP)
     subtitle_label.set_size(456, lv.SIZE.CONTENT)  # 宽度保持456，但通过对齐方式实现12px边距
     subtitle_label.align_to(title_label, lv.ALIGN.OUT_BOTTOM_MID, 0, 16)

@@ -1195,6 +1195,7 @@ async def request_pin_on_device(
         min_len = 6
     else:
         min_len = 4
+    print("min_len min_len min_len",min_len)
     pinscreen = InputPin(
         title=prompt, subtitle=subprompt, allow_fingerprint=allow_fingerprint,standy_wall_only=standy_wall_only,min_len = min_len
     )

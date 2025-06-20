@@ -5186,7 +5186,7 @@ class PassphraseScreen(AnimScreen):
         desc_height = self.description.get_height()
         
         # 计算advance_label的位置（在description下方16像素）
-        advance_y_offset = 16
+        advance_y_offset = 40
         
         # 重新对齐advance_label
         self.advance_label.align_to(self.description, lv.ALIGN.OUT_BOTTOM_LEFT, 0, advance_y_offset)

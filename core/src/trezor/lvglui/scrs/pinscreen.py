@@ -226,7 +226,7 @@ class InputPin(FullSizeWindow):
         self.subtitle.set_text(subtitle)
         self._show_fingerprint_prompt_if_necessary()
         self.clear_flag(lv.obj.FLAG.SCROLLABLE)
-        self.keyboard = NumberKeyboard(self)
+        self.keyboard = NumberKeyboard(self,min_len=self.min_len )
         self.keyboard.add_event_cb(self.on_event, lv.EVENT.READY, None)
         self.keyboard.add_event_cb(self.on_event, lv.EVENT.CANCEL, None)
         self.keyboard.add_event_cb(self.on_event, lv.EVENT.VALUE_CHANGED, None)
