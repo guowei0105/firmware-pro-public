@@ -108,14 +108,12 @@ async def verify_user_pin(
 ) -> None:
     from storage import device
     pin_use_type = int(pin_use_type)
-    # 如果密码短语功能未启用，强制 pin_use_type 为 0（只验证主 PIN）
     if not device.is_passphrase_enabled():
         pin_use_type = 0
-        # 再次确保是整数类型
         pin_use_type = int(pin_use_type)
     if pin_use_type is 3:
        prompt = f"{_(i18n_keys.TITLE__ENTER_HIDDEN_WALLET_PIN)}"
-    last_unlock = _get_last_unlock_time()  # 获取上次解锁时间
+    last_unlock = _get_last_unlock_time()
     if (
         cache_time_ms
         and last_unlock
@@ -125,36 +123,33 @@ async def verify_user_pin(
     ):
         return
 
-    print(f"[DEBUG] Has PIN: {config.has_pin()}, PIN remaining attempts: {config.get_pin_rem()}")
-    if config.has_pin():  # 如果设置了PIN码
-        print("[DEBUG] Device has PIN, requesting PIN input")
-        from trezor.ui.layouts import request_pin_on_device  # 导入PIN码请求界面
+    if config.has_pin():
+        from trezor.ui.layouts import request_pin_on_device
         try:
-            pin = await request_pin_on_device(  # 在设备上请求PIN码
+            pin = await request_pin_on_device( 
                 ctx,
                 prompt,
-                config.get_pin_rem(),  # 获取剩余尝试次数
+                config.get_pin_rem(), 
                 allow_cancel,
                 allow_fingerprint,
                 close_others=close_others,
                 standy_wall_only = standy_wall_only,
                 attach_wall_only = attach_wall_only,
             )
-            config.ensure_not_wipe_code(pin)  # 确保输入的不是擦除码
+            config.ensure_not_wipe_code(pin)
         except Exception as e:
             print(f"[ERROR] Exception during PIN request: {type(e).__name__}: {e}")
-            raise
+            raise wire.PinCancelled("cancle")
     else:
         pin = ""
     try:
-        salt = await request_sd_salt(ctx)  # 请求SD卡盐值
-        print("[DEBUG] SD salt received")
-    except SdCardUnavailable as e:  # 如果SD卡不可用
+        salt = await request_sd_salt(ctx)  
+    except SdCardUnavailable as e:  
         print(f"[ERROR] SD card unavailable: {e}")
-        raise wire.PinCancelled("SD salt is unavailable")  # 抛出PIN取消异常
+        raise wire.PinCancelled("SD salt is unavailable") 
     except Exception as e:
         print(f"[ERROR] Unexpected error requesting SD salt: {type(e).__name__}: {e}")
-        raise
+        raise wire.PinCancelled("cancle")
 
     if not config.is_unlocked():  # 如果配置未解锁
         print(f"[DEBUG] Attempting to unlock with pin_use_type={pin_use_type}")
@@ -176,7 +171,7 @@ async def verify_user_pin(
             #     print(f"[DEBUG] PIN check result: {verified}")
         except Exception as e:
             print(f"[ERROR] Exception during unlock: {type(e).__name__}: {e}")
-            raise
+            raise wire.PinCancelled("cancle")
     else:
         print("[DEBUG] Device already unlocked, checking PIN")
         try:
@@ -184,7 +179,7 @@ async def verify_user_pin(
             print(f"[DEBUG] PIN check result: {verified}")
         except Exception as e:
             print(f"[ERROR] Exception during PIN check: {type(e).__name__}: {e}")
-            raise
+            raise wire.PinCancelled("cancle")
 
     if verified:  # 如果验证成功
         print("[DEBUG] PIN verification successful")

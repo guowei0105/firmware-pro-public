@@ -78,14 +78,15 @@ async def _request_on_host(ctx: wire.Context) -> str:  # 在主机上请求密�
          ctx, "passphrase_device", code=ButtonRequestType.AttachPin
         ) 
         lock_device()
-        try:
-            await unlock_device(ctx, pin_use_type=3,attach_wall_only=True) #后面要改成只能输入passphrase pin那种的  需要更改文案
-            storage.cache.start_session()
-            return ""
-        except wire.PinCancelled:
-            pass
-
+        #try:
+        await unlock_device(ctx, pin_use_type=3,attach_wall_only=True) 
+        storage.cache.start_session()
+        print("on_device_attach_pin null")
         return ""
+        # except wire.PinCancelled:
+        #     print("on_device_attach_pin cancell exce")
+        #     raise wire.PinCancelled("Passphrase cancelled")
+
 
     if ack.on_device:  # 如果主机请求在设备上输入
         from trezor.ui.layouts import request_passphrase_on_device  # 导入设备上请求密码短语的布局

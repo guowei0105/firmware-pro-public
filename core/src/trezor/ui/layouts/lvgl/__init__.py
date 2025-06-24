@@ -718,6 +718,9 @@ async def confirm_blob(
     icon: str | None = "A:/res/warning.png",  # TODO cleanup @ redesign
     icon_color: int = ui.GREEN,  # TODO cleanup @ redesign
     ask_pagination: bool = False,
+    subtitle: str | None = None,
+    item_key: str | None = None,
+    item_value: str | None = None,
 ) -> None:
     """Confirm data blob.
 
@@ -743,6 +746,9 @@ async def confirm_blob(
         data_str,
         icon_path=icon,
         primary_color=ctx.primary_color,
+        subtitle=subtitle,
+        item_key=item_key,
+        item_value=item_value,
     )
     return await raise_if_cancelled(interact(ctx, blob, br_type, br_code))
 
@@ -934,10 +940,8 @@ async def confirm_metadata(
     description: str | None = None,
     hide_continue: bool = False,
     hold: bool = False,
-    param_font: int = ui.BOLD,
-    icon: str = ui.ICON_SEND,  # TODO cleanup @ redesign
-    icon_color: int = ui.GREEN,  # TODO cleanup @ redesign
-    larger_vspace: bool = False,  # TODO cleanup @ redesign
+    icon: str | None = None,
+    icon_color: int | None = None,
 ) -> None:
     from trezor.lvglui.scrs.template import ConfirmMetaData
 
@@ -1165,7 +1169,6 @@ async def request_pin_on_device(
     attach_wall_only: bool = False,
 ) -> str:
     
-    print("standy_wall_only standy_wall_only standy_wall_only1111",standy_wall_only)
     if not attach_wall_only:
         await button_request(
         ctx, "pin_device", code=ButtonRequestType.PinEntry, close_others=close_others
@@ -1174,7 +1177,6 @@ async def request_pin_on_device(
         await button_request(
         ctx, "pin_device", code=ButtonRequestType.AttachPin, close_others=close_others
         )
-    print("standy_wall_only standy_wall_only standy_wall_only",standy_wall_only)
     from storage import device
     
     if attempts_remaining is None or attempts_remaining == device.PIN_MAX_ATTEMPTS:
@@ -1195,23 +1197,17 @@ async def request_pin_on_device(
         min_len = 6
     else:
         min_len = 4
-    print("min_len min_len min_len",min_len)
     pinscreen = InputPin(
         title=prompt, subtitle=subprompt, allow_fingerprint=allow_fingerprint,standy_wall_only=standy_wall_only,min_len = min_len
     )
     result = await ctx.wait(pinscreen.request())
-    print("not  111 pin calncelled ......",result)
+    print("request_pin_on_device begin",result)
     if not result:
+        print("request_pin_on_device PinCancelled")
         if not allow_cancel:
-            print("2222pin calncelled ......")
             from trezor import loop
-            print("3333pin calncelled ......")
             loop.clear()
-            print("pin calncelled ......")
-        print("pin calncelled ......final")
         raise wire.PinCancelled
-    else: 
-        print("not pin calncelled ......",result)
     assert isinstance(result, str)
     print("request_pin_on_device final none")
     return result
@@ -1311,6 +1307,24 @@ async def confirm_sol_transfer(
         await raise_if_cancelled(
             interact(ctx, screen, "sol_transfer", ButtonRequestType.ProtectCall)
         )
+
+
+async def confirm_turbo(
+    ctx: wire.GenericContext, message_text: str, chain_name: str
+) -> None:
+
+    from trezor.lvglui.scrs.template import Turbo
+
+    screen = Turbo(
+        message_text,
+        chain_name,
+        ctx.primary_color,
+        ctx.icon_path,
+    )
+    print(ctx.icon_path)
+    await raise_if_cancelled(
+        interact(ctx, screen, "turbo", ButtonRequestType.ProtectCall)
+    )
 
 
 async def confirm_sol_create_ata(
@@ -1931,6 +1945,7 @@ async def cosmos_require_show_more(
     value: str | None,
     address: str | None,
     amount: str | None,
+    chain_name: str | None = None,
     br_code: ButtonRequestType = ButtonRequestType.ConfirmOutput,
 ) -> bool:
     from trezor.lvglui.scrs.template import CosmosTransactionOverview
@@ -1942,7 +1957,7 @@ async def cosmos_require_show_more(
         striped_amount, striped = strip_amount(amount)
         title = _(i18n_keys.TITLE__SEND_MULTILINE).format(striped_amount)
     else:
-        title = _(i18n_keys.TITLE__SIGN_STR_TRANSACTION).format("Cosmos")
+        title = _(i18n_keys.TITLE__SIGN_STR_TRANSACTION).format(chain_name or "Cosmos")
     res = await interact(
         ctx,
         CosmosTransactionOverview(
@@ -2058,8 +2073,8 @@ async def confirm_cosmos_sign_common(
     )
 
     for key, value in msgs_item.items():
-        if len(value) > 80:
-            screen = CosmosLongValue(key, value, ctx.primary_color)
+        if len(str(value)) > 80:
+            screen = CosmosLongValue(key, str(value), ctx.primary_color)
             await raise_if_cancelled(
                 interact(
                     ctx, screen, "cosmos_sign_common", ButtonRequestType.ProtectCall

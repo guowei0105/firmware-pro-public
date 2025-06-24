@@ -1,6 +1,7 @@
+import gc
 import utime
 
-from trezor import utils
+from trezor import motor, utils
 from trezor.enums import InputScriptType
 from trezor.lvglui.scrs.components.button import NormalButton
 from trezor.lvglui.scrs.components.pageable import PageAbleMessage
@@ -10,11 +11,11 @@ from ..lv_colors import lv_colors
 from ..lv_symbols import LV_SYMBOLS
 from . import (
     font_GeistMono28,
+    font_GeistMono38,
     font_GeistRegular20,
     font_GeistRegular30,
     font_GeistSemiBold26,
     font_GeistSemiBold38,
-    font_GeistSemiBold48,
 )
 from .common import FullSizeWindow, lv
 from .components.banner import LEVEL, Banner
@@ -80,11 +81,14 @@ class Address(FullSizeWindow):
             del self.subtitle
         self.btn_no.label.set_text(_(i18n_keys.BUTTON__QRCODE))
 
-        self.item_addr = DisplayItem(self.content_area, None, self.address, radius=40)
+        self.item_addr = DisplayItem(
+            self.content_area, None, self.format_address(self.address), radius=40
+        )
         self.item_addr.add_style(StyleWrapper().pad_ver(24), 0)
         self.item_addr.label.add_style(
             StyleWrapper()
-            .text_font(font_GeistSemiBold48)
+            # .text_font(font_GeistSemiBold48)
+            .text_font(font_GeistMono38)
             .text_line_space(-2)
             .text_color(lv_colors.LIGHT_GRAY),
             0,
@@ -125,6 +129,15 @@ class Address(FullSizeWindow):
                 xpub,
                 "A:/res/group-icon-more.png",
             )
+
+    def format_address(self, address: str) -> str:
+        address = address.replace(" ", "")
+        groups = [address[i : i + 4] for i in range(0, len(address), 4)]
+
+        lines = [" ".join(groups[i : i + 4]) for i in range(0, len(groups), 4)]
+        formatted_address = "\n".join(lines)
+
+        return formatted_address
 
     def show_qr_code(self, has_tips: bool = False):
         self.current = self.SHOW_TYPE.QRCODE
@@ -426,8 +439,8 @@ class AddressOffline(FullSizeWindow):
         self.item_group_body = DisplayItem(
             self.group_address,
             None,
-            content=self.address,
-            font=font_GeistSemiBold48,
+            self.format_address(self.address),
+            font=font_GeistMono38,
         )
         self.group_address.add_dummy()
 
@@ -442,6 +455,15 @@ class AddressOffline(FullSizeWindow):
                 StyleWrapper().bg_color(lv_colors.ONEKEY_GRAY_3),
                 0,
             )
+
+    def format_address(self, address: str) -> str:
+        address = address.replace(" ", "")
+        groups = [address[i : i + 4] for i in range(0, len(address), 4)]
+
+        lines = [" ".join(groups[i : i + 4]) for i in range(0, len(groups), 4)]
+        formatted_address = "\n".join(lines)
+
+        return formatted_address
 
     def show_qr_code(self, has_tips: bool = False):
         self.current = self.SHOW_TYPE.QRCODE
@@ -1306,10 +1328,13 @@ class BlobDisPlay(FullSizeWindow):
         icon_path: str = "A:/res/warning.png",
         anim_dir: int = 1,
         primary_color=lv_colors.ONEKEY_GREEN,
+        subtitle: str | None = None,
+        item_key: str | None = None,
+        item_value: str | None = None,
     ):
         super().__init__(
             title,
-            None,
+            subtitle,
             _(i18n_keys.BUTTON__CONTINUE),
             _(i18n_keys.BUTTON__CANCEL),
             icon_path=icon_path,
@@ -1318,9 +1343,14 @@ class BlobDisPlay(FullSizeWindow):
         )
         self.primary_color = primary_color
         self.container = ContainerFlexCol(
-            self.content_area, self.title, pos=(0, 40), padding_row=0
+            self.content_area,
+            self.subtitle if subtitle else self.title,
+            pos=(0, 40),
+            padding_row=0,
         )
         self.container.add_dummy()
+        if item_key and item_value:
+            self.item_key_value = DisplayItem(self.container, item_key, item_value)
         self.item_data = DisplayItem(self.container, description, content[:240])
         self.container.add_dummy()
         self.long_message = False
@@ -2448,7 +2478,7 @@ class PassphraseDisplayConfirm(FullSizeWindow):
 
     def show_unload_anim(self):
         self.clean()
-        self.destroy(10)
+        self.destroy(200)
 
 
 class SolBlindingSign(FullSizeWindow):
@@ -4016,8 +4046,8 @@ class CosmosSignContent(FullSizeWindow):
         )
         self.container.add_dummy()
         for key, value in msgs_item.items():
-            if len(value) <= 80:
-                self.item = DisplayItem(self.container, key, value)
+            if len(str(value)) <= 80:
+                self.item = DisplayItem(self.container, key, str(value))
         self.container.add_dummy()
 
 
@@ -4569,10 +4599,8 @@ class UrResponse(FullSizeWindow):
             anim_dir=0,
         )
         self.btn_yes.enable(lv_colors.ONEKEY_GRAY_3, text_color=lv_colors.WHITE)
-        import gc
 
         gc.collect()
-        gc.threshold(int(18248 * 1.5))  # type: ignore["threshold" is not a known member of module]
         self.qr_code = qr_code
         self.encoder = encoder
         self.qr = QRCode(
@@ -4619,7 +4647,7 @@ class ErrorFeedback(FullSizeWindow):
         )
 
     def destroy(self):
-        return super().destroy(0)
+        return super().destroy(100)
 
 
 ##################
@@ -4743,10 +4771,8 @@ class ConnectWalletTutorial(FullSizeWindow):
                 anim_dir=0,
                 cancel_text=_(i18n_keys.BUTTON__CLOSE),
             )
-            import gc
 
             gc.collect()
-            gc.threshold(int(18248 * 1.5))  # type: ignore["threshold" is not a known member of module]
             self.qr = QRCode(self.content_area, qr_content, logo_path)
             self.qr.align_to(self.content_area, lv.ALIGN.TOP_MID, 0, 16)
 
@@ -4944,3 +4970,142 @@ class GnosisSafeTxDetails(FullSizeWindow):
                     cancel_text=None,
                     page_size=351,
                 )
+
+
+class Turbo(FullSizeWindow):
+    def __init__(
+        self,
+        message_text=_(i18n_keys.MSG__UNKNOWN_MESSAGE),
+        chain_name=_(i18n_keys.MSG__UNKNOWN_NETWORK),
+        primary_color=lv_colors.ONEKEY_GREEN,
+        icon_path="A:/res/turbo-send.png",
+    ):
+        super().__init__(
+            None,
+            None,
+        )
+
+        gc.threshold(int(18248 * 1.5))  # type: ignore["threshold" is not a known member of module]
+        gc.collect()
+
+        self.gif_done_triggered = False
+
+        self.content_area.set_style_max_height(800, 0)
+        self.content_area.set_size(480, 800)
+        self.content_area.align(lv.ALIGN.TOP_MID, 0, 0)
+        self.content_area.add_style(
+            StyleWrapper().bg_color(lv_colors.ONEKEY_PURPLE_1),
+            0,
+        )
+
+        from .components.navigation import GeneralNavigation
+
+        self.nav_back = GeneralNavigation(self.content_area, img="A:/res/cancel.png")
+        self.nav_back.align(lv.ALIGN.TOP_RIGHT, 0, 44)
+        self.add_event_cb(self.eventhandler, lv.EVENT.CLICKED, None)
+
+        self.title = lv.img(self.content_area)
+        self.title.set_src("A:/res/turbo-header.png")
+        self.title.align(lv.ALIGN.TOP_MID, 0, 130)
+
+        from .components.listitem import ShortInfoItem
+
+        self.info_item = ShortInfoItem(
+            parent=self.content_area,
+            img_src=icon_path,
+            title_text=message_text,
+            subtitle_text=chain_name,
+            bg_color=lv_colors.WHITE,
+            border_color=lv_colors.WHITE,
+            icon_boarder_color=primary_color,
+        )
+        self.info_item.align_to(self.title, lv.ALIGN.OUT_BOTTOM_MID, 0, 50)
+
+        self.gif_loop = lv.gif(self.content_area)
+        self.gif_loop.set_src("A:/res/turbo-loop.gif")
+        self.gif_loop.align_to(self.info_item, lv.ALIGN.OUT_BOTTOM_MID, 0, 60)
+        self.gif_loop.set_loop_count(15)
+        self.gif_loop.add_event_cb(self._on_gif_loop_complete, lv.EVENT.READY, None)
+        gc.collect()
+
+        click_style = (
+            StyleWrapper()
+            .bg_opa(lv.OPA._30)
+            .bg_color(lv_colors.BLACK)
+            .border_opa(lv.OPA.TRANSP)
+            .radius(100)
+        )
+
+        self.gif_mask = lv.obj(self.content_area)
+        self.gif_mask.set_size(200, 200)
+        self.gif_mask.align_to(self.gif_loop, lv.ALIGN.CENTER, 0, 0)
+
+        self.gif_mask.add_style(
+            StyleWrapper().bg_opa(lv.OPA.TRANSP).radius(100).border_opa(lv.OPA.TRANSP),
+            0,
+        )
+
+        self.gif_mask.add_style(click_style, lv.STATE.PRESSED)
+
+        self.gif_mask.add_flag(lv.obj.FLAG.CLICKABLE)
+        self.gif_mask.add_event_cb(self.eventhandler, lv.EVENT.CLICKED, None)
+        self.gif_mask.add_event_cb(self.eventhandler, lv.EVENT.PRESSED, None)
+
+        self.tip_text = lv.label(self.content_area)
+        self.tip_text.set_text(_(i18n_keys.ITEM__TAP_TO_SEND))
+        self.tip_text.add_style(
+            StyleWrapper()
+            .text_font(font_GeistRegular20)
+            .text_color(lv_colors.LIGHT_GRAY)
+            .pad_hor(12)
+            .pad_ver(16),
+            0,
+        )
+        self.tip_text.align_to(self.gif_loop, lv.ALIGN.OUT_BOTTOM_MID, 0, -10)
+
+    def _on_gif_loop_complete(self, event_obj=None):
+        self.destroy()
+        self.channel.publish(0)
+
+    def _on_gif_click(self, event_obj=None):
+        if self.gif_done_triggered:
+            return
+
+        self.gif_done_triggered = True
+
+        self.gif_mask.clear_flag(lv.obj.FLAG.CLICKABLE)
+
+        if hasattr(self, "gif_loop"):
+            self.gif_loop.del_delayed(0)
+
+        self._start_completion_animation()
+
+    def _start_completion_animation(self):
+        self.gif_done = lv.gif(self.content_area)
+        self.gif_done.set_src("A:/res/turbo-done.gif")
+        self.gif_done.align_to(self.info_item, lv.ALIGN.OUT_BOTTOM_MID, 0, 60)
+        self.gif_done.set_loop_count(1)
+        self.gif_done.add_event_cb(self._on_completion_finished, lv.EVENT.READY, None)
+
+    def _on_completion_finished(self, event_obj=None):
+        self.destroy()
+        self.channel.publish(1)
+
+    def eventhandler(self, event_obj):
+        code = event_obj.code
+        target = event_obj.get_target()
+
+        if code == lv.EVENT.PRESSED:
+            gc.collect()
+            if target == self.gif_mask:
+                motor.vibrate(weak=True)
+        if code == lv.EVENT.CLICKED:
+            if utils.lcd_resume():
+                return
+
+            if target == self.nav_back.select_btn:
+                self.destroy(200)
+                self.channel.publish(0)
+            elif target == self.gif_mask:
+                motor.vibrate()
+                self._on_gif_click(event_obj)

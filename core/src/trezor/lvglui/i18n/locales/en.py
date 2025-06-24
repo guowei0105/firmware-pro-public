@@ -1001,7 +1001,7 @@ translations = [
     "Approve {name}",
     "Approve unlimited {name}",
     "Revoke {name}",
-    "Reading fingerprint from security chip...",
+    "Secure chip reading…",
     "Energy Rental",
     "To (Provider)",
     "Single-share",

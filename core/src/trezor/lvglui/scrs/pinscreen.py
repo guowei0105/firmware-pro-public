@@ -161,7 +161,7 @@ class InputNum(FullSizeWindow):
             self.channel.publish(0)
 
         self.clean()
-        self.destroy(500)
+        self.destroy(250)
 
 
 class InputPin(FullSizeWindow):
@@ -196,14 +196,9 @@ class InputPin(FullSizeWindow):
             0,
         )
         self.title.align(lv.ALIGN.TOP_MID, 0, 24)
-
-        # 根据是否是标准钱包提示来设置不同的样式
         
         standard_wallet_text = _(i18n_keys.CONTENT__PIN_FOR_STANDARD_WALLET)
-        print("subtitle:", subtitle)
-        print("standard_wallet_text:", standard_wallet_text)
         is_standard_wallet = subtitle == standard_wallet_text
-        print("is_standard_wallet:", is_standard_wallet)
         self.subtitle.add_style(
             StyleWrapper()
             .text_font(font_GeistRegular26)
@@ -217,9 +212,7 @@ class InputPin(FullSizeWindow):
             .text_align_center(),
             0,
         )
-        print("is_standard_wallet",is_standard_wallet)
         self.subtitle.set_text(subtitle)
-
         title_height = self.title.get_height()
         subtitle_y = (16 if is_standard_wallet else 24) if title_height > 60 else 70
         self.subtitle.align_to(self.title, lv.ALIGN.OUT_BOTTOM_MID, 0, subtitle_y)
@@ -240,20 +233,15 @@ class InputPin(FullSizeWindow):
         from apps.common import passphrase
         # if standy_wall_only :
         if subtitle == _(i18n_keys.CONTENT__PIN_FOR_STANDARD_WALLET) and  passphrase.is_passphrase_pin_enabled():
-            # 标准钱包提示不使用红色背景
             self.subtitle.set_style_bg_color(lv_colors.BLACK, 0)
             self.subtitle.align_to(self.title, lv.ALIGN.OUT_BOTTOM_MID, 0, 16)
         else:
-            # 其他提示（如错误信息）使用红色背景
             self.subtitle.set_style_bg_color(
                 lv_colors.ONEKEY_RED_2 if subtitle else lv_colors.BLACK, 0
             )
             self.subtitle.align_to(self.title, lv.ALIGN.OUT_BOTTOM_MID, 0, 24)
             
         self.subtitle.set_text(subtitle)
-        # title_height = self.title.get_height()
-        # subtitle_y = (32 if subtitle == _(i18n_keys.CONTENT__PIN_FOR_STANDARD_WALLET) else 40) if title_height > 60 else 70
-        # self.subtitle.align_to(self.title, lv.ALIGN.OUT_BOTTOM_MID, 0, subtitle_y)
         keyboard_text = self.keyboard.ta.get_text()
         if keyboard_text:
             if subtitle:
@@ -263,7 +251,6 @@ class InputPin(FullSizeWindow):
 
     def _show_fingerprint_prompt_if_necessary(self):
         from . import fingerprints
-
         if self.allow_fingerprint and fingerprints.is_available():
             self.fingerprint_prompt = lv.img(self.content_area)
             self.fingerprint_prompt.set_src("A:/res/fingerprint-prompt.png")
@@ -335,7 +322,7 @@ class InputPin(FullSizeWindow):
             self.channel.publish(0)
 
         self.clean()
-        self.destroy(200)
+        self.destroy(500)
 
 
 class InputLitePin(FullSizeWindow):

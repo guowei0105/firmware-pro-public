@@ -1001,7 +1001,7 @@ translations = [
     "Autorizar a {name}",
     "Aprobar ilimitado {name}",
     "Revocar {name}",
-    "Leyendo la huella digital del chip de seguridad...",
+    "Leyendo chip de forma segura…",
     "Alquiler de energía",
     "Para (Proveedor)",
     "Acción individual",

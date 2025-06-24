@@ -1,5 +1,6 @@
 from typing import TYPE_CHECKING
 
+from storage import device
 from trezor import wire
 from trezor.crypto.curve import ed25519
 from trezor.lvglui.scrs import lv
@@ -38,8 +39,14 @@ async def sign_unsafe_message(
     decoded_message = decode_message(message)
     address = str(PublicKey(signer_pub_key_bytes))
 
-    # display the decoded message to confirm
-    await confirm_sol_message(ctx, address, None, decoded_message, is_unsafe=True)
+    if device.is_turbomode_enabled() and not isinstance(ctx, wire.QRContext):
+        from trezor.lvglui.i18n import gettext as _, keys as i18n_keys
+        from trezor.ui.layouts.lvgl import confirm_turbo
+
+        await confirm_turbo(ctx, _(i18n_keys.MSG__SIGN_MESSAGE), "Solana")
+    else:
+        # display the decoded message to confirm
+        await confirm_sol_message(ctx, address, None, decoded_message, is_unsafe=True)
 
     signature = ed25519.sign(node.private_key(), message)
     return SolanaMessageSignature(signature=signature)

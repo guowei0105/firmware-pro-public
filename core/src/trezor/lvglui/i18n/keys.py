@@ -2200,7 +2200,7 @@ TITLE_APPROVE = 998
 TITLE_UNLIMITED = 999
 # Revoke {name}
 TITLE_REVOKE = 1000
-# Reading fingerprint from security chip...
+# Secure chip reading…
 MSG__READING_FINGERPRINT_FROM_SECURITY_CHIP = 1001
 # Energy Rental
 TITLE_ENERGY_RENTAL = 1002

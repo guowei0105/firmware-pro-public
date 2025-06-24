@@ -30,3 +30,9 @@
 [submodule "vendor/lvgl_mp"]
 	path = vendor/lvgl_mp
 	url = https://github.com/OneKeyHQ/lv_binding_micropython.git
+[submodule "vendor/vendor/lvgl_mp"]
+	path = vendor/vendor/lvgl_mp
+	url = https://github.com/OneKeyHQ/lv_binding_micropython.git
+[submodule "lvgl_mp"]
+	path = lvgl_mp
+	url = https://github.com/OneKeyHQ/lv_binding_micropython.git

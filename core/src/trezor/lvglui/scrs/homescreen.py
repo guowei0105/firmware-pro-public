@@ -36,6 +36,7 @@ from .components.listitem import (
     DisplayItemWithFont_30,
     DisplayItemWithFont_TextPairs,
     ImgGridItem,
+    ListItemWithLeadingCheckbox,
 )
 from .deviceinfo import DeviceInfoManager
 from .widgets.style import StyleWrapper
@@ -1753,6 +1754,7 @@ class ConnectWalletWays(Screen):
             elif target == self.by_usb:
                 ConnectWalletGuide("usb", self)
             elif target == self.by_qrcode:
+                gc.collect()
                 WalletList(self)
             else:
                 return
@@ -1959,10 +1961,17 @@ class WalletList(Screen):
             _(i18n_keys.CONTENT__COMING_SOON),
             left_img_src="A:/res/okx-logo-48.png",
         )
+        self.okx.add_style(
+            StyleWrapper().bg_color(lv_colors.ONEKEY_BLACK_5),
+            0,
+        )
         self.okx.text_layout_vertical(pad_top=17, pad_ver=20)
-        self.okx.disable()
+
+        self.okx.label_left.set_style_text_color(lv_colors.WHITE_2, 0)
+        self.okx.label_right.set_style_text_color(lv_colors.ONEKEY_GRAY_1, 0)
 
         self.add_event_cb(self.on_click, lv.EVENT.CLICKED, None)
+        self.okx.clear_flag(lv.obj.FLAG.CLICKABLE)
 
         if not device.is_passphrase_enabled() and not passphrase.is_passphrase_pin_enabled():
             from trezor.qr import gen_hd_key
@@ -1979,49 +1988,11 @@ class WalletList(Screen):
         if code == lv.EVENT.CLICKED:
             if target not in [self.onekey, self.mm, self.okx]:
                 return
+            gc.collect()
             if target == self.onekey:
-                from trezor.qr import gen_multi_accounts, get_encoder
-
-                if passphrase.is_enabled():
-                    encoder = retrieval_encoder()
-                else:
-                    encoder = get_encoder()
-                if encoder is None:
-                    workflow.spawn(
-                        gen_multi_accounts(
-                            lambda: lv.event_send(target, lv.EVENT.CLICKED, None)
-                        )
-                    )
-                    return
-                ConnectWallet(
-                    None,
-                    None,
-                    None,
-                    encoder=encoder,
-                    subtitle=_(i18n_keys.CONTENT__OPEN_ONEKEY_SCAN_THE_QRCODE),
-                )
-
+                self.connect_onekey(target)
             elif target == self.mm:
-                qr_data = (
-                    retrieval_hd_key()
-                    if device.is_passphrase_enabled()
-                    else get_hd_key()
-                )
-                if qr_data is None:
-                    from trezor.qr import gen_hd_key
-
-                    workflow.spawn(
-                        gen_hd_key(
-                            lambda: lv.event_send(target, lv.EVENT.CLICKED, None)
-                        )
-                    )
-                    return
-                ConnectWallet(
-                    _(i18n_keys.ITEM__METAMASK_WALLET),
-                    _(i18n_keys.CONTENT__ETH_AND_EVM_POWERED_NETWORK),
-                    qr_data,
-                    "A:/res/mm-logo-96.png",
-                )
+                self.connect_mm(target)
             elif target == self.okx:
                 qr_data = b""
                 ConnectWallet(
@@ -2033,6 +2004,46 @@ class WalletList(Screen):
 
     def _load_scr(self, scr: "Screen", back: bool = False) -> None:
         lv.scr_load(scr)
+
+    def connect_onekey(self, target):
+        from trezor.qr import get_encoder
+
+        if passphrase.is_enabled():
+            encoder = retrieval_encoder()
+        else:
+            encoder = get_encoder()
+        if encoder is None:
+            from trezor.qr import gen_multi_accounts
+
+            workflow.spawn(
+                gen_multi_accounts(
+                    lambda: lv.event_send(target, lv.EVENT.CLICKED, None)
+                )
+            )
+            return
+        ConnectWallet(
+            None,
+            None,
+            None,
+            encoder=encoder,
+            subtitle=_(i18n_keys.CONTENT__OPEN_ONEKEY_SCAN_THE_QRCODE),
+        )
+
+    def connect_mm(self, target):
+        qr_data = retrieval_hd_key() if device.is_passphrase_enabled() else get_hd_key()
+        if qr_data is None:
+            from trezor.qr import gen_hd_key
+
+            workflow.spawn(
+                gen_hd_key(lambda: lv.event_send(target, lv.EVENT.CLICKED, None))
+            )
+            return
+        ConnectWallet(
+            _(i18n_keys.ITEM__METAMASK_WALLET),
+            _(i18n_keys.CONTENT__ETH_AND_EVM_POWERED_NETWORK),
+            qr_data,
+            "A:/res/mm-logo-96.png",
+        )
 
 
 class BackupWallet(Screen):
@@ -2279,7 +2290,7 @@ class ConnectWallet(FullSizeWindow):
         self.add_nav_back()
 
         gc.collect()
-
+        gc.threshold(int(18248 * 1.5))  # type: ignore["threshold" is not a known member of module]
         from trezor.lvglui.scrs.components.qrcode import QRCode
 
         self.encoder = encoder
@@ -2377,6 +2388,17 @@ class ConnectWallet(FullSizeWindow):
             self.qr.update(qr_data, len(qr_data))
 
 class ScanScreen(Screen):
+    SCAN_STATE_IDLE = 0
+    SCAN_STATE_SCANNING = 1
+    SCAN_STATE_SUCCESS = 2
+    SCAN_STATE_ERROR = 3
+    VALID_TRANSITIONS = {
+        SCAN_STATE_IDLE: [SCAN_STATE_SCANNING, SCAN_STATE_ERROR],
+        SCAN_STATE_SCANNING: [SCAN_STATE_SUCCESS, SCAN_STATE_ERROR],
+        SCAN_STATE_SUCCESS: [SCAN_STATE_IDLE],
+        SCAN_STATE_ERROR: [SCAN_STATE_IDLE],
+    }
+
     def __init__(self, prev_scr=None):
         if not hasattr(self, "_init"):
             self._init = True
@@ -2399,7 +2421,14 @@ class ScanScreen(Screen):
         self.camera_bg = lv.img(self.content_area)
         self.camera_bg.set_src("A:/res/camera-bg.png")
         self.camera_bg.align(lv.ALIGN.TOP_MID, 0, 148)
+        # self.camera_bg.add_flag(lv.obj.FLAG.HIDDEN)
 
+        self.btn = NormalButton(self, f"{LV_SYMBOLS.LV_SYMBOL_LIGHTBULB}")
+        self.btn.set_size(64, 64)
+        self.btn.add_style(StyleWrapper().radius(lv.RADIUS.CIRCLE), 0)
+        self.btn.align(lv.ALIGN.TOP_LEFT, 12, 48)
+        self.btn.add_state(lv.STATE.CHECKED)
+        self.add_event_cb(self.on_event, lv.EVENT.CLICKED, None)
         self.desc = lv.label(self.content_area)
         self.desc.set_size(456, lv.SIZE.CONTENT)
         self.desc.add_style(
@@ -2412,17 +2441,51 @@ class ScanScreen(Screen):
             .text_align_center(),
             0,
         )
-        self.desc.set_text(_(i18n_keys.CONTENT__SCAN_THE_QR_CODE_DISPLAYED_ON_THE_APP))
         self.desc.align_to(self.camera_bg, lv.ALIGN.OUT_BOTTOM_MID, 0, 14)
+        self.process_bar = lv.bar(self.content_area)
+        self.process_bar.set_size(368, 8)
+        self.process_bar.add_style(
+            StyleWrapper()
+            .bg_color(lv_colors.ONEKEY_GRAY_2)
+            .bg_opa(lv.OPA.COVER)
+            .radius(22),
+            0,
+        )
+        self.process_bar.add_style(
+            StyleWrapper().bg_color(lv_colors.ONEKEY_GREEN_2),
+            lv.PART.INDICATOR | lv.STATE.DEFAULT,
+        )
+        self.process_bar.align_to(self.desc, lv.ALIGN.OUT_BOTTOM_MID, 0, 32)
+        self.process_bar.set_range(0, 100)
+        self.process_bar.set_value(0, lv.ANIM.OFF)
+        self.process_bar.add_flag(lv.obj.FLAG.HIDDEN)
 
-        self.btn = NormalButton(self, f"{LV_SYMBOLS.LV_SYMBOL_LIGHTBULB}")
-        self.btn.set_size(115, 115)
-        self.btn.add_style(StyleWrapper().radius(lv.RADIUS.CIRCLE), 0)
-        self.btn.align(lv.ALIGN.BOTTOM_MID, 0, -8)
-        self.btn.add_state(lv.STATE.CHECKED)
-        self.add_event_cb(self.on_event, lv.EVENT.CLICKED, None)
+        self.state = ScanScreen.SCAN_STATE_IDLE
+        self._fsm_show()
 
         scan_qr(self)
+
+    @classmethod
+    def notify_close(cls):
+        if hasattr(cls, "_instance") and cls._instance._init:
+            lv.event_send(cls._instance.nav_back.nav_btn, lv.EVENT.CLICKED, None)
+
+    async def transition_to(self, new_state: int):
+        self._can_transition_to(new_state)
+        if new_state == ScanScreen.SCAN_STATE_ERROR:
+            await self._error_feedback()
+            new_state = ScanScreen.SCAN_STATE_IDLE
+
+        self._fsm_show(new_state)
+        self.state = new_state
+
+    async def on_process_update(self, process: int):
+        if self.state == ScanScreen.SCAN_STATE_IDLE:
+            await self.transition_to(ScanScreen.SCAN_STATE_SCANNING)
+        workflow.idle_timer.touch()
+        self.process_bar.set_value(process, lv.ANIM.OFF)
+        if process >= 100:
+            await self.transition_to(ScanScreen.SCAN_STATE_SUCCESS)
 
     def on_event(self, event_obj):
         code = event_obj.code
@@ -2443,7 +2506,7 @@ class ScanScreen(Screen):
                 uart.flashled_close()
                 close_camera()
 
-    async def error_feedback(self):
+    async def _error_feedback(self):
         from trezor.ui.layouts import show_error_no_interact
 
         await show_error_no_interact(
@@ -2451,13 +2514,66 @@ class ScanScreen(Screen):
             _(i18n_keys.CONTENT__QR_CODE_TYPE_NOT_SUPPORT_PLEASE_TRY_AGAIN),
         )
 
+    def _can_transition_to(self, new_state: int):
+        if new_state not in ScanScreen.VALID_TRANSITIONS[self.state]:
+            if __debug__:
+                raise ValueError(
+                    f"Invalid state transition: {self.state} -> {new_state}"
+                )
+            else:
+                self.notify_close()
+
+    def _fsm_show(self, state: int = SCAN_STATE_IDLE):
+        if state == ScanScreen.SCAN_STATE_IDLE:
+            if self.state == ScanScreen.SCAN_STATE_SCANNING:
+                self.process_bar.add_flag(lv.obj.FLAG.HIDDEN)
+            elif self.state == ScanScreen.SCAN_STATE_SUCCESS:
+                if hasattr(self, "wait_tips"):
+                    self.wait_tips.add_flag(lv.obj.FLAG.HIDDEN)
+
+            self.desc.set_text(
+                _(i18n_keys.CONTENT__SCAN_THE_QR_CODE_DISPLAYED_ON_THE_APP)
+            )
+            self.desc.align_to(self.camera_bg, lv.ALIGN.OUT_BOTTOM_MID, 0, 14)
+
+        elif state == ScanScreen.SCAN_STATE_SCANNING:
+            self.desc.set_text(_(i18n_keys.CONTENT__SCANNING_HOLD_STILL))
+            self.desc.align_to(self.camera_bg, lv.ALIGN.OUT_BOTTOM_MID, 0, 14)
+            if self.process_bar.has_flag(lv.obj.FLAG.HIDDEN):
+                self.process_bar.clear_flag(lv.obj.FLAG.HIDDEN)
+            self.process_bar.set_value(0, lv.ANIM.OFF)
+        elif state == ScanScreen.SCAN_STATE_SUCCESS:
+            self.process_bar.add_flag(lv.obj.FLAG.HIDDEN)
+            self.desc.add_flag(lv.obj.FLAG.HIDDEN)
+            if not hasattr(self, "wait_tips"):
+                self.refresh()
+                self.wait_tips = lv.label(self.camera_bg)
+                self.wait_tips.set_text(_(i18n_keys.TITLE__PLEASE_WAIT))
+                self.wait_tips.add_style(
+                    StyleWrapper()
+                    .text_font(font_GeistRegular30)
+                    .text_color(lv_colors.LIGHT_GRAY),
+                    0,
+                )
+                self.wait_tips.align(lv.ALIGN.CENTER, 0, 0)
+            else:
+                if self.wait_tips.has_flag(lv.obj.FLAG.HIDDEN):
+                    self.refresh()
+                    self.wait_tips.clear_flag(lv.obj.FLAG.HIDDEN)
+            # if not hasattr(self, "success_overlay"):
+            #     from .components.overlay import ScanSuccessOverlay
+
+            #     self.success_overlay = ScanSuccessOverlay(
+            #         self, _(i18n_keys.TITLE__PLEASE_WAIT)
+            #     )
+            # else:
+            #     if self.success_overlay.has_flag(lv.obj.FLAG.HIDDEN):
+            #         self.success_overlay.clear_flag(lv.obj.FLAG.HIDDEN)
+        else:
+            raise ValueError(f"Invalid state: {state}")
+
     def _load_scr(self, scr: "Screen", back: bool = False) -> None:
         lv.scr_load(scr)
-
-    @classmethod
-    def notify_close(cls):
-        if hasattr(cls, "_instance") and cls._instance._init:
-            lv.event_send(cls._instance.nav_back.nav_btn, lv.EVENT.CLICKED, None)
 
 
 if __debug__:
@@ -4391,16 +4507,32 @@ class AboutSetting(AnimScreen):
             "SE Bootloader",
             se_boot_content_pairs,
         )
+
         self.serial = DisplayItemWithFont_30(
             self.container, _(i18n_keys.ITEM__SERIAL_NUMBER), preloaded_info["serial"]
         )
-
         self.serial.add_flag(lv.obj.FLAG.EVENT_BUBBLE)
-        self.fcc_id = DisplayItemWithFont_30(self.container, "FCC ID", "2BB8VP1")
 
+        self.fcc_id = DisplayItemWithFont_30(self.container, "FCC ID", "2BB8VP1")
+        self.fcc_id.set_style_pad_right(0, 0)
         self.fcc_icon = lv.img(self.fcc_id)
-        self.fcc_icon.set_src("A:/res/fcc-logo.png")
-        self.fcc_icon.align(lv.ALIGN.RIGHT_MID, 0, -5)
+        self.fcc_icon.set_src("A:/res/icon-fcc.png")
+        self.fcc_icon.align(lv.ALIGN.RIGHT_MID, 0, 0)
+
+        self.mic_id = DisplayItemWithFont_30(self.container, "MIC ID", "211-240720")
+        self.mic_id.set_style_pad_right(0, 0)
+        self.mic_icon = lv.img(self.mic_id)
+        self.mic_icon.set_src("A:/res/icon-mic.png")
+        self.mic_icon.align(lv.ALIGN.RIGHT_MID, 0, 0)
+
+        self.anatel_id = DisplayItemWithFont_30(
+            self.container, "ANATEL ID", "02335-25-16343"
+        )
+        self.anatel_id.set_style_pad_right(0, 0)
+        self.anatel_icon = lv.img(self.anatel_id)
+        self.anatel_icon.set_src("A:/res/icon-anatel.png")
+        self.anatel_icon.align(lv.ALIGN.RIGHT_MID, 0, 0)
+
         self.container.add_dummy()
 
         self.firmware_update = NormalButton(
@@ -5786,6 +5918,7 @@ class WalletScreen(AnimScreen):
             self.container, _(i18n_keys.ITEM__CHECK_RECOVERY_PHRASE)
         )
         self.passphrase = ListItemBtn(self.container, _(i18n_keys.ITEM__PASSPHRASE))
+        self.turbo_mode = ListItemBtn(self.container, _(i18n_keys.TITLE__TURBO_MODE))
         self.trezor_mode = ListItemBtnWithSwitch(
             self.container, _(i18n_keys.ITEM__COMPATIBLE_WITH_TREZOR)
         )
@@ -5871,6 +6004,8 @@ class WalletScreen(AnimScreen):
                 # pyright: on
             elif target == self.passphrase:
                 PassphraseScreen(self)
+            elif target == self.turbo_mode:
+                TurboModeScreen(self)
             elif target == self.rest_device:
                 from apps.management.wipe_device import wipe_device
                 from trezor.messages import WipeDevice
@@ -6334,6 +6469,139 @@ class CryptoScreen(Screen):
             elif target == self.solana:
                 SolanaSetting(self)
 
+
+
+class TurboModeScreen(AnimScreen):
+    def collect_animation_targets(self) -> list:
+        targets = []
+        if hasattr(self, "container") and self.container:
+            targets.append(self.container)
+        if hasattr(self, "tips") and self.tips:
+            targets.append(self.tips)
+        return targets
+
+    def __init__(self, prev_scr=None):
+        if not hasattr(self, "_init"):
+            self._init = True
+        else:
+            return
+        super().__init__(prev_scr, title=_(i18n_keys.TITLE__TURBO_MODE), nav_back=True)
+
+        self.container = ContainerFlexCol(self.content_area, self.title, padding_row=2)
+
+        self.turbo_mode = ListItemBtnWithSwitch(
+            self.container, _(i18n_keys.TITLE__TURBO_MODE)
+        )
+        self.turbo_mode.add_style(
+            StyleWrapper().bg_color(lv_colors.ONEKEY_BLACK_3).bg_opa(lv.OPA.COVER), 0
+        )
+        if not device.is_turbomode_enabled():
+            self.turbo_mode.clear_state()
+
+        self.tips = lv.label(self.content_area)
+        self.tips.align_to(self.container, lv.ALIGN.OUT_BOTTOM_LEFT, 8, 16)
+        self.tips.set_long_mode(lv.label.LONG.WRAP)
+        self.tips.add_style(
+            StyleWrapper()
+            .text_font(font_GeistRegular26)
+            .width(448)
+            .text_color(lv_colors.WHITE_2)
+            .text_align_left(),
+            0,
+        )
+        self.tips.set_text(
+            _(
+                i18n_keys.CONTENT__SIGN_TRANSACTIONS_WITH_ONE_CLICK_ONLY_EVM_NETWORK_AND_SOLANA
+            )
+        )
+
+        self.container.add_event_cb(self.on_click, lv.EVENT.CLICKED, None)
+        self.turbo_mode.add_event_cb(
+            self.on_value_changed, lv.EVENT.VALUE_CHANGED, None
+        )
+
+        self.load_screen(self)
+        gc.collect()
+
+    def on_value_changed(self, event_obj):
+        code = event_obj.code
+        target = event_obj.get_target()
+        if code == lv.EVENT.VALUE_CHANGED:
+            if target == self.turbo_mode.switch:
+                if not device.is_turbomode_enabled():
+                    TurboModeConfirm(self, True)
+                    self.turbo_mode.add_state()
+                else:
+                    self.turbo_mode.clear_state()
+                    device.set_turbomode_enable(False)
+
+    def reset_switch(self):
+        self.turbo_mode.clear_state()
+
+
+class TurboModeConfirm(FullSizeWindow):
+    def __init__(self, callback_obj, enable=False):
+        if enable:
+            super().__init__(
+                title=_(i18n_keys.TITLE__ENABLE_TURBO_MODE),
+                subtitle=_(i18n_keys.CONTENT__SIGN_TRANSACTIONS_WITH_ONE_CLICK),
+                confirm_text=_(i18n_keys.ACTION__SLIDE_TO_ENABLE),
+                cancel_text=_(i18n_keys.BUTTON__CANCEL),
+                hold_confirm=True,
+            )
+            self.container = ContainerFlexCol(
+                self.content_area, self.subtitle, padding_row=2
+            )
+            self.item1 = ListItemWithLeadingCheckbox(
+                self.container,
+                _(
+                    i18n_keys.ACTION__ONCE_ENABLED_THE_DEVICE_WILL_OMIT_DETAILS_WHEN_REVIEWING_TRANSACTIONS_I_KNOW_THE_RISKS
+                ),
+                radius=40,
+            )
+
+            self.enable = enable
+            self.callback_obj = callback_obj
+
+        self.slider_enable(False)
+        self.container.add_event_cb(self.on_value_changed, lv.EVENT.VALUE_CHANGED, None)
+
+    def eventhandler(self, event_obj):
+        code = event_obj.code
+        target = event_obj.get_target()
+        if code == lv.EVENT.CLICKED:
+            if utils.lcd_resume():
+                return
+            if target == self.btn_no.click_mask:
+                self.callback_obj.reset_switch()
+                self.destroy(200)
+        elif code == lv.EVENT.READY and self.hold_confirm:
+            if target == self.slider:
+                device.set_turbomode_enable(self.enable)
+                self.destroy(200)
+
+    def on_value_changed(self, event_obj):
+        code = event_obj.code
+        target = event_obj.get_target()
+        if code == lv.EVENT.VALUE_CHANGED:
+            if target == self.item1.checkbox:
+                if target.get_state() & lv.STATE.CHECKED:
+                    self.item1.enable_bg_color()
+                    self.slider_enable()
+                else:
+                    self.item1.enable_bg_color(False)
+                    self.slider_enable(False)
+
+    def slider_enable(self, enable: bool = True):
+        if enable:
+            self.slider.add_flag(lv.obj.FLAG.CLICKABLE)
+            self.slider.enable()
+            self.slider.set_style_bg_color(
+                lv_colors.WHITE, lv.PART.KNOB | lv.STATE.DEFAULT
+            )
+        else:
+            self.slider.clear_flag(lv.obj.FLAG.CLICKABLE)
+            self.slider.enable(False)
 
 
 class CryptoScreen(Screen):

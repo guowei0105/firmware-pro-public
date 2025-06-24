@@ -89,6 +89,7 @@ _NEEDS_BACKUP_VALUE: bool | None = None
 _FIDO_SEED_GEN = False
 _FIDO2_COUNTER_VALUE: int | None = None
 _FIDO_ENABLED_VALUE: bool | None = None
+_TURBOMODE_VALUE: bool | None = None
 
 
 
@@ -246,6 +247,8 @@ if utils.USE_THD89:
     offset += uctypes.sizeof(struct_bool, uctypes.LITTLE_ENDIAN)
     struct_public["fido_enabled"] = (offset, struct_bool)
     offset += uctypes.sizeof(struct_bool, uctypes.LITTLE_ENDIAN)
+    struct_public["turbomode"] = (offset, struct_bool)
+    offset += uctypes.sizeof(struct_bool, uctypes.LITTLE_ENDIAN)
     struct_public["use_passphrase_pin"] = (offset, struct_bool)
     offset += uctypes.sizeof(struct_bool, uctypes.LITTLE_ENDIAN)
     struct_public["auto_passphrase"] = (offset, struct_bool)
@@ -312,6 +315,7 @@ if utils.USE_THD89:
     _FINGER_FAILED_COUNT = struct_public["finger_failed_count"][0]
     _FIDO2_COUNTER = struct_public["fido2_counter"][0]
     _FIDO_ENABLED = struct_public["fido_enabled"][0]
+    _TURBOMODE = struct_public["turbomode"][0]
     U2F_COUNTER = 0x00  # u2f counter
 
     # recovery key
@@ -380,6 +384,7 @@ else:
     _FINGER_FAILED_COUNT = (0x8F)  # int
     _FIDO2_COUNTER = (0x90)  # int
     _FIDO_ENABLED = (0x91)  # bool
+    _TURBOMODE = (0x92)  # bool
     # fmt: on
 SAFETY_CHECK_LEVEL_STRICT: Literal[0] = const(0)
 SAFETY_CHECK_LEVEL_PROMPT: Literal[1] = const(1)
@@ -684,6 +689,24 @@ def set_animation_enable(enable: bool) -> None:
         public=True,
     )
     _ANIMATION_VALUE = enable
+
+
+def is_turbomode_enabled() -> bool:
+    global _TURBOMODE_VALUE
+    if _TURBOMODE_VALUE is None:
+        return False
+    return _TURBOMODE_VALUE
+
+
+def set_turbomode_enable(enable: bool) -> None:
+    global _TURBOMODE_VALUE
+    common.set_bool(
+        _NAMESPACE,
+        _TURBOMODE,
+        enable,
+        public=True,
+    )
+    _TURBOMODE_VALUE = enable
 
 
 def keyboard_haptic_enabled() -> bool:

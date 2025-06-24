@@ -1001,7 +1001,7 @@ translations = [
     "{name} autorisieren",
     "Unbegrenzte Genehmigung für {name} erteilen",
     "{name} widerrufen",
-    "Fingerabdruck wird vom Sicherheitschip gelesen...",
+    "Sichere Chip-Lesung…",
     "Energievermietung",
     "An (Anbieter)",
     "Einzelaktie",

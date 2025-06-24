@@ -716,7 +716,6 @@ async def handle_GetPassphraseState(ctx: wire.Context, msg: GetPassphraseState) 
     #        await unlock_device(ctx, pin_use_type=2)
     # else: pass      
         
-
     # print("handle_GetPassphraseState")
     # has_only_main_pin = hasattr(msg, 'only_main_pin') and msg.only_main_pin is True
     # if has_only_main_pin:  ### 创建或者重新连接主钱包
@@ -791,6 +790,8 @@ async def handle_GetPassphraseState(ctx: wire.Context, msg: GetPassphraseState) 
         print("handle_GetPassphraseState current :",session_id)
         print("is_attach_to_pin_state current :",is_attach_to_pin_state)
         return PassphraseState(passphrase_state=address_obj.address, session_id=session_id,unlocked_attach_pin = is_attach_to_pin_state)
+    except wire.PinCancelled:
+          raise
     except Exception as e:
             error_msg = str(e) if e else "Unknown error in btc_get_address"
             return PassphraseState(btc_test=f"Error in btc_get_address: {error_msg}")

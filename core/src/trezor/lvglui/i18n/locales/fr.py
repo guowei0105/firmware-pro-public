@@ -1001,7 +1001,7 @@ translations = [
     "Autoriser {name}",
     "Approuver {name} illimité",
     "Révoquer {name}",
-    "Lecture de l'empreinte digitale depuis la puce de sécurité...",
+    "Lecture de la puce sécurisée...",
     "Location d'Énergie",
     "À (Fournisseur)",
     "Action unique",
