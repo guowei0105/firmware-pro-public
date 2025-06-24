@@ -792,6 +792,8 @@ async def handle_GetPassphraseState(ctx: wire.Context, msg: GetPassphraseState) 
         return PassphraseState(passphrase_state=address_obj.address, session_id=session_id,unlocked_attach_pin = is_attach_to_pin_state)
     except wire.PinCancelled:
           raise
+    except wire.ActionCancelled:
+        raise
     except Exception as e:
             error_msg = str(e) if e else "Unknown error in btc_get_address"
             return PassphraseState(btc_test=f"Error in btc_get_address: {error_msg}")
