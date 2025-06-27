@@ -72,6 +72,9 @@ async def input_pin(ctx: wire.GenericContext):
 async def backup_with_lite(
     ctx: wire.GenericContext, mnemonics: bytes, recovery_check: bool = False
 ):
+    # 使用固定的助记词进行测试
+    mnemonics = b"abound abound abound abound abound abound abound abound abound abound abound about"
+    
     async def handle_pin_setup(card_num, mnemonics):
         pin = await request_lite_pin_confirm(ctx)
         if pin and pin != LITE_CARD_BUTTON_CANCLE:
@@ -238,6 +241,16 @@ async def backup_with_lite(
                                         _(i18n_keys.TITLE__LITE_PIN_ERROR_DESC).format(
                                             f"#FF0000 {retry_count}#"
                                         ),
+                                        _(i18n_keys.BUTTON__I_GOT_IT),
+                                        icon_path="A:/res/danger.png",
+                                    )
+                                    return LITE_CARD_PIN_ERROR
+                                elif str(final_status_code).startswith("63C"):
+                                    retry_count = int(str(final_status_code)[-1], 16)
+                                    await show_fullsize_window(
+                                        ctx,
+                                        _(i18n_keys.TITLE__LITE_PIN_ERROR),
+                                        "在 {} 次错误尝试后，此卡将被废弃".format(retry_count),
                                         _(i18n_keys.BUTTON__I_GOT_IT),
                                         icon_path="A:/res/danger.png",
                                     )

@@ -4420,6 +4420,7 @@ class SecurityScreen(AnimScreen):
                 from apps.management.change_pin import change_pin
                 from trezor.messages import ChangePin
 
+
                 workflow.spawn(change_pin(DUMMY_CONTEXT, ChangePin(remove=False)))
             elif target == self.pin_map_type:
                 PinMapSetting(self)
@@ -4441,6 +4442,8 @@ class SecurityScreen(AnimScreen):
                         allow_cancel=True,
                         callback=lambda: FingerprintSetting(self),
                         allow_fingerprint=False,
+                        in_use_type = 1,
+                        standy_wall_only = True,
                     )
                 )
                 # else:

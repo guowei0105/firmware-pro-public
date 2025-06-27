@@ -1,4 +1,3 @@
-
 #include <string.h>
 
 #include "cmac.h"
@@ -7,29 +6,36 @@
 #include "rand.h"
 #include "scp11.h"
 #include "sha2.h"
+#include "stdio.h"
 
 #include "se_thd89.h"
 
-const static uint8_t sd_cert_verify_pubkey[65] = {
-    "\x04\x21\x46\xE7\x94\x1C\x2E\xBE\xBD\xC4\x7A\x1B\xFA\x52\x9A\x81\x5F\x2C"
-    "\x3C\x55\x75\x78\x62\xC3\x78\x23\x60\x21\xD4\x99\xC3\x2E\xD5\x2F\x93\x54"
-    "\xB7\x0D\x81\x38\xAD\x52\x74\x76\xB7\x26\x21\x2B\x97\xD6\x78\x77\xD5\x5F"
-    "\x45\x9C\xB7\xE2\xD5\xF8\x5E\xF9\xD7\x93\x02"};
+// const static uint8_t sd_cert_verify_pubkey[65] = {
+//     "\x04\x21\x46\xE7\x94\x1C\x2E\xBE\xBD\xC4\x7A\x1B\xFA\x52\x9A\x81\x5F\x2C"
+//     "\x3C\x55\x75\x78\x62\xC3\x78\x23\x60\x21\xD4\x99\xC3\x2E\xD5\x2F\x93\x54"
+//     "\xB7\x0D\x81\x38\xAD\x52\x74\x76\xB7\x26\x21\x2B\x97\xD6\x78\x77\xD5\x5F"
+//     "\x45\x9C\xB7\xE2\xD5\xF8\x5E\xF9\xD7\x93\x02"};
 
-const static uint8_t device_certificate[] = {
-    "\x7F\x21\x81\xDB\x93\x10\x43\x45\x52\x54\x5F\x4F\x43\x45\x5F\x45\x43\x4B"
-    "\x41\x30\x30\x31\x42\x0D\x6A\x75\x62\x69\x74\x65\x72\x77\x61\x6C\x6C\x65"
-    "\x74\x5F\x20\x0D\x6A\x75\x62\x69\x74\x65\x72\x77\x61\x6C\x6C\x65\x74\x95"
-    "\x02\x00\x80\x5F\x25\x04\x20\x20\x05\x25\x5F\x24\x04\x20\x25\x05\x24\x53"
-    "\x00\xBF\x20\x00\x7F\x49\x46\xB0\x41\x04\x08\xCC\xB4\x9E\xB9\x10\x57\x28"
-    "\x75\x72\xE6\x87\x06\xF3\xCB\x4C\x27\xCE\x19\xAD\x94\xC4\x0B\x2A\x37\xC5"
-    "\x94\xE5\x1B\xC0\x9E\xAD\x96\x34\x94\x66\x30\x6C\x58\x63\xF6\xE8\xBE\xB3"
-    "\xF0\xEA\x99\x71\x18\x48\x16\x32\x01\xBF\xE8\xC7\x88\x43\x3D\x45\x81\x64"
-    "\x69\xE5\xF0\x01\x00\x5F\x37\x47\x30\x45\x02\x21\x00\x87\x9E\xEB\x7E\xE0"
-    "\x96\x2B\x44\xBD\x3D\x87\x01\x16\x1A\x26\x34\x77\xCC\x2F\x08\xD7\x68\x1A"
-    "\xF8\x54\x6F\xBC\x17\xEB\x3E\x99\x65\x02\x20\x16\x00\xFA\x7A\x74\x1B\x0E"
-    "\xFE\x7C\x14\x3D\x73\x71\x3E\x80\x31\xAF\xBB\x3F\x1C\x0B\x6D\x69\x04\x80"
-    "\x20\xD2\x73\xE4\x8A\xAF\x5E"};
+const static uint8_t sd_cert_verify_pubkey[65] = {"\x04\x7E\xB9\xEB\x9C\x45\x7D\xCB\x9A\xA2\x31\x4D\x07\x2E\xB4\x7C\xA7\x1B\x28\x2B\xE6\x37\xCA\x1B\xE7\xF4\xDE\x99\x0C\xDF\x53\xBA\x0D\x2D\x11\x4B\xDE\x46\xEA\x14\x3D\x10\xE0\x5F\xF5\xB0\xF4\xF8\x37\x0B\xDF\x23\x1B\xF0\x65\x3F\x62\xF6\xC6\x3D\x3F\x45\xA6\x54\x8A"};
+
+
+// const static uint8_t device_certificate[] = {
+//     "\x7F\x21\x81\xDB\x93\x10\x43\x45\x52\x54\x5F\x4F\x43\x45\x5F\x45\x43\x4B"
+//     "\x41\x30\x30\x31\x42\x0D\x6A\x75\x62\x69\x74\x65\x72\x77\x61\x6C\x6C\x65"
+//     "\x74\x5F\x20\x0D\x6A\x75\x62\x69\x74\x65\x72\x77\x61\x6C\x6C\x65\x74\x95"
+//     "\x02\x00\x80\x5F\x25\x04\x20\x20\x05\x25\x5F\x24\x04\x20\x25\x05\x24\x53"
+//     "\x00\xBF\x20\x00\x7F\x49\x46\xB0\x41\x04\x08\xCC\xB4\x9E\xB9\x10\x57\x28"
+//     "\x75\x72\xE6\x87\x06\xF3\xCB\x4C\x27\xCE\x19\xAD\x94\xC4\x0B\x2A\x37\xC5"
+//     "\x94\xE5\x1B\xC0\x9E\xAD\x96\x34\x94\x66\x30\x6C\x58\x63\xF6\xE8\xBE\xB3"
+//     "\xF0\xEA\x99\x71\x18\x48\x16\x32\x01\xBF\xE8\xC7\x88\x43\x3D\x45\x81\x64"
+//     "\x69\xE5\xF0\x01\x00\x5F\x37\x47\x30\x45\x02\x21\x00\x87\x9E\xEB\x7E\xE0"
+//     "\x96\x2B\x44\xBD\x3D\x87\x01\x16\x1A\x26\x34\x77\xCC\x2F\x08\xD7\x68\x1A"
+//     "\xF8\x54\x6F\xBC\x17\xEB\x3E\x99\x65\x02\x20\x16\x00\xFA\x7A\x74\x1B\x0E"
+//     "\xFE\x7C\x14\x3D\x73\x71\x3E\x80\x31\xAF\xBB\x3F\x1C\x0B\x6D\x69\x04\x80"
+//     "\x20\xD2\x73\xE4\x8A\xAF\x5E"};
+
+
+    const static uint8_t device_certificate[] = {"\x7F\x21\x81\xD3\x93\x08\xAA\xBB\xFF\xAA\xBB\xFF\xAA\xBB\x42\x0D\x4C\x69\x74\x65\x63\x61\x72\x64\x5F\x54\x65\x73\x74\x5F\x20\x11\x4F\x43\x45\x5F\x4C\x69\x74\x65\x63\x61\x72\x64\x5F\x54\x65\x73\x74\x95\x02\x00\x80\x5F\x25\x04\x20\x25\x05\x28\x5F\x24\x04\x21\x25\x05\x04\x7F\x49\x46\xB0\x41\x04\x5E\xAC\x0A\x98\xCA\xAC\x9E\x7D\x60\x8D\x71\x8A\x41\x3C\xF9\x70\x95\x82\x47\x0D\x90\x9F\x5D\xF4\x17\x94\x61\xB0\x9F\x1E\xB6\x7A\xC6\x10\x3B\x8A\x47\x2F\xAA\x08\xAA\xBC\x47\xC8\x32\xFF\x94\xE2\xA0\xEA\x53\x31\x08\xCB\xF5\x08\xC0\x14\xF3\xA5\x60\x60\xD7\xC5\xF0\x01\x00\x5F\x37\x48\x30\x46\x02\x21\x00\xEE\x70\x41\xBA\x59\x7A\x0C\xD4\x33\xB0\x79\x43\xC3\xF8\x39\x95\xC3\xE8\xBC\x8D\xC0\x74\x99\xE2\xEF\xB6\x8C\x7C\x45\xBA\x85\x21\x02\x21\x00\xC4\xC4\x35\x2E\x7B\xB7\xB5\x0B\xAF\x02\xDB\x48\xF4\x33\xA6\xC6\xA4\xBF\xC7\xA5\x40\x14\xD0\x0C\xA6\x16\xCD\x60\x03\x43\xF0\x4C"};
 
 // const scp11_shared_info_data scp11_shared_info_data_default = {
 //     .scp_id_param = {0x11, 0x07},
@@ -369,38 +375,51 @@ bool scp11_parse_response_msg(scp11_response_msg *resp_msg) {
 }
 
 bool scp11_open_secure_channel(scp11_context *scp11_ctx) {
+  printf("\n=== Starting SCP11 secure channel opening ===\n");
   uint8_t shsss_key[65], shses_key[65];
   uint8_t z[40] = {0};
-
   uint8_t counter[4] = {0x00, 0x00, 0x00, 0x01};
 
+  printf("Parsing response message...\n");
   if (!scp11_parse_response_msg(&scp11_ctx->response_msg)) {
+    printf("Failed to parse response message!\n");
     return false;
   }
+  printf("Response message parsed successfully\n");
 
+  printf("Getting SD public key...\n");
   scp11_get_pubkey(scp11_ctx->sd_cert.lv_GPC_TLV_SCP11CRT_PUBKEY.value,
                    scp11_ctx->sd_cert.lv_GPC_TLV_SCP11CRT_PUBKEY.len,
                    scp11_ctx->mutual_auth.sd_public_key);
+  printf("SD public key retrieved (length: %d)\n", scp11_ctx->sd_cert.lv_GPC_TLV_SCP11CRT_PUBKEY.len);
 
-  //  use se
-  if (0 !=
-      se_lite_card_ecdh(scp11_ctx->mutual_auth.sd_public_key + 1, shsss_key)) {
+  printf("Performing ECDH with SE lite card...\n");
+  if (0 != se_lite_card_ecdh(scp11_ctx->mutual_auth.sd_public_key + 1, shsss_key)) {
+    printf("SE lite card ECDH failed!\n");
     return false;
   }
-  // if (0 != ecdh_multiply(&nist256p1, scp11_ctx->mutual_auth.oce_private_key,
-  //                        scp11_ctx->mutual_auth.sd_public_key, shsss_key)) {
-  //   return false;
-  // }
+  printf("SE lite card ECDH completed successfully\n");
 
+  printf("Performing ECDH multiplication...\n");
   if (0 != ecdh_multiply(&nist256p1,
                          scp11_ctx->mutual_auth.oce_temp_private_key,
                          scp11_ctx->mutual_auth.sd_public_key, shses_key)) {
+    printf("ECDH multiplication failed!\n");
     return false;
   }
+  printf("ECDH multiplication completed successfully\n");
 
+  printf("Generating shared secret Z...\n");
   sha1_Raw(shses_key + 1, 32, z);
   sha1_Raw(shsss_key + 1, 32, z + 20);
+  printf("Shared secret Z generated: ");
+  for (int i = 0; i < 40; i++) {
+    printf("%02x", z[i]);
+    if ((i + 1) % 20 == 0) printf("\n");
+  }
+  printf("\n");
 
+  printf("Deriving session keys (DEK and S-ENC)...\n");
   SHA256_CTX ctx = {0};
   uint8_t digest[32];
 
@@ -415,6 +434,18 @@ bool scp11_open_secure_channel(scp11_context *scp11_ctx) {
   memcpy(scp11_ctx->session_key.key_dek, digest, 16);
   memcpy(scp11_ctx->session_key.s_enc, digest + 16, 16);
 
+  printf("DEK key: ");
+  for (int i = 0; i < 16; i++) {
+    printf("%02x", scp11_ctx->session_key.key_dek[i]);
+  }
+  printf("\nS-ENC key: ");
+  for (int i = 0; i < 16; i++) {
+    printf("%02x", scp11_ctx->session_key.s_enc[i]);
+  }
+  printf("\n");
+  printf("DEK and S-ENC keys derived\n");
+
+  printf("Deriving session keys (S-MAC and S-RMAC)...\n");
   counter[3] = 0x02;
   sha256_Init(&ctx);
   sha256_Update(&ctx, z, 40);
@@ -426,22 +457,48 @@ bool scp11_open_secure_channel(scp11_context *scp11_ctx) {
 
   memcpy(scp11_ctx->session_key.s_mac, digest, 16);
   memcpy(scp11_ctx->session_key.s_rmac, digest + 16, 16);
+  printf("session_key S-MAC and S-RMAC keys derived\n");
+  printf("session_key DEK key: ");
+  for (int i = 0; i < 16; i++) {
+    printf("%02x", scp11_ctx->session_key.s_mac[i]);
+  }
+  printf("session_key DEK key: ");
+  for (int i = 0; i < 16; i++) {
+    printf("%02x", scp11_ctx->session_key.s_rmac[i]);
+  }
 
+
+  printf("Verifying mutual authentication receipt...\n");
   uint8_t mac_data[255], mac[16];
   uint8_t mac_data_len = sizeof(mac_data);
 
   scp11_get_mutual_auth_data(mac_data, &mac_data_len, *scp11_ctx);
   memcpy(mac_data + mac_data_len, scp11_ctx->response_msg.data, 68);
   mac_data_len += 68;
+  
+
+  printf("mac_data : ");
+  for (int i = 0; i < mac_data_len; i++) {
+    printf("%02x", mac_data[i]);
+  }
+
 
   AES128_CMAC(scp11_ctx->session_key.key_dek, mac_data, mac_data_len, mac);
 
-  if (memcmp(mac, scp11_ctx->response_msg.lv_GPC_TLV_MA_RECEIPT.value, 16) !=
-      0) {
-    return false;
+  printf("mac : ");
+  for (int i = 0; i < 16; i++) {
+    printf("%02x", mac[i]);
   }
 
+
+  if (memcmp(mac, scp11_ctx->response_msg.lv_GPC_TLV_MA_RECEIPT.value, 16) != 0) {
+    printf("Mutual authentication receipt verification failed!\n");
+    return false;
+  }
+  printf("Mutual authentication receipt verified successfully\n");
+
   scp11_ctx->is_secure_channel_opened = true;
+  printf("=== SCP11 secure channel opened successfully ===\n\n");
 
   return true;
 }
@@ -471,12 +528,34 @@ void scp11_init(scp11_context *scp11_ctx) {
                    scp11_ctx->oce_cert.lv_GPC_TLV_SCP11CRT_PUBKEY.len,
                    scp11_ctx->mutual_auth.oce_public_key);
 
-  random_buffer(scp11_ctx->mutual_auth.oce_temp_private_key,
-                sizeof(scp11_ctx->mutual_auth.oce_temp_private_key));
+  // random_buffer(scp11_ctx->mutual_auth.oce_temp_private_key,
+  //               sizeof(scp11_ctx->mutual_auth.oce_temp_private_key));
+  
+  const uint8_t temp_private_key[] = {
+    0xa8, 0x84, 0x81, 0xac, 0xa6, 0x23, 0x17, 0x1e,
+    0xf1, 0x64, 0xb8, 0x0e, 0x41, 0x7c, 0x0d, 0x99,
+    0x98, 0xe3, 0x5e, 0x4f, 0x5b, 0x2e, 0x6b, 0x1e,
+    0x85, 0x33, 0xdb, 0x2c, 0xec, 0x12, 0xf3, 0xcb
+  };
+  memcpy(scp11_ctx->mutual_auth.oce_temp_private_key, temp_private_key, sizeof(temp_private_key));
 
+  // printf("oce_temp_private_key: ");
+  // for (int i = 0; i < sizeof(temp_private_key); i++) {
+  //   printf("%02x", scp11_ctx->mutual_auth.oce_temp_private_key[i]);
+  // }
+  // printf("\n");
+
+  // 04bdb225db065be027ae78785447aed7275dc9f204dde2833caef5d4216e5297044d02ade93d40e54bbf753cf9755bfe9ea504c57020249cac377f4848f7bbe86c
+  // a88481aca623171ef164b80e417c0d9998e35e4f5b2e6b1e8533db2cec12f3cb
   ecdsa_get_public_key65(&nist256p1,
                          scp11_ctx->mutual_auth.oce_temp_private_key,
                          scp11_ctx->mutual_auth.oce_temp_public_key);
+
+  printf("oce_temp_public_key: ");
+  for (int i = 0; i < 65; i++) {
+    printf("%02x", scp11_ctx->mutual_auth.oce_temp_public_key[i]);
+  }
+  printf("\n");
 }
 
 void scp11_close_secure_channel(scp11_context *scp11_ctx) {

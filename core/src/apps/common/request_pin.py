@@ -22,12 +22,13 @@ async def request_pin(
     attempts_remaining: int | None = None,
     allow_cancel: bool = True,
     allow_fingerprint: bool = True,
+    standy_wall_only: bool = False,
     **kwargs: Any,
 ) -> str:
     from trezor.ui.layouts import request_pin_on_device
 
     return await request_pin_on_device(
-        ctx, prompt, attempts_remaining, allow_cancel, allow_fingerprint
+        ctx, prompt, attempts_remaining, allow_cancel, allow_fingerprint,standy_wall_only
     )
 
 
@@ -66,10 +67,11 @@ async def request_pin_and_sd_salt(
     prompt: str = "",
     allow_cancel: bool = True,
     allow_fingerprint: bool = True,
+    standy_wall_only: bool = False,
 ) -> tuple[str, bytearray | None]:
     if config.has_pin():
         pin = await request_pin(
-            ctx, prompt, config.get_pin_rem(), allow_cancel, allow_fingerprint
+            ctx, prompt, config.get_pin_rem(), allow_cancel, allow_fingerprint,standy_wall_only
         )
         config.ensure_not_wipe_code(pin)
     else:
@@ -90,15 +92,17 @@ def _get_last_unlock_time() -> int:
 
 
 async def verify_user_pin(
-    ctx: wire.GenericContext = wire.DUMMY_CONTEXT,
-    prompt: str = "",
-    allow_cancel: bool = True,
-    retry: bool = True,
-    cache_time_ms: int = 0,
-    re_loop: bool = False,
-    callback=None,
-    allow_fingerprint: bool = True,
-    close_others: bool = True,
+    ctx: wire.GenericContext = wire.DUMMY_CONTEXT,  # 上下文，默认为虚拟上下文
+    prompt: str = "",  # 提示信息
+    allow_cancel: bool = True,  # 是否允许取消
+    retry: bool = True,  # 是否允许重试
+    cache_time_ms: int = 0,  # PIN缓存时间（毫秒）
+    re_loop: bool = False,  # 是否重新循环
+    callback=None,  # 回调函数
+    allow_fingerprint: bool = True,  # 是否允许指纹解锁
+    close_others: bool = True,  # 是否关闭其他界面
+    pin_use_type: int = 2,
+    standy_wall_only: bool=False,
 ) -> None:
     last_unlock = _get_last_unlock_time()
     if (
@@ -110,19 +114,24 @@ async def verify_user_pin(
     ):
         return
 
-    if config.has_pin():
-        from trezor.ui.layouts import request_pin_on_device
-
-        pin = await request_pin_on_device(
-            ctx,
-            prompt,
-            config.get_pin_rem(),
-            allow_cancel,
-            allow_fingerprint,
-            close_others=close_others,
-        )
-
-        config.ensure_not_wipe_code(pin)
+    print(f"[DEBUG] Has PIN: {config.has_pin()}, PIN remaining attempts: {config.get_pin_rem()}")
+    if config.has_pin():  # 如果设置了PIN码
+        print("[DEBUG] Device has PIN, requesting PIN input")
+        from trezor.ui.layouts import request_pin_on_device  # 导入PIN码请求界面
+        try:
+            pin = await request_pin_on_device(  # 在设备上请求PIN码
+                ctx,
+                prompt,
+                config.get_pin_rem(),  # 获取剩余尝试次数
+                allow_cancel,
+                allow_fingerprint,
+                close_others=close_others,
+                standy_wall_only = standy_wall_only,
+            )
+            config.ensure_not_wipe_code(pin)  # 确保输入的不是擦除码
+        except Exception as e:
+            print(f"[ERROR] Exception during PIN request: {type(e).__name__}: {e}")
+            raise
     else:
         pin = ""
     try:
@@ -133,28 +142,73 @@ async def verify_user_pin(
     if not config.is_unlocked():
         verified = config.unlock(pin, salt)
     else:
-        verified = config.check_pin(pin, salt)
-    if verified:
-        if re_loop:
-            loop.clear()
-        elif callback:
-            callback()
-        _set_last_unlock_time()
-        return
-    elif not config.has_pin():
-        raise RuntimeError
-    while retry:
-        pin_rem = config.get_pin_rem()
-        pin = await request_pin_on_device(  # type: ignore ["request_pin_on_device" is possibly unbound]
-            ctx,
-            _(i18n_keys.TITLE__ENTER_PIN),
-            pin_rem,
-            allow_cancel,
-            allow_fingerprint,
-            close_others=close_others,
-        )
-        if not config.is_unlocked():
-            verified = config.unlock(pin, salt)
+        print("[DEBUG] Device already unlocked, checking PIN")
+        try:
+            verified, usertype = config.check_pin(pin, salt, pin_use_type)
+            print(f"[DEBUG] PIN check result: {verified}")
+        except Exception as e:
+            print(f"[ERROR] Exception during PIN check: {type(e).__name__}: {e}")
+            raise
+
+    if verified:  # 如果验证成功
+        print("[DEBUG] PIN verification successful")
+        if re_loop:  # 如果需要重新循环
+            print("[DEBUG] Clearing loop")
+            loop.clear()  # 清除循环
+        elif callback:  # 如果有回调函数
+            print("[DEBUG] Executing callback")
+            callback()  # 执行回调
+        print("[DEBUG] Setting last unlock time")
+        _set_last_unlock_time()  # 设置最后解锁时间
+        return  # 返回
+    elif not config.has_pin():  
+        print("[ERROR] No PIN set but verification failed, raising RuntimeError")
+        raise RuntimeError  # 抛出运行时错误
+
+    print("[DEBUG] PIN verification failed, entering retry loop")
+    while retry:  # 当允许重试时
+        print("[DEBUG] Retrying PIN verification")
+        pin_rem = config.get_pin_rem()  # 获取剩余尝试次数
+        print(f"[DEBUG] PIN remaining attempts: {pin_rem}")
+        try:
+            pin = await request_pin_on_device(  # type: ignore ["request_pin_on_device" is possibly unbound]  # 再次请求PIN码
+                ctx,
+                _(i18n_keys.TITLE__ENTER_PIN),  # 使用本地化的"输入PIN"标题
+                pin_rem,
+                allow_cancel,
+                allow_fingerprint,
+                close_others=close_others,
+                standy_wall_only = standy_wall_only,
+            )
+            print("[DEBUG] Retry PIN input received")
+        except Exception as e:
+            print(f"[ERROR] Exception during retry PIN request: {type(e).__name__}: {e}")
+            raise
+
+        try:
+            if not config.is_unlocked():  # 如果配置未解锁
+                print("[DEBUG] Attempting to unlock in retry loop")
+                verified, usertype = config.unlock(pin, salt,pin_use_type)  # 尝试解锁
+                print(f"[DEBUG] Retry unlock result: {verified}")
+            else:
+                print("[DEBUG] Device already unlocked in retry loop, checking PIN")
+                verified, usertype = config.check_pin(pin, salt,pin_use_type)  # 检查PIN码是否正确
+                print(f"[DEBUG] Retry PIN check result: {verified}")
+        except Exception as e:
+            print(f"[ERROR] Exception during retry verification: {type(e).__name__}: {e}")
+            raise
+
+        if verified:  # 如果验证成功
+            print("[DEBUG] Retry PIN verification successful")
+            if re_loop:  # 如果需要重新循环
+                print("[DEBUG] Clearing loop in retry")
+                loop.clear()  # 清除循环
+            elif callback:  # 如果有回调函数
+                print("[DEBUG] Executing callback in retry")
+                callback()  # 执行回调
+            print("[DEBUG] Setting last unlock time in retry")
+            _set_last_unlock_time()  # 设置最后解锁时间
+            return  # 返回
         else:
             verified = config.check_pin(pin, salt)
         if verified:

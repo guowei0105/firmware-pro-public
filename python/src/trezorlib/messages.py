@@ -449,6 +449,8 @@ class MessageType(IntEnum):
     OnekeyGetFeatures = 10025
     OnekeyFeatures = 10026
     WriteSEPrivateKey = 10027
+    GetPassphraseState = 10028
+    PassphraseState = 10029
 
 
 class FailureType(IntEnum):
@@ -5477,6 +5479,46 @@ class UnlockedPathRequest(protobuf.MessageType):
         mac: Optional["bytes"] = None,
     ) -> None:
         self.mac = mac
+
+
+class GetPassphraseState(protobuf.MessageType):
+    MESSAGE_WIRE_TYPE = 10028
+    FIELDS = {
+        1: protobuf.Field("btc_test", "string", repeated=False, required=False),
+        2: protobuf.Field("only_main_pin", "bool", repeated=False, required=False),
+        3: protobuf.Field("session_id", "bytes", repeated=False, required=False),
+    }
+
+    def __init__(
+        self,
+        *,
+        btc_test: Optional["str"] = None,
+        only_main_pin: Optional["bool"] = None,
+        session_id: Optional["bytes"] = None,
+    ) -> None:
+        self.btc_test = btc_test
+        self.only_main_pin = only_main_pin
+        self.session_id = session_id
+
+
+class PassphraseState(protobuf.MessageType):
+    MESSAGE_WIRE_TYPE = 10029
+    FIELDS = {
+        1: protobuf.Field("btc_test", "string", repeated=False, required=False),
+        2: protobuf.Field("session_id", "bytes", repeated=False, required=False),
+        3: protobuf.Field("attach_to_pin_user", "bool", repeated=False, required=False),
+    }
+
+    def __init__(
+        self,
+        *,
+        btc_test: Optional["str"] = None,
+        session_id: Optional["bytes"] = None,
+        attach_to_pin_user: Optional["bool"] = None,
+    ) -> None:
+        self.btc_test = btc_test
+        self.session_id = session_id
+        self.attach_to_pin_user = attach_to_pin_user
 
 
 class FileInfo(protobuf.MessageType):

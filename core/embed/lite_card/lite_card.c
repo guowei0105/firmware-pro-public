@@ -74,6 +74,7 @@ bool lite_card_send_safeapdu(uint8_t* apdu, uint16_t apdu_len,
 
   // encrypt data
   scp03_generate_icv(scp11_ctx.session_key.s_enc, &scp03_ctx, true);
+  
   scp03_encrypt(scp11_ctx.session_key.s_enc, scp03_ctx.icv, data_buffer + 5,
                 apdu_len - 5, enc_data, &enc_data_len);
 
@@ -112,7 +113,7 @@ bool lite_card_send_safeapdu(uint8_t* apdu, uint16_t apdu_len,
   }
 
   // enc data len + mac len
-  if (buffer_len < AES_BLOCK_SIZE + SCP03_MAC_SIZE) {
+  if (buffer_len < SCP03_MAC_SIZE) {
     return false;
   }
 
@@ -135,6 +136,12 @@ bool lite_card_send_safeapdu(uint8_t* apdu, uint16_t apdu_len,
 
   // decrypt data
   scp03_generate_icv(scp11_ctx.session_key.s_enc, &scp03_ctx, false);
+  if(buffer_len == 0){ return true;}
+  // if (!scp03_decrypt(scp11_ctx.session_key.s_enc, scp03_ctx.icv, data_buffer,
+  //                    buffer_len, enc_data, &buffer_len)) {
+  //   return false;
+  // }
+  
   if (!scp03_decrypt(scp11_ctx.session_key.s_enc, scp03_ctx.icv, data_buffer,
                      buffer_len, enc_data, &buffer_len)) {
     return false;
@@ -145,35 +152,60 @@ bool lite_card_send_safeapdu(uint8_t* apdu, uint16_t apdu_len,
 }
 
 bool lite_card_open_secure_channel(void) {
+  printf("\n=== Starting secure channel opening process ===\n");
+  
   if (scp11_get_secure_channel_status(&scp11_ctx)) {
+    printf("Secure channel is already open\n");
     return true;
   }
+  printf("Initializing new secure channel...\n");
   scp11_init(&scp11_ctx);
 
+  printf("Getting SD certificate...\n");
   scp11_ctx.sd_cert.raw_len = sizeof(scp11_ctx.sd_cert.raw);
   if (!lite_card_get_sd_certificate(scp11_ctx.sd_cert.raw,
                                     &scp11_ctx.sd_cert.raw_len)) {
+    printf("Failed to get SD certificate!\n");
     return false;
   }
+  printf("Successfully got SD certificate (length: %d)\n", scp11_ctx.sd_cert.raw_len);
+
+  printf("Parsing and verifying SD certificate...\n");
   if (!scp11_certificate_parse_and_verify(scp11_ctx.sd_cert.raw,
                                           scp11_ctx.sd_cert.raw_len,
                                           &scp11_ctx.sd_cert)) {
+    printf("Failed to parse or verify SD certificate!\n");
     return false;
   }
+  printf("SD certificate successfully parsed and verified\n");
+
+  printf("Sending device certificate (length: %d)...\n", scp11_ctx.oce_cert.raw_len);
   if (!lite_card_send_device_certificate(scp11_ctx.oce_cert.raw,
                                          scp11_ctx.oce_cert.raw_len)) {
+    printf("Failed to send device certificate!\n");
     return false;
   }
+  printf("Device certificate sent successfully\n");
+
+  printf("Starting mutual authentication...\n");
   if (!lite_card_mutual_authentication(&scp11_ctx)) {
+    printf("Mutual authentication failed!\n");
     return false;
   }
+  printf("Mutual authentication completed successfully\n");
 
+  printf("Opening SCP11 secure channel...\n");
   if (!scp11_open_secure_channel(&scp11_ctx)) {
+    printf("Failed to open SCP11 secure channel!\n");
     return false;
   }
+  printf("SCP11 secure channel opened successfully\n");
 
+  printf("Initializing SCP03 context...\n");
   scp03_init(&scp03_ctx, scp11_ctx.response_msg.lv_GPC_TLV_MA_RECEIPT.value);
+  printf("SCP03 context initialized\n");
 
+  printf("=== Secure channel opening process completed successfully ===\n\n");
   return true;
 }
 
@@ -208,18 +240,45 @@ bool lite_card_data_exchange_test(void) {
 
 bool lite_card_apdu(uint8_t* apdu, uint16_t apdu_len, uint8_t* response,
                     uint16_t* response_len, uint8_t* sw1sw2, bool safe) {
+  // 打印输入参数
+  printf("lite_card_apdu: apdu_len=%d, safe=%s\n", apdu_len, safe ? "true" : "false");
+  
+  // 打印完整的APDU命令
+  printf("APDU command (%d bytes):", apdu_len);
+  for (int i = 0; i < apdu_len; i++) {
+    printf(" %02X", apdu[i]);
+  }
+  printf("\n");
+
   if (memcmp(apdu, "\x00\xa4\x04\x00", 4) == 0) {
+    printf("Detected SELECT command, closing secure channel\n");
     scp11_close_secure_channel(&scp11_ctx);
   }
 
   if (safe) {
+    printf("Using safe mode, opening secure channel\n");
     if (!lite_card_open_secure_channel()) {
+      printf("Failed to open secure channel\n");
       return false;
     }
-    return lite_card_send_safeapdu(apdu, apdu_len, response, response_len,
-                                   sw1sw2);
+    printf("Sending safe APDU\n");
+    bool result = lite_card_send_safeapdu(apdu, apdu_len, response, response_len, sw1sw2);
+    printf("Safe APDU result: %s, response_len=%d, sw1sw2=%02X%02X\n", 
+           result ? "success" : "failed", 
+           response_len ? *response_len : 0,
+           sw1sw2 ? sw1sw2[0] : 0, 
+           sw1sw2 ? sw1sw2[1] : 0);
+    return result;
   }
-  return nfc_send_recv(apdu, apdu_len, response, response_len, sw1sw2);
+  
+  printf("Using normal mode, sending direct APDU\n");
+  bool result = nfc_send_recv(apdu, apdu_len, response, response_len, sw1sw2);
+  printf("Direct APDU result: %s, response_len=%d, sw1sw2=%02X%02X\n", 
+         result ? "success" : "failed", 
+         response_len ? *response_len : 0,
+         sw1sw2 ? sw1sw2[0] : 0, 
+         sw1sw2 ? sw1sw2[1] : 0);
+  return result;
 }
 
 bool lite_card_safe_apdu_test(void) {

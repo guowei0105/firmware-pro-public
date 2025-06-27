@@ -3,18 +3,23 @@
 
 #include "aes/aes.h"
 #include "scp03.h"
+#include "stdio.h"
 
 #define SWAP_UINT32(x)                                     \
   (((x) >> 24) & 0x000000FF) | (((x) >> 8) & 0x0000FF00) | \
       (((x) << 8) & 0x00FF0000) | (((x) << 24) & 0xFF000000)
 
 void scp03_generate_icv(uint8_t *aes_key, scp03_context *scp03_ctx, bool send) {
+  printf("send: %d\n", send);
   aes_encrypt_ctx ctxe;
   uint8_t iv[AES_BLOCK_SIZE] = {0};
   uint8_t counter[AES_BLOCK_SIZE] = {0};
   uint32_t counter_temp;
 
   aes_init();
+
+
+  
 
   if (send) {
     counter_temp = SWAP_UINT32(scp03_ctx->counter);
@@ -25,9 +30,30 @@ void scp03_generate_icv(uint8_t *aes_key, scp03_context *scp03_ctx, bool send) {
     memcpy(counter + 12, &counter_temp, 4);
     counter[0] = 0x80;
   }
-  aes_encrypt_key128(aes_key, &ctxe);
 
+  aes_encrypt_key128(aes_key, &ctxe);
+  printf("aes_key: ");
+  for(int i = 0; i < 16; i++) {
+    printf("%02x", aes_key[i]);
+  }
+  printf("\n");
+  
+  printf("counter: ");
+  for(int i = 0; i < 16; i++) {
+    printf("%02x", counter[i]);
+  }
+  printf("\n");
   aes_cbc_encrypt(counter, scp03_ctx->icv, AES_BLOCK_SIZE, iv, &ctxe);
+  printf("icv: ");
+  for(int i = 0; i < 16; i++) {
+    printf("%02x", scp03_ctx->icv[i]);
+  }
+  printf("\n");
+  printf("iv: ");
+  for(int i = 0; i < 16; i++) {
+    printf("%02x", iv[i]);
+  }
+  printf("\n");
 
   return;
 }
