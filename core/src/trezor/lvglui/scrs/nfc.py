@@ -35,7 +35,8 @@ CMD_EXPORT_DATA = b"\x80\x4c\x00\x00"
 CMD_BACKUP_DATA = b"\x80\x3c\x00\x00"
 CMD_SETUP_NEW_PIN = b"\x80\xcb\x80\x00\x0e\xdf\xfe\x0b\x82\x04\x08\x00\x06"
 CMD_GET_BACKUP_STATUS = b"\x80\x6A\x00\x00"
-CMD_VERIFY_PIN = b"\x80\x20\x00\x00\x07\x06"
+CMD_VERIFY_PIN = b"\x84\x20\x00\x00\x07\x06"
+CMD_SET_CARD_LOCK = b"\x84\x21\x00\x00\x08\x06"
 
 
 async def handle_sw1sw2_connect_error(self):
@@ -218,6 +219,12 @@ async def start_import_pin_mnemonicmphrase(self, pin):
         pin_status = f"63C{retry_count:X}"
         await handle_cleanup(self, pin_status)
         return
+    if sw1sw2[0] == 0x63 and (sw1sw2[1] & 0xF0) == 0xD0:
+        retry_count = sw1sw2[1] & 0x0F
+        print(f"PIN verification failed. Remaining retries: {retry_count}")
+        pin_status = f"63D{retry_count:X}"
+        await handle_cleanup(self, pin_status)
+        return
 
     if card_type == "OLD":
         exportresp, exportsw1sw2 = nfc.send_recv(CMD_EXPORT_DATA)
@@ -286,6 +293,13 @@ async def start_check_pin_mnemonicmphrase(self, pin, mnemonic, card_num):
         self.stop_animation()
         await handle_cleanup(self, pin_status)
         return retry_count
+    if sw1sw2[0] == 0x63 and (sw1sw2[1] & 0xF0) == 0xD0:
+        retry_count = sw1sw2[1] & 0x0F
+        print(f"PIN verification failed. Remaining retries: {retry_count}")
+        pin_status = f"63D{retry_count:X}"
+        self.stop_animation()
+        await handle_cleanup(self, pin_status)
+        return retry_count
     if card_type == "NEW":
         command_data = CMD_SETUP_NEW_PIN + pin_bytes
         print(f"set new pincommand_data: {command_data}")
@@ -332,6 +346,202 @@ async def start_check_pin_mnemonicmphrase(self, pin, mnemonic, card_num):
     self.clean()
     self.destroy()
     return
+
+
+async def check_card_lock_status():
+    """检查卡锁定状态 - 先选择应用，再查询PIN设置状态和锁定状态"""
+    print("=== Starting card lock status check ===")
+    
+    # 1. 先选择应用 (Select Applet)
+    print("Step 1: Selecting applet...")
+    resp, sw1sw2 = nfc.send_recv(CMD_NEW_APPLET)
+    print(f"Select applet response: {resp}")
+    
+    # 安全地打印状态字
+    if isinstance(sw1sw2, bytes):
+        hex_str = ''.join(f'{b:02x}' for b in sw1sw2)
+        print(f"Select applet status word: {sw1sw2} (hex: {hex_str})")
+    else:
+        print(f"Select applet status word: {sw1sw2}")
+    
+    # 检查连接状态
+    if sw1sw2 == LITE_CARD_DISCONECT_STATUS:
+        print("Card disconnection detected during applet selection")
+        return LITE_CARD_DISCONECT_STATUS
+    
+    if sw1sw2 != LITE_CARD_SUCCESS_STATUS:
+        print("Failed to select applet")
+        return LITE_CARD_ERROR_REPONSE
+    
+    # 2. 查询PIN设置状态
+    print("Step 2: Checking PIN setup status...")
+    pin_status_resp, pin_status_sw1sw2 = nfc.send_recv(CMD_GET_PIN_STATUS)
+    print(f"PIN status response data: {pin_status_resp}")
+    
+    # 安全地打印状态字
+    if isinstance(pin_status_sw1sw2, bytes):
+        hex_str = ''.join(f'{b:02x}' for b in pin_status_sw1sw2)
+        print(f"PIN status word: {pin_status_sw1sw2} (hex: {hex_str})")
+    else:
+        print(f"PIN status word: {pin_status_sw1sw2} (hex: {hex(pin_status_sw1sw2)})")
+    
+    # 检查连接状态
+    if pin_status_sw1sw2 == LITE_CARD_DISCONECT_STATUS:
+        print("Card disconnection detected during PIN status check")
+        return LITE_CARD_DISCONECT_STATUS
+    
+    # 检查PIN是否已设置
+    if pin_status_sw1sw2 == LITE_CARD_SUCCESS_STATUS:
+        if pin_status_resp == b"\x01":
+            print("PIN is set")
+        elif pin_status_resp == b"\x02":
+            print("PIN is not set - card needs PIN setup first")
+            return "pin_not_set"
+        else:
+            print(f"Unknown PIN status response: {pin_status_resp}")
+    else:
+        print("Failed to get PIN status")
+        return LITE_CARD_ERROR_REPONSE
+    
+    # 3. 查询PIN剩余次数来判断锁定状态
+    print("Step 3: Checking PIN retry count for lock status...")
+    retry_resp, retry_sw1sw2 = nfc.send_recv(CMD_GET_PIN_RETRY_COUNT)
+    print(f"PIN retry response data: {retry_resp}")
+    
+    # 安全地打印状态字
+    if isinstance(retry_sw1sw2, bytes):
+        hex_str = ''.join(f'{b:02x}' for b in retry_sw1sw2)
+        print(f"PIN retry status word: {retry_sw1sw2} (hex: {hex_str})")
+    else:
+        print(f"PIN retry status word: {retry_sw1sw2} (hex: {hex(retry_sw1sw2)})")
+    
+    # 检查连接状态
+    if retry_sw1sw2 == LITE_CARD_DISCONECT_STATUS:
+        print("Card disconnection detected during PIN retry count check")
+        return LITE_CARD_DISCONECT_STATUS
+    
+    # 检查状态字来判断锁定状态
+    if len(retry_sw1sw2) >= 2:
+        sw1 = retry_sw1sw2[0]
+        sw2 = retry_sw1sw2[1]
+        print(f"SW1: 0x{sw1:02X}, SW2: 0x{sw2:02X}")
+        
+        if sw1 == 0x63:
+            retry_count = sw2 & 0x0F
+            print(f"PIN retry count: {retry_count}")
+            
+            if (sw2 & 0xF0) == 0xC0:
+                # 63CX - 未锁定状态
+                print(f"Card status: Unlocked (63C{retry_count:X})")
+                return ("unlocked", retry_count)
+            elif (sw2 & 0xF0) == 0xD0:
+                # 63DX - 已锁定状态  
+                print(f"Card status: Locked (63D{retry_count:X})")
+                return ("locked", retry_count)
+            else:
+                print(f"Unknown 63XX status: 63{sw2:02X}")
+        elif retry_sw1sw2 == LITE_CARD_SUCCESS_STATUS:
+            # 如果是90 00成功状态，默认为未锁定
+            print("Card status: Success status (9000) - default to unlocked")
+            return "unlocked"
+        elif sw1 == 0x6D and sw2 == 0x00:
+            # 6D00 - 指令不支持
+            print("Card status: Command not supported (6D00) - card may not support lock feature")
+            return "unsupported"
+        else:
+            print(f"Other status word: {sw1:02X}{sw2:02X}")
+    else:
+        print(f"Insufficient status word length: {len(retry_sw1sw2)}")
+    
+    # 如果无法判断，返回错误
+    print("Unable to determine card lock status, returning error")
+    print("=== Card lock status check completed ===")
+    return LITE_CARD_ERROR_REPONSE
+
+
+async def set_card_lock_state(pin, lock_enable):
+    """设置卡锁定状态（使用SCP03安全通道）
+    Args:
+        pin: PIN码列表
+        lock_enable: True为开启锁定，False为关闭锁定
+    Returns:
+        状态字或错误码
+    """
+    print(f"=== Setting card lock state: {'Enable' if lock_enable else 'Disable'} ===")
+    
+    # 重新选择应用
+    print("Selecting applet before lock operation...")
+    resp, sw1sw2 = nfc.send_recv(CMD_NEW_APPLET)
+    if sw1sw2 != LITE_CARD_SUCCESS_STATUS:
+        print(f"Failed to select applet: {sw1sw2}")
+        return LITE_CARD_ERROR_REPONSE
+    
+    # 构建PIN数据 - 确保PIN码为6字节
+    pin_str = "".join(pin)
+    if len(pin_str) != 6:
+        print(f"Error: PIN must be 6 digits, got {len(pin_str)}")
+        return LITE_CARD_ERROR_REPONSE
+    pin_bytes = pin_str.encode()
+    
+    # 先验证PIN码
+    print("Verifying PIN before setting lock state...")
+    verify_command = CMD_VERIFY_PIN + pin_bytes
+    verify_resp, verify_sw1sw2 = nfc.send_recv(verify_command, True)
+    print(f"PIN verification response: {verify_resp}")
+    if isinstance(verify_sw1sw2, bytes):
+        hex_str = ''.join(f'{b:02x}' for b in verify_sw1sw2)
+        print(f"PIN verification status: {verify_sw1sw2} (hex: {hex_str})")
+    
+    if verify_sw1sw2 != LITE_CARD_SUCCESS_STATUS:
+        print(f"PIN verification failed: {verify_sw1sw2}")
+        return verify_sw1sw2
+    
+    control_code = b"\x01" if lock_enable else b"\x00"
+    
+    # 构建命令数据：PIN(6字节) + 控制码
+    command_data = CMD_SET_CARD_LOCK + pin_bytes + control_code
+    
+    print(f"Command length: {len(command_data)} bytes")
+    print(f"Control code: {'Enable' if lock_enable else 'Disable'} (0x{control_code[0]:02x})")
+    # 发送命令（使用SCP03安全通道）
+    resp, sw1sw2 = nfc.send_recv(command_data, True)  # True表示使用SCP03
+    
+    print(f"Set lock response data: {resp}")
+    if isinstance(sw1sw2, bytes):
+        hex_str = ''.join(f'{b:02x}' for b in sw1sw2)
+        print(f"Set lock status: {sw1sw2} (hex: {hex_str})")
+    
+    # 解析响应
+    if sw1sw2 == LITE_CARD_DISCONECT_STATUS:
+        print("Card disconnected")
+        return LITE_CARD_DISCONECT_STATUS
+    elif sw1sw2 == LITE_CARD_SUCCESS_STATUS:
+        # 检查响应数据
+        if resp and len(resp) > 0:
+            lock_state = resp[0] if isinstance(resp[0], int) else ord(resp[0])
+            print(f"Card lock state response: 0x{lock_state:02X} ({'Enabled' if lock_state == 0x01 else 'Disabled'})")
+        print("Card lock state changed successfully")
+        return LITE_CARD_SUCCESS_STATUS
+    else:
+        print(f"Failed to set card lock state")
+        # 返回错误状态字供调用方处理
+        return sw1sw2
+
+
+async def start_card_lock_workflow():
+    """卡锁定工作流程 - 搜索卡片并处理锁定状态"""
+    nfc.pwr_ctrl(True)
+    
+    # 在while循环中搜索卡片
+    while True:
+        await loop.sleep(1000)
+        if nfc.poll_card():
+            # 找到卡片，返回成功
+            MOTOR_CTL = io.MOTOR()
+            perform_ticks(MOTOR_CTL, 80)
+            return LITE_CARD_FIND
+        else:
+            continue
 
 
 async def start_set_pin_mnemonicmphrase(self, pin, mnemonic, card_num):
@@ -542,3 +752,23 @@ class TransferDataScreen(FullSizeWindow):
 
     def import_pin_mnemonicmphrase(self, pin):
         loop.schedule(start_import_pin_mnemonicmphrase(self, pin))
+
+    def check_card_lock_status(self):
+        """检查卡锁定状态"""
+        loop.schedule(self._check_card_lock_status())
+
+    async def _check_card_lock_status(self):
+        """检查卡锁定状态的异步实现"""
+        lock_status = await check_card_lock_status()
+        self.channel.publish(lock_status)
+        self.stop_animation()
+        
+    def set_card_lock_state(self, pin, lock_enable):
+        """设置卡锁定状态"""
+        loop.schedule(self._set_card_lock_state(pin, lock_enable))
+        
+    async def _set_card_lock_state(self, pin, lock_enable):
+        """设置卡锁定状态的异步实现"""
+        result = await set_card_lock_state(pin, lock_enable)
+        self.channel.publish(result)
+        self.stop_animation()
