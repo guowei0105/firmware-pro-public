@@ -10,6 +10,9 @@
 #include "sdram.h"
 #include "touch.h"
 
+// Forward declaration for second layer animation
+extern void lcd_ensure_second_layer(void);
+
 lv_color_t *fb[2] = {NULL, NULL};
 
 static mp_obj_t mp_disp_drv_framebuffer(mp_obj_t n_obj) {
@@ -47,6 +50,14 @@ static void mp_disp_drv_flush(lv_disp_drv_t *disp_drv, const lv_area_t *area,
   dma2d_copy_buffer((uint32_t *)color_p, (uint32_t *)lcd_get_src_addr(),
                     area->x1, area->y1, area->x2 - area->x1 + 1,
                     area->y2 - area->y1 + 1);
+  
+  // In single buffer mode, we need to manually call second layer animation
+  // since lcd_set_src_addr is not called
+  static uint32_t flush_counter = 0;
+  flush_counter++;
+  if (flush_counter % 2 == 0) {  // Every other flush to maintain smooth animation
+    lcd_ensure_second_layer();
+  }
 #endif
   lv_disp_flush_ready(disp_drv);
 }

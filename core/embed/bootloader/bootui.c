@@ -867,9 +867,16 @@ void ui_bootloader_first(const image_header* const hdr) {  // 显示引导程序
   ui_bootloader_page_current = 0;  // 设置当前页面为0
   uint8_t se_state;  // 安全元件状态变量
   char se_info[64] = {0};  // 安全元件信息字符串缓冲区
+void ui_bootloader_first(const image_header* const hdr) {  // 显示引导程序首页界面函数
+  ui_bootloader_page_current = 0;  // 设置当前页面为0
+  uint8_t se_state;  // 安全元件状态变量
+  char se_info[64] = {0};  // 安全元件信息字符串缓冲区
 
   static image_header* current_hdr = NULL;  // 静态当前镜像头指针
+  static image_header* current_hdr = NULL;  // 静态当前镜像头指针
 
+  if (current_hdr == NULL && hdr) {  // 如果当前头为空且传入头不为空
+    current_hdr = (image_header*)hdr;  // 保存传入的头
   if (current_hdr == NULL && hdr) {  // 如果当前头为空且传入头不为空
     current_hdr = (image_header*)hdr;  // 保存传入的头
   }
@@ -891,12 +898,21 @@ void ui_bootloader_first(const image_header* const hdr) {  // 显示引导程序
     char* ble_name;  // 蓝牙名称字符串指针
     ble_name = ble_get_name();  // 获取蓝牙名称
     display_text_center(DISPLAY_RESX / 2, SUBTITLE_OFFSET_Y, ble_name, -1,  // 显示蓝牙名称作为副标题
+  if (ble_name_state()) {  // 如果蓝牙名称状态有效
+    char* ble_name;  // 蓝牙名称字符串指针
+    ble_name = ble_get_name();  // 获取蓝牙名称
+    display_text_center(DISPLAY_RESX / 2, SUBTITLE_OFFSET_Y, ble_name, -1,  // 显示蓝牙名称作为副标题
                         FONT_NORMAL, COLOR_BL_SUBTITLE, COLOR_BL_BG);
+    ble_name_show = true;  // 设置蓝牙名称显示标志
     ble_name_show = true;  // 设置蓝牙名称显示标志
   }
 
   display_text_center(DISPLAY_RESX / 2, DISPLAY_RESY - 92, "SafeOS", -1,  // 显示SafeOS文本
+  display_text_center(DISPLAY_RESX / 2, DISPLAY_RESY - 92, "SafeOS", -1,  // 显示SafeOS文本
                       FONT_PJKS_BOLD_38, COLOR_BL_FG, COLOR_BL_BG);
+  if (current_hdr) {  // 如果有当前头信息
+    const char* ver_str = format_ver("%d.%d.%d", (current_hdr->onekey_version));  // 格式化版本字符串
+    display_text_center(DISPLAY_RESX / 2, DISPLAY_RESY - 50, ver_str, -1,  // 显示版本信息
   if (current_hdr) {  // 如果有当前头信息
     const char* ver_str = format_ver("%d.%d.%d", (current_hdr->onekey_version));  // 格式化版本字符串
     display_text_center(DISPLAY_RESX / 2, DISPLAY_RESY - 50, ver_str, -1,  // 显示版本信息
@@ -907,19 +923,33 @@ void ui_bootloader_first(const image_header* const hdr) {  // 显示引导程序
     strcat(se_info, "SE ");  // 添加SE前缀
     if (se_state & THD89_1ST_IN_BOOT) {  // 检查第一个SE是否在引导模式
       strcat(se_info, "1st ");  // 添加1st标识
+  se_state = se_get_state();  // 获取安全元件状态
+  if (se_state != 0) {  // 如果安全元件不在正常状态
+    strcat(se_info, "SE ");  // 添加SE前缀
+    if (se_state & THD89_1ST_IN_BOOT) {  // 检查第一个SE是否在引导模式
+      strcat(se_info, "1st ");  // 添加1st标识
     }
+    if (se_state & THD89_2ND_IN_BOOT) {  // 检查第二个SE是否在引导模式
+      strcat(se_info, "2nd ");  // 添加2nd标识
     if (se_state & THD89_2ND_IN_BOOT) {  // 检查第二个SE是否在引导模式
       strcat(se_info, "2nd ");  // 添加2nd标识
     }
     if (se_state & THD89_3RD_IN_BOOT) {  // 检查第三个SE是否在引导模式
       strcat(se_info, "3rd ");  // 添加3rd标识
+    if (se_state & THD89_3RD_IN_BOOT) {  // 检查第三个SE是否在引导模式
+      strcat(se_info, "3rd ");  // 添加3rd标识
     }
+    if (se_state & THD89_4TH_IN_BOOT) {  // 检查第四个SE是否在引导模式
+      strcat(se_info, "4th ");  // 添加4th标识
     if (se_state & THD89_4TH_IN_BOOT) {  // 检查第四个SE是否在引导模式
       strcat(se_info, "4th ");  // 添加4th标识
     }
     strcat(se_info, "in boot");  // 添加in boot后缀
     display_text_center(DISPLAY_RESX / 2, 300, se_info, -1, FONT_NORMAL,  // 显示SE状态信息
+    strcat(se_info, "in boot");  // 添加in boot后缀
+    display_text_center(DISPLAY_RESX / 2, 300, se_info, -1, FONT_NORMAL,  // 显示SE状态信息
                         COLOR_BL_SUBTITLE, COLOR_BL_BG);
+    display_text_center(DISPLAY_RESX / 2, 330, "please install se firmware", -1,  // 显示SE固件安装提示
     display_text_center(DISPLAY_RESX / 2, 330, "please install se firmware", -1,  // 显示SE固件安装提示
                         FONT_NORMAL, COLOR_BL_SUBTITLE, COLOR_BL_BG);
   }

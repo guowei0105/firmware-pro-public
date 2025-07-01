@@ -155,6 +155,38 @@ int main(void) {
 
   timer_init();
   display_clear();
+  
+  printf("Display system ready - adding second layer. flag: %d\n", 2);
+  // Initialize second layer after display system is ready
+  lcd_add_second_layer();
+  printf("Second layer initialization completed\n");
+  
+  // Extended test of hardware CoverBackground functions
+  printf("=== HARDWARE LAYER TEST START ===\n");
+  
+  // Test 1: Show layer
+  printf("TEST 1: Showing CoverBackground (full opacity)...\n");
+  lcd_cover_background_show();
+  HAL_Delay(2000);  // 2 seconds to see effect
+  
+  // Test 2: Change opacity
+  printf("TEST 2: Setting opacity to 128 (semi-transparent)...\n");
+  lcd_cover_background_set_opacity(128);
+  HAL_Delay(2000);  // 2 seconds to see effect
+  
+  // Test 3: Set to very low opacity 
+  printf("TEST 3: Setting opacity to 64 (very transparent)...\n");
+  lcd_cover_background_set_opacity(64);
+  HAL_Delay(2000);  // 2 seconds to see effect
+  
+  // Test 4: Hide layer completely
+  printf("TEST 4: Hiding CoverBackground completely...\n");
+  lcd_cover_background_hide();
+  HAL_Delay(1000);  // 1 second pause
+  
+  printf("=== HARDWARE LAYER TEST COMPLETE ===\n");
+  printf("All hardware layer functions executed. Proceeding to Python...\n");
+  
   pendsv_init();
 
   device_test(false);

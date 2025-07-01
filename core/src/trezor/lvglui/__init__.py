@@ -8,13 +8,26 @@ DEFAULT_DISPLAY = None
 
 async def lvgl_tick():
     from trezor import workflow
+    import time
 
     inactive_time_bak = 0
+    slow_handler_count = 0
+    
     while True:
         if utils.EMULATOR:
             lv.tick_inc(10)
         await loop.sleep(5)
+        
+        # 只监控耗时较长的timer_handler
+        timer_start = time.ticks_ms()
         lv.timer_handler()
+        timer_duration = time.ticks_diff(time.ticks_ms(), timer_start)
+        
+        # 只在明显过慢时打印，减少日志干扰
+        if timer_duration > 50:
+            slow_handler_count += 1
+            # print(f"ANIM: LVGL_HANDLER={timer_duration}ms (#{slow_handler_count})")
+        
         inactive_time = get_elapsed()
         if inactive_time < inactive_time_bak:
             workflow.idle_timer.touch()

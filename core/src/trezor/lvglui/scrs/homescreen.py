@@ -28,6 +28,7 @@ from . import font_GeistRegular26, font_GeistRegular30, font_GeistSemiBold26
 from .address import AddressManager, chain_list
 from .common import AnimScreen, FullSizeWindow, Screen, lv  # noqa: F401, F403, F405
 from .components.anim import Anim
+# PerformanceProfiler removed to reduce logging overhead
 from .components.banner import LEVEL, Banner
 from .components.button import ListItemBtn, ListItemBtnWithSwitch, NormalButton
 from .components.container import ContainerFlexCol, ContainerFlexRow, ContainerGrid
@@ -48,8 +49,8 @@ def brightness2_percent_str(brightness: int) -> str:
 GRID_CELL_SIZE_ROWS = const(240)
 GRID_CELL_SIZE_COLS = const(144)
 
-APP_DRAWER_UP_TIME = 10
-APP_DRAWER_DOWN_TIME = 50
+APP_DRAWER_UP_TIME = 600
+APP_DRAWER_DOWN_TIME = 650
 APP_DRAWER_UP_DELAY = 15
 APP_DRAWER_DOWN_DELAY = 0
 if __debug__:
@@ -72,8 +73,13 @@ def change_state(is_busy: bool = False):
 
 class MainScreen(Screen):
     def __init__(self, device_name=None, ble_name=None, dev_state=None):
-        homescreen = device.get_homescreen()
+        print("=== MainScreen.__init__ called ===")
+        print(f"MainScreen: device_name={device_name}, ble_name={ble_name}")
+        print("MainScreen: Starting initialization...")
+        # homescreen = device.get_homescreen()
+        # print("homescreen",homescreen)
         if not hasattr(self, "_init"):
+            print("MainScreen: First time initialization")
             self._init = True
             super().__init__(
                 title=device_name, subtitle=ble_name or uart.get_ble_name()
@@ -83,10 +89,10 @@ class MainScreen(Screen):
                 StyleWrapper().text_align_center().text_color(lv_colors.WHITE), 0
             )
         else:
-            self.add_style(
-                StyleWrapper().bg_img_src(homescreen),
-                0,
-            )
+            # self.add_style(
+            #     StyleWrapper().bg_img_src(homescreen),
+            #     0,
+            # )
             if hasattr(self, "dev_state"):
                 from apps.base import get_state
 
@@ -109,10 +115,10 @@ class MainScreen(Screen):
             self.dev_state.align_to(self.subtitle, lv.ALIGN.OUT_BOTTOM_MID, 0, 48)
             self.dev_state.show(dev_state)
 
-        self.add_style(
-            StyleWrapper().bg_img_src(homescreen),
-            0,
-        )
+        # self.add_style(
+        #     StyleWrapper().bg_img_src(homescreen),
+        #     0,
+        # )
 
         self.clear_flag(lv.obj.FLAG.SCROLLABLE)
 
@@ -132,25 +138,132 @@ class MainScreen(Screen):
         self.up_arrow.set_src("A:/res/up-home.png")
         self.up_arrow.align_to(self.bottom_tips, lv.ALIGN.OUT_TOP_MID, 0, -8)
 
+
         self.apps = self.AppDrawer(self)
-        self.apps.add_flag(lv.obj.FLAG.HIDDEN)
-        self.add_event_cb(self.on_slide_up, lv.EVENT.GESTURE, None)
+        self.set_size(480, 800)  # 设置Screen的尺寸
+        # CoverBackground moved to hardware layer 2
+        # self.cover_bg = self.CoverBackground(self)
+
+        # Initialize hardware CoverBackground control
+        self.init_hardware_cover_background()
+        
         save_app_obj(self)
 
-    def hidden_others(self, hidden: bool = True):
-        if hidden:
-            self.set_style_bg_img_src(None, 0)
-            if hasattr(self, "title"):
-                self.title.add_flag(lv.obj.FLAG.HIDDEN)
-            if hasattr(self, "subtitle"):
-                self.subtitle.add_flag(lv.obj.FLAG.HIDDEN)
+    def init_hardware_cover_background(self):
+        """Initialize hardware CoverBackground control and gesture handling"""
+        # Enable gesture recognition on this screen
+        self.add_flag(lv.obj.FLAG.GESTURE_BUBBLE)
+        self.clear_flag(lv.obj.FLAG.SCROLLABLE)  # Disable scrolling to allow gestures
+        
+        # Add gesture event handler
+        self.add_event_cb(self.on_gesture, lv.EVENT.GESTURE, None)
+        
+        # Import trezorui for hardware CoverBackground control
+        try:
+            from trezorui import Display
+            self.display = Display()
+            
+            # Test if our new methods exist
+            if hasattr(self.display, 'cover_background_show'):
+                # Ensure CoverBackground starts hidden first
+                self.display.cover_background_hide()
+                # Schedule delayed loading of homescreen to allow display to stabilize
+                self.schedule_delayed_background_load()
+            else:
+                self.display = None
+                
+        except (ImportError, Exception):
+            self.display = None
+
+    def schedule_delayed_background_load(self):
+        """Schedule delayed loading of background to ensure display system is ready"""
+        if not self.display:
+            return
+            
+        # Use a timer to delay the background loading by 100ms
+        try:
+            def delayed_load():
+                self.load_homescreen_to_hardware()
+                
+            # Schedule the load operation
+            import micropython
+            micropython.schedule(delayed_load, None)
+        except:
+            # Fallback: load immediately if scheduling fails
+            self.load_homescreen_to_hardware()
+
+    def load_homescreen_to_hardware(self):
+        """Load the current homescreen image to hardware CoverBackground layer"""
+        if not self.display or not hasattr(self.display, 'cover_background_set_image'):
+            return
+            
+        try:
+            # Get current homescreen path
+            homescreen_path = device.get_homescreen()
+            
+            if homescreen_path and homescreen_path.startswith("A:"):
+                # Convert LVGL path to actual file path
+                file_path = homescreen_path[2:]  # Remove "A:" prefix
+                
+                # Try to load the JPEG file directly
+                if hasattr(self.display, 'cover_background_load_jpeg'):
+                    self.display.cover_background_load_jpeg(file_path)
+                else:
+                    # Alternative: try to read raw image data
+                    try:
+                        with open(file_path, 'rb') as f:
+                            image_data = f.read()
+                            self.display.cover_background_set_image(image_data)
+                    except Exception:
+                        pass  # Silent fallback
+                        
+        except Exception:
+            pass  # Silent fallback to default behavior
+
+    def on_test_btn(self, event_obj):
+        """Test button to manually toggle CoverBackground"""
+        print("=== TEST BUTTON CLICKED ===")
+        if self.display and hasattr(self.display, 'cover_background_show'):
+            try:
+                # Simple toggle - show CoverBackground
+                print("TEST: Showing CoverBackground...")
+                self.display.cover_background_show()
+                print("TEST: CoverBackground shown - should see blue gradient!")
+                print("TEST: Click again to hide it")
+                
+                # Change button text to indicate next action
+                if hasattr(self, 'test_btn'):
+                    btn_label = self.test_btn.get_child(0)  # Get the label
+                    current_text = btn_label.get_text()
+                    if "Hide" in current_text:
+                        btn_label.set_text("Test CoverBackground")
+                        self.display.cover_background_hide()
+                        print("TEST: CoverBackground hidden")
+                    else:
+                        btn_label.set_text("Hide CoverBackground")
+                        self.display.cover_background_show()
+                        print("TEST: CoverBackground shown")
+                
+            except Exception as e:
+                print(f"TEST: Error in CoverBackground test: {e}")
         else:
-            homescreen = device.get_homescreen()
-            self.set_style_bg_img_src(homescreen, 0)
-            if hasattr(self, "title"):
-                self.title.clear_flag(lv.obj.FLAG.HIDDEN)
-            if hasattr(self, "subtitle"):
-                self.subtitle.clear_flag(lv.obj.FLAG.HIDDEN)
+            print("TEST: Display or CoverBackground methods not available")
+
+    def hidden_others(self, hidden: bool = True):
+        pass
+        # if hidden:
+        #     self.set_style_bg_img_src(None, 0)
+        #     if hasattr(self, "title"):
+        #         self.title.add_flag(lv.obj.FLAG.HIDDEN)
+        #     if hasattr(self, "subtitle"):
+        #         self.subtitle.add_flag(lv.obj.FLAG.HIDDEN)
+        # else:
+        #     homescreen = device.get_homescreen()
+        #     self.set_style_bg_img_src(homescreen, 0)
+        #     if hasattr(self, "title"):
+        #         self.title.clear_flag(lv.obj.FLAG.HIDDEN)
+        #     if hasattr(self, "subtitle"):
+        #         self.subtitle.clear_flag(lv.obj.FLAG.HIDDEN)
 
     def change_state(self, busy: bool):
         if busy:
@@ -162,22 +275,28 @@ class MainScreen(Screen):
             self.up_arrow.clear_flag(lv.obj.FLAG.HIDDEN)
             self.bottom_tips.set_text(_(i18n_keys.BUTTON__SWIPE_TO_SHOW_APPS))
 
-    def on_slide_up(self, event_obj):
+    def on_gesture(self, event_obj):
+        """Handle gestures for hardware CoverBackground control"""
         code = event_obj.code
-        if code == lv.EVENT.GESTURE:
-            _dir = lv.indev_get_act().get_gesture_dir()
-            if _dir == lv.DIR.TOP:
-                # child_cnt == 5 in common if in homepage
-                if self.get_child_cnt() > 5:
-                    return
-                if self.is_visible():
-                    # self.hidden_others()
-                    # if hasattr(self, "dev_state"):
-                    #     self.dev_state.hidden()
-                    self.apps.clear_flag(lv.obj.FLAG.HIDDEN)
-                    self.apps.show()
-            elif _dir == lv.DIR.BOTTOM:
-                lv.event_send(self.apps, lv.EVENT.GESTURE, None)
+        if code == lv.EVENT.GESTURE and self.display:
+            try:
+                indev = lv.indev_get_act()
+                if indev:
+                    _dir = indev.get_gesture_dir()
+                    
+                    if _dir == lv.DIR.TOP:
+                        # Gesture UP - Hide hardware CoverBackground
+                        if hasattr(self.display, 'cover_background_hide'):
+                            self.display.cover_background_hide()
+                            
+                    elif _dir == lv.DIR.BOTTOM:
+                        # Gesture DOWN - Show hardware CoverBackground  
+                        if hasattr(self.display, 'cover_background_show'):
+                            self.display.cover_background_show()
+                            
+            except Exception:
+                pass  # Silently handle any errors
+
 
     def _load_scr(self, scr: "Screen", back: bool = False) -> None:
         lv.scr_load(scr)
@@ -214,6 +333,9 @@ class MainScreen(Screen):
 
         def hidden(self):
             self.add_flag(lv.obj.FLAG.HIDDEN)
+     
+    # CoverBackground class moved to hardware layer 2
+    # Original CoverBackground functionality is now handled by LTDC layer 1
 
     class AppDrawer(lv.obj):
         PAGE_SIZE = 2
@@ -226,7 +348,7 @@ class MainScreen(Screen):
             self.text_label = {}
             self.init_ui()
             self.init_items()
-            self.create_down_arrow()
+            # self.create_down_arrow()
             self.init_indicators()
             self.init_anim()
 
@@ -235,7 +357,7 @@ class MainScreen(Screen):
             self.set_pos(0, 0)
             self.set_size(lv.pct(100), lv.pct(100))
             self.add_style(
-                StyleWrapper().bg_color(lv_colors.BLACK).bg_opa().border_width(0),
+                StyleWrapper().bg_opa().border_width(0),
                 0,
             )
 
@@ -245,12 +367,14 @@ class MainScreen(Screen):
             self.add_event_cb(self.on_gesture, lv.EVENT.GESTURE, None)
 
             self.main_cont = lv.obj(self)
-            self.main_cont.set_size(448, 600)
-            self.main_cont.set_pos(16, 200)
+            self.main_cont.set_size(480, 750)
+            self.main_cont.set_pos(64, 75)
             self.main_cont.add_flag(lv.obj.FLAG.EVENT_BUBBLE)
             self.main_cont.set_style_pad_all(0, 0)
             self.main_cont.set_style_border_width(0, 0)
             self.main_cont.set_style_bg_opa(lv.OPA.TRANSP, 0)
+            self.clear_flag(lv.obj.FLAG.GESTURE_BUBBLE)
+            self.clear_flag(lv.obj.FLAG.SCROLLABLE) 
 
             self.current_page = 0
             self.page_items = [[] for _ in range(2)]
@@ -272,32 +396,59 @@ class MainScreen(Screen):
                     ("scan", "app-scan", i18n_keys.APP__SCAN),
                     ("my_address", "app-address", i18n_keys.APP__ADDRESS),
                     ("settings", "app-settings", i18n_keys.APP__SETTINGS),
+                    ("test_cover", "app-settings", i18n_keys.APP__SETTINGS),  # Test app using settings i18n key
                     ("passkey", "app-keys", i18n_keys.FIDO_FIDO_KEYS_LABEL),
                     ("backup", "app-backup", i18n_keys.APP__BACK_UP),
                     ("nft", "app-nft", i18n_keys.APP__NFT_GALLERY),
                     ("guide", "app-tips", i18n_keys.APP__TIPS),
                 ]
 
-            items_per_page = 4
+            items_per_page = 6
             cols = 2
             rows = 2
-            item_width = 216
-            item_height = 280
-            col_gap = 16
-            row_gap = 16
+            item_width = 144
+            item_height = 214
+            col_gap = 48
+            row_gap = 24
 
+            # 遍历所有的应用项目
             for idx, (name, img, text) in enumerate(items):
+                # print(f"Processing item {idx}:")
+                
+                # Calculate page number (0 or 1) by dividing index by items per page (6)
                 page = idx // items_per_page
+                # print(f"  Page: {page}")
+                
+                # Calculate index within current page (0-5)
                 page_idx = idx % items_per_page
+                # print(f"  Page index: {page_idx}")
+                
+                # Calculate row number (0 or 1) by dividing page index by rows (2)
                 row = page_idx // rows
+                # print(f"  Row: {row}")
+                
+                # Calculate column number (0 or 1) by modulo page index with columns (2)
                 col = page_idx % cols
+                # print(f"  Column: {col}")
+                
+                # Calculate x coordinate based on column number * (width + gap)
                 x = col * (item_width + col_gap)
+                # print(f"  X coordinate: {x}")
+                
+                # Calculate y coordinate based on row number * (height + gap)
                 y = row * (item_height + row_gap)
+                # print(f"  Y coordinate: {y}")
 
+                # Create item and add to corresponding page
                 item = self.create_item(name, img, text, x, y)
                 self.page_items[page].append(item)
+                # print(f"  Created item: {name} at position ({x}, {y})")
+                
+                # Hide items not on first page
                 if page != 0:
                     item.add_flag(lv.obj.FLAG.HIDDEN)
+                    # print(f"  Item hidden on page {page}")
+                # print("---")
 
         def create_item(self, name, img_src, text_key, x, y):
             cont = lv.obj(self.main_cont)
@@ -310,35 +461,40 @@ class MainScreen(Screen):
                 .pad_all(0),
                 0,
             )
-            cont.set_size(216, 280)
+            cont.set_size(144, 214)
             cont.set_pos(x, y)
             cont.add_flag(lv.obj.FLAG.EVENT_BUBBLE)
 
             btn = lv.imgbtn(cont)
-            btn.set_size(216, 216)
-            btn.set_style_bg_img_src(f"A:/res/{img_src}.jpg", 0)
+            btn.set_size(144, 144)
+            btn.set_style_bg_img_src(f"A:/res/{img_src}.png", 0)
+
+            
             btn.add_style(
                 StyleWrapper()
-                .bg_img_recolor_opa(lv.OPA._30)
+                # .bg_img_recolor_opa(lv.OPA._30)
                 .bg_img_recolor(lv_colors.BLACK),
                 lv.PART.MAIN | lv.STATE.PRESSED,
             )
             btn.add_flag(lv.obj.FLAG.EVENT_BUBBLE)
             btn.align(lv.ALIGN.TOP_MID, 0, 0)
+            btn.set_style_border_width(0, 0)  
+            btn.clear_flag(lv.obj.FLAG.SCROLLABLE)
+            btn.clear_flag(lv.obj.FLAG.GESTURE_BUBBLE)
 
             label = lv.label(cont)
             label.set_text(_(text_key))
             label.add_style(
                 StyleWrapper()
-                .width(170)
+                .width(144)
                 .text_font(font_GeistSemiBold26)
                 .text_color(lv_colors.WHITE)
                 .text_align_center(),
                 0,
             )
-            label.add_style(
-                StyleWrapper().text_opa(lv.OPA._70), lv.PART.MAIN | lv.STATE.PRESSED
-            )
+            # label.add_style(
+            #     StyleWrapper().text_opa(lv.OPA._70), lv.PART.MAIN | lv.STATE.PRESSED
+            # )
 
             label.align_to(btn, lv.ALIGN.OUT_BOTTOM_MID, 0, 8)
 
@@ -369,9 +525,9 @@ class MainScreen(Screen):
             ]
 
         def init_anim(self):
-            self.show_anim = Anim(
-                200,
-                148,
+            self.show_anim = Anim(                                                                                                          
+                130,
+                75,
                 self.set_position,
                 start_cb=self.show_anim_start_cb,
                 delay=APP_DRAWER_UP_DELAY,
@@ -382,8 +538,8 @@ class MainScreen(Screen):
                 else APP_DRAWER_UP_PATH_CB,
             )
             self.dismiss_anim = Anim(
-                148,
-                200,
+                75,
+                130,
                 self.set_position,
                 path_cb=lv.anim_t.path_linear
                 if not __debug__
@@ -395,26 +551,134 @@ class MainScreen(Screen):
             )
 
         def set_position(self, val):
-            if not hasattr(self, "_last_position"):
-                self._last_position = val
-            y_offset = val - self._last_position
-            position_threshold = 2
-            if abs(y_offset) >= position_threshold:
-                current_y = self.main_cont.get_y()
-                self.main_cont.set_y(current_y + y_offset)
-                self._last_position = val
+            pass
+                # self.main_cont.set_y(val)
+
+        # def set_position(self, val):
+        #     print(f"set_position called with val: {val}")
+            
+        #     if not hasattr(self, "_last_position"):
+        #         self._last_position = val
+        #         print(f"Initialized _last_position: {self._last_position}")
+            
+        #     y_offset = val - self._last_position
+        #     print(f"y_offset: {y_offset} (val: {val} - _last_position: {self._last_position})")
+            
+        #     position_threshold = 2
+        #     print(f"position_threshold: {position_threshold}")
+            
+        #     if abs(y_offset) >= position_threshold:
+        #         current_y = self.main_cont.get_y()
+        #         print(f"current_y: {current_y}")
+                
+        #         new_y = current_y + y_offset
+        #         # print(f"Setting new_y: {new_y} (current_y: {current_y} + y_offset: {y_offset})")
+                
+        #         self.main_cont.set_y(new_y)
+        #         self._last_position = val
+        #         # print(f"Updated _last_position to: {self._last_position}")
+        #     else:
+        #         print(f"y_offset {y_offset} is below threshold {position_threshold}, skipping update")
 
         def on_gesture(self, event_obj):
             code = event_obj.code
+            print(f"AppDrawer: on_gesture called with code: {code}") 
             if code == lv.EVENT.GESTURE:
                 indev = lv.indev_get_act()
                 _dir = indev.get_gesture_dir()
+                print(f"AppDrawer: Gesture direction: {_dir}")
+                
+                # 向上滑动 - 隐藏layer（向上滑出屏幕）
+                if _dir == lv.DIR.TOP:
+                    try:
+                        from trezorui import Display
+                        display = Display()
+                        
+                        # UP手势：向上滑出动画
+                        if hasattr(display, 'cover_background_is_visible') and display.cover_background_is_visible():
+                            if hasattr(display, 'cover_background_animate_to_y'):
+                                # 流畅的向上滑出动画
+                                display.cover_background_animate_to_y(-800, 350)
+                                # 动画完成后隐藏layer
+                                if hasattr(display, 'cover_background_hide'):
+                                    display.cover_background_hide()
+                            else:
+                                # 如果没有动画函数，直接隐藏
+                                if hasattr(display, 'cover_background_hide'):
+                                    display.cover_background_hide()
+                    except Exception as e:
+                        pass  # 静默处理错误
+                    return
+                
                 if _dir == lv.DIR.BOTTOM:
+                    try:
+                        from trezorui import Display
+                        display = Display()
+                        
+                        # 如果layer当前不可见，则显示
+                        if hasattr(display, 'cover_background_is_visible') and not display.cover_background_is_visible():
+                            # 先加载图片内容
+                            if hasattr(display, 'cover_background_load_jpeg'):
+                                try:
+                                    from storage import device
+                                    homescreen_path = device.get_homescreen()
+                                    
+                                    if not homescreen_path:
+                                        homescreen_path = "A:/res/wallpaper-1.jpg"
+                                    
+                                    display.cover_background_load_jpeg(homescreen_path)
+                                except Exception:
+                                    # 创建测试图案作为备用
+                                    if hasattr(display, 'cover_background_set_image'):
+                                        width, height = 480, 800
+                                        test_image = bytearray(width * height * 2)
+                                        for y in range(height):
+                                            for x in range(width):
+                                                if (y // 50) % 2 == 0:
+                                                    pixel = 0x07E0  # Green
+                                                else:
+                                                    pixel = 0xFFE0  # Yellow
+                                                offset = (y * width + x) * 2
+                                                test_image[offset] = pixel & 0xFF
+                                                test_image[offset + 1] = (pixel >> 8) & 0xFF
+                                        display.cover_background_set_image(bytes(test_image))
+                            
+                            # DOWN手势：从顶部滑入动画
+                            if hasattr(display, 'cover_background_animate_to_y'):
+                                # 先将layer移动到屏幕上方
+                                display.cover_background_move_to_y(-800)
+                                # 设置为可见但保持透明
+                                if hasattr(display, 'cover_background_set_opacity'):
+                                    display.cover_background_set_opacity(255)
+                                if hasattr(display, 'cover_background_set_visible'):
+                                    display.cover_background_set_visible(True)
+                                # 流畅的从顶部滑入动画
+                                display.cover_background_animate_to_y(0, 350)
+                            else:
+                                # 如果没有动画函数，直接显示
+                                if hasattr(display, 'cover_background_show'):
+                                    display.cover_background_show()
+                            
+                            # CoverBackground处理完成，直接返回，不执行AppDrawer dismiss
+                            return
+                                    
+                    except Exception as e:
+                        pass  # 静默处理错误
+                    
+                    # Original dismiss functionality - 只有在CoverBackground处理失败时才执行
+                    print("AppDrawer: Bottom gesture detected, dismissing...")
                     self.slide = True
                     self.dismiss()
                     return
+                    
                 if _dir not in [lv.DIR.RIGHT, lv.DIR.LEFT]:
                     return
+                    
+                # Check if indicators exist before using them
+                if not hasattr(self, 'indicators') or not self.indicators:
+                    print("AppDrawer: indicators not initialized, skipping page change")
+                    return
+                    
                 self.indicators[self.current_page].set_active(False)
                 page_idx = self.current_page
                 if _dir == lv.DIR.LEFT:
@@ -490,9 +754,39 @@ class MainScreen(Screen):
                 "connect": lambda: ConnectWalletWays(self.parent),
                 "my_address": lambda: ShowAddress(self.parent),
                 "passkey": lambda: PasskeysManager(self.parent),
+                "test_cover": lambda: self.test_cover_background(),
             }
             if name in handlers:
                 handlers[name]()
+                
+        def test_cover_background(self):
+            """Test function for CoverBackground control"""
+            print("=== TEST COVER APP CLICKED ===")
+            try:
+                # Direct access to hardware functions
+                from trezorui import Display
+                display = Display()
+                if hasattr(display, 'cover_background_show'):
+                    print("TEST APP: Showing CoverBackground for 3 seconds...")
+                    display.cover_background_show()
+                    
+                    # Auto-hide after 3 seconds
+                    def hide_bg():
+                        try:
+                            display.cover_background_hide() 
+                            print("TEST APP: CoverBackground auto-hidden")
+                        except Exception as e:
+                            print(f"TEST APP: Error hiding: {e}")
+                    
+                    # Schedule hide
+                    import trezor.loop as loop
+                    loop.call_later(3000, hide_bg)  # 3 seconds
+                    print("TEST APP: CoverBackground shown - will auto-hide in 3s")
+                else:
+                    print("TEST APP: cover_background_show method not found")
+                    
+            except Exception as e:
+                print(f"TEST APP: Error: {e}")
 
         def on_click(self, event_obj):
             code = event_obj.code
@@ -2730,44 +3024,44 @@ if __debug__:
             # _code = event_obj.code
             target = event_obj.get_target()
             if target == self.path_liner:
-                print("path_liner clicked")
+                # Path liner animation selected
                 if self.path_up.checkbox.get_state() & lv.STATE.CHECKED:
-                    print("path_up checked")
+                    # Path up animation checked
                     APP_DRAWER_UP_PATH_CB = PATH_LINEAR
                 if self.path_down.checkbox.get_state() & lv.STATE.CHECKED:
                     APP_DRAWER_DOWN_PATH_CB = PATH_LINEAR
             elif target == self.path_ease_in:
-                print("path_ease_in clicked")
+                # Path ease in animation selected
                 if self.path_up.checkbox.get_state() & lv.STATE.CHECKED:
                     APP_DRAWER_UP_PATH_CB = PATH_EASE_IN
                 if self.path_down.checkbox.get_state() & lv.STATE.CHECKED:
                     APP_DRAWER_DOWN_PATH_CB = PATH_EASE_IN
             elif target == self.path_ease_out:
-                print("path_ease_out clicked")
+                # Path ease out animation selected
                 if self.path_up.checkbox.get_state() & lv.STATE.CHECKED:
                     APP_DRAWER_UP_PATH_CB = PATH_EASE_OUT
                 if self.path_down.checkbox.get_state() & lv.STATE.CHECKED:
                     APP_DRAWER_DOWN_PATH_CB = PATH_EASE_OUT
             elif target == self.path_ease_in_out:
-                print("path_ease_in_out clicked")
+                # Path ease in out animation selected
                 if self.path_up.checkbox.get_state() & lv.STATE.CHECKED:
                     APP_DRAWER_UP_PATH_CB = PATH_EASE_IN_OUT
                 if self.path_down.checkbox.get_state() & lv.STATE.CHECKED:
                     APP_DRAWER_DOWN_PATH_CB = PATH_EASE_IN_OUT
             elif target == self.path_over_shoot:
-                print("path_over_shoot clicked")
+                # Path over shoot animation selected
                 if self.path_up.checkbox.get_state() & lv.STATE.CHECKED:
                     APP_DRAWER_UP_PATH_CB = PATH_OVER_SHOOT
                 if self.path_down.checkbox.get_state() & lv.STATE.CHECKED:
                     APP_DRAWER_DOWN_PATH_CB = PATH_OVER_SHOOT
             elif target == self.path_bounce:
-                print("path_bounce clicked")
+                # Path bounce animation selected
                 if self.path_up.checkbox.get_state() & lv.STATE.CHECKED:
                     APP_DRAWER_UP_PATH_CB = PATH_BOUNCE
                 if self.path_down.checkbox.get_state() & lv.STATE.CHECKED:
                     APP_DRAWER_DOWN_PATH_CB = PATH_BOUNCE
             elif target == self.path_step:
-                print("path_step clicked")
+                # Path step animation selected
                 if self.path_up.checkbox.get_state() & lv.STATE.CHECKED:
                     APP_DRAWER_UP_PATH_CB = PATH_STEP
                 if self.path_down.checkbox.get_state() & lv.STATE.CHECKED:
@@ -5296,6 +5590,18 @@ class FidoKeysToggle(FullSizeWindow):
         )
         self.enable = enable
         self.callback_obj = callback_obj
+        if not enable:
+            self.btn_yes.enable(
+                bg_color=lv_colors.ONEKEY_YELLOW, text_color=lv_colors.BLACK
+            )
+            self.tips_bar = Banner(
+                self.content_area,
+                LEVEL.WARNING,
+                _(i18n_keys.MSG__DO_NOT_CHANGE_THIS_SETTING),
+            )
+            self.tips_bar.align(lv.ALIGN.TOP_LEFT, 8, 8)
+            self.title.align_to(self.tips_bar, lv.ALIGN.OUT_BOTTOM_LEFT, 0, 16)
+            self.subtitle.align_to(self.title, lv.ALIGN.OUT_BOTTOM_LEFT, 0, 16)
 
     def eventhandler(self, event_obj):
         code = event_obj.code
