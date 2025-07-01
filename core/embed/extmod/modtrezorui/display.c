@@ -474,26 +474,26 @@ void display_icon(int x, int y, int w, int h, const void *data,
   y0 -= y;
   y1 -= y;
 
-  uint16_t colortable[16] = {0};
-  set_color_table(colortable, fgcolor, bgcolor);
+  uint16_t colortable[16] = {0};  // 定义颜色查找表数组
+  set_color_table(colortable, fgcolor, bgcolor);  // 设置颜色查找表
 
-  struct uzlib_uncomp decomp = {0};
-  uint8_t decomp_window[UZLIB_WINDOW_SIZE] = {0};
-  uint8_t decomp_out = 0;
-  uzlib_prepare(&decomp, decomp_window, data, datalen, &decomp_out,
+  struct uzlib_uncomp decomp = {0};  // 定义解压缩结构体
+  uint8_t decomp_window[UZLIB_WINDOW_SIZE] = {0};  // 定义解压缩窗口缓冲区
+  uint8_t decomp_out = 0;  // 定义解压输出缓冲区
+  uzlib_prepare(&decomp, decomp_window, data, datalen, &decomp_out,  // 准备解压缩
                 sizeof(decomp_out));
 
-  for (uint32_t pos = 0; pos < w * h / 2; pos++) {
-    int st = uzlib_uncompress(&decomp);
-    if (st == TINF_DONE) break;  // all OK
-    if (st < 0) break;           // error
-    const int px = 2 * pos % w;
-    const int py = 2 * pos / w;
-    if (px >= x0 && px <= x1 && py >= y0 && py <= y1) {
-      fb_write_pixel(x_pos + px, y_pos + py, colortable[decomp_out >> 4]);
-      fb_write_pixel(x_pos + px + 1, y_pos + py, colortable[decomp_out & 0x0F]);
+  for (uint32_t pos = 0; pos < w * h / 2; pos++) {  // 遍历所有像素点(每次处理2个像素)
+    int st = uzlib_uncompress(&decomp);  // 解压缩数据
+    if (st == TINF_DONE) break;  // 如果解压完成则退出
+    if (st < 0) break;           // 如果发生错误则退出
+    const int px = 2 * pos % w;  // 计算当前x坐标
+    const int py = 2 * pos / w;  // 计算当前y坐标
+    if (px >= x0 && px <= x1 && py >= y0 && py <= y1) {  // 如果在裁剪区域内
+      fb_write_pixel(x_pos + px, y_pos + py, colortable[decomp_out >> 4]);  // 写入第一个像素
+      fb_write_pixel(x_pos + px + 1, y_pos + py, colortable[decomp_out & 0x0F]);  // 写入第二个像素
     }
-    decomp.dest = (uint8_t *)&decomp_out;
+    decomp.dest = (uint8_t *)&decomp_out;  // 重置解压输出缓冲区
   }
 }
 

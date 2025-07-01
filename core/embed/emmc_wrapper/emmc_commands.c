@@ -868,29 +868,29 @@ extern void disable_usb_tiny_task(void);
 
 static int update_firmware_from_file(uint8_t iface_num, const char* path, bool check_only)
 {
-    uint32_t update_data_len = 0;
+    uint32_t update_data_len = 0;  // 更新数据长度
 
-    // wipe whole buffer
+    // 清空整个缓冲区
     memzero(bl_buffer->misc_buff, SDRAM_BOOLOADER_BUFFER_MISC_LEN);
 
-    if ( strlen(path) > FF_MAX_LFN )
+    if ( strlen(path) > FF_MAX_LFN )  // 检查固件文件路径长度是否超过最大限制
     {
         send_failure(iface_num, FailureType_Failure_ProcessError, "Firmware file path is too long!");
         return -1;
     }
 
-    PathType path_type;
-    ExecuteCheck_MSGS_ADV(emmc_fs_path_type(path, &path_type), true, {
+    PathType path_type;  // 路径类型
+    ExecuteCheck_MSGS_ADV(emmc_fs_path_type(path, &path_type), true, {  // 获取路径类型
         send_failure(iface_num, FailureType_Failure_ProcessError, "path is invalid!");
         return -1;
     });
-    // get file info
+    // 获取文件信息
     EMMC_PATH_INFO file_info;
 
-    if ( path_type == PATH_FILE )
+    if ( path_type == PATH_FILE )  // 如果是文件
     {
 
-        ExecuteCheck_MSGS_ADV(emmc_fs_path_info(path, &file_info), true, {
+        ExecuteCheck_MSGS_ADV(emmc_fs_path_info(path, &file_info), true, {  // 获取文件信息
 #if PRODUCTION
             send_failure_detailed(
                 iface_num, FailureType_Failure_ProcessError, "%s -> %s Failed", __func__, str_func_call
@@ -906,7 +906,7 @@ static int update_firmware_from_file(uint8_t iface_num, const char* path, bool c
             return -1;
         });
 
-        // check file exist, type, size
+        // 检查文件是否存在、类型和大小
         ExecuteCheck_MSGS_ADV((file_info.path_exist), true, {
             send_failure(iface_num, FailureType_Failure_ProcessError, "Firmware file not exist!");
             return -1;
@@ -924,7 +924,7 @@ static int update_firmware_from_file(uint8_t iface_num, const char* path, bool c
             }
         );
 
-        // read firmware file to ram
+        // 将固件文件读入RAM
         uint32_t processed = 0;
         ExecuteCheck_MSGS_ADV(
             emmc_fs_file_read(path, 0, bl_buffer->misc_buff, file_info.size, &processed), true,
@@ -945,7 +945,7 @@ static int update_firmware_from_file(uint8_t iface_num, const char* path, bool c
             }
         );
 
-        // make sure same size read
+        // 确保读取的大小相同
         if ( processed != file_info.size )
         {
             emmc_fs_file_delete(path);
@@ -958,43 +958,43 @@ static int update_firmware_from_file(uint8_t iface_num, const char* path, bool c
             return -1;
         });
     }
-    else if ( path_type == PATH_DIR )
+    else if ( path_type == PATH_DIR )  // 如果是目录
     {
         FRESULT res;
         DIR dir;
         FILINFO fno;
 
-        uint8_t header[4] = {0};
-        uint32_t br = 0;
+        uint8_t header[4] = {0};  // 文件头
+        uint32_t br = 0;  // 读取的字节数
 
-        if ( f_opendir(&dir, path) != FR_OK )
+        if ( f_opendir(&dir, path) != FR_OK )  // 打开目录
         {
             send_failure(iface_num, FailureType_Failure_ProcessError, "Firmware file path is a directory!");
             return -1;
         }
 
-        f_chdir(path);
+        f_chdir(path);  // 切换到目标目录
 
-        while ( 1 )
+        while ( 1 )  // 遍历目录中的文件
         {
             res = f_readdir(&dir, &fno);
             if ( res != FR_OK || fno.fname[0] == 0 )
             {
                 break;
             }
-            if ( fno.fattrib & AM_DIR )
+            if ( fno.fattrib & AM_DIR )  // 跳过子目录
             {
                 continue;
             }
 
-            if ( strlen(fno.fname) > FF_MAX_LFN )
+            if ( strlen(fno.fname) > FF_MAX_LFN )  // 检查文件名长度
             {
                 send_failure(iface_num, FailureType_Failure_ProcessError, "Firmware file path is too long!");
                 f_chdir("0:/");
                 return -1;
             }
 
-            if ( fno.fsize > IMAGE_HEADER_SIZE )
+            if ( fno.fsize > IMAGE_HEADER_SIZE )  // 检查文件大小
             {
 
                 ExecuteCheck_MSGS_ADV(emmc_fs_file_read(fno.fname, 0, header, sizeof(header), &br), true, {
@@ -1003,9 +1003,9 @@ static int update_firmware_from_file(uint8_t iface_num, const char* path, bool c
                     return -1;
                 });
                 if ( memcmp(header, MCU_HEADER_MAGIC, 4) == 0 || memcmp(header, SE_HEADER_MAGIC, 4) == 0 ||
-                     memcmp(header, BLE_HEADER_MAGIC, 4) == 0 )
+                     memcmp(header, BLE_HEADER_MAGIC, 4) == 0 )  // 检查文件头魔数
                 {
-                    if ( update_data_len + fno.fsize > SDRAM_BOOLOADER_BUFFER_MISC_LEN )
+                    if ( update_data_len + fno.fsize > SDRAM_BOOLOADER_BUFFER_MISC_LEN )  // 检查总大小是否超出缓冲区
                     {
                         send_failure(
                             iface_num, FailureType_Failure_ProcessError, "Firmware file size too big!"
@@ -1027,9 +1027,9 @@ static int update_firmware_from_file(uint8_t iface_num, const char* path, bool c
                             return -1;
                         }
                     );
-                    update_data_len += fno.fsize;
+                    update_data_len += fno.fsize;  // 更新总数据长度
 
-                    if ( !check_only )
+                    if ( !check_only )  // 如果不是仅检查模式，删除原文件
                     {
                         emmc_fs_file_delete(fno.fname);
                     }
@@ -1037,9 +1037,9 @@ static int update_firmware_from_file(uint8_t iface_num, const char* path, bool c
             }
         }
 
-        f_chdir("0:/");
+        f_chdir("0:/");  // 返回根目录
 
-        if ( update_data_len == 0 )
+        if ( update_data_len == 0 )  // 如果没有找到有效的固件文件
         {
             return 0;
         }
@@ -1049,16 +1049,16 @@ static int update_firmware_from_file(uint8_t iface_num, const char* path, bool c
         });
     }
 
-    if ( check_only )
+    if ( check_only )  // 如果是仅检查模式
         return 0;
 
-    if ( iface_num != USB_IFACE_NULL )
+    if ( iface_num != USB_IFACE_NULL )  // 如果不是空接口
     {
-        ui_fadeout();
-        ui_update_info_show(update_info);
-        ui_fadein();
+        ui_fadeout();  // UI淡出
+        ui_update_info_show(update_info);  // 显示更新信息
+        ui_fadein();  // UI淡入
 
-        int response = ui_input_poll(INPUT_CONFIRM | INPUT_CANCEL, true);
+        int response = ui_input_poll(INPUT_CONFIRM | INPUT_CANCEL, true);  // 等待用户确认
         if ( INPUT_CONFIRM != response )
         {
             send_user_abort_nocheck(iface_num, "Firmware install cancelled");
@@ -1068,29 +1068,29 @@ static int update_firmware_from_file(uint8_t iface_num, const char* path, bool c
         send_success_nocheck(iface_num, "Firmware install confirmed");
     }
 
-    enable_usb_tiny_task(iface_num == USB_IFACE_NULL ? true : false);
+    enable_usb_tiny_task(iface_num == USB_IFACE_NULL ? true : false);  // 启用USB小任务
 
-    if ( iface_num == USB_IFACE_NULL )
+    if ( iface_num == USB_IFACE_NULL )  // 如果是空接口
     {
         iface_num = USB_IFACE_NUM;
     }
 
-    uint8_t* p_data = bl_buffer->misc_buff;
-    uint8_t current_percent = 0;
+    uint8_t* p_data = bl_buffer->misc_buff;  // 数据指针
+    uint8_t current_percent = 0;  // 当前进度百分比
 
-    display_clear();
-    ui_screen_progress_bar_init(NULL, NULL, current_percent);
+    display_clear();  // 清屏
+    ui_screen_progress_bar_init(NULL, NULL, current_percent);  // 初始化进度条
 
-    // detect firmware type
-    if ( update_info.ble_location )
+    // 检测固件类型并更新
+    if ( update_info.ble_location )  // 蓝牙固件更新
     {
-        // bluetooth update
+        // 蓝牙更新
         image_header file_hdr;
 
         p_data = bl_buffer->misc_buff + update_info.items[update_info.ble_location - 1].offset;
-        uint8_t ble_weights = 100 / update_info.item_count;
+        uint8_t ble_weights = 100 / update_info.item_count;  // 蓝牙更新权重
 
-        // check header
+        // 检查头部
         ExecuteCheck_MSGS_ADV(
             load_ble_image_header(p_data, FIRMWARE_IMAGE_MAGIC_BLE, FIRMWARE_IMAGE_MAXSIZE_BLE, &file_hdr),
             sectrue,
@@ -1100,26 +1100,20 @@ static int update_firmware_from_file(uint8_t iface_num, const char* path, bool c
             }
         );
 
-        // make sure we have latest bluetooth status
+        // 刷新蓝牙设备信息
         ble_refresh_dev_info();
 
-        // return success as bluetooth will be disconnected, we have no way to send
-        // result back if the update started via bluetooth
-        // send_success_nocheck(iface_num, "Succeed");
-        // may have to delay a bit to allow the message be sent out (if ui fade in
-        // and out time is too short) hal_delay(50);
-
-        // ui start install
+        // UI开始安装
         ui_screen_install_title_clear();
         ui_screen_progress_bar_init("Installing BLE", NULL, current_percent);
 
-        // enter dfu
+        // 进入DFU模式
         ExecuteCheck_MSGS_ADV(bluetooth_enter_dfu(), true, {
             send_failure(iface_num, FailureType_Failure_ProcessError, "Bluetooth enter DFU failed!");
             return -6;
         });
 
-        // install
+        // 安装
         uint8_t* p_init = p_data + IMAGE_HEADER_SIZE;
         uint32_t init_data_len = p_init[0] + (p_init[1] << 8);
         ExecuteCheck_MSGS_ADV(
@@ -1137,26 +1131,24 @@ static int update_firmware_from_file(uint8_t iface_num, const char* path, bool c
             }
         );
 
-        // delay before kick it out of DFU
-        // this is important, otherwise the update may fail
+        // 延迟退出DFU模式
         hal_delay(50);
-        // reboot bluetooth
+        // 重启蓝牙
         bluetooth_reset();
-        // make sure we have latest bluetooth status (and wait for bluetooth become
-        // ready)
+        // 刷新蓝牙状态
         ble_refresh_dev_info();
         current_percent += ble_weights;
     }
-    if ( update_info.se_count )
+    if ( update_info.se_count )  // SE固件更新
     {
-        uint8_t se_weights = 100 / update_info.item_count;
+        uint8_t se_weights = 100 / update_info.item_count;  // SE更新权重
         for ( int i = 0; i < update_info.se_count; i++ )
         {
             p_data = bl_buffer->misc_buff + update_info.items[update_info.se_location[i] - 1].offset;
 
             image_header_th89 thd89_hdr;
-            // se thd89 update
-            // check header
+            // SE THD89更新
+            // 检查头部
             ExecuteCheck_MSGS_ADV(
                 load_thd89_image_header(
                     p_data, FIRMWARE_IMAGE_MAGIC_THD89, FIRMWARE_IMAGE_MAXSIZE_THD89, &thd89_hdr

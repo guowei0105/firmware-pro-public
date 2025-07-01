@@ -93,6 +93,24 @@ void dma2d_copy_ycbcr_to_rgb(uint32_t *pSrc, uint32_t *pDst, uint16_t xsize,
 void lcd_set_src_addr(uint32_t addr);
 uint32_t lcd_get_src_addr(void);
 
+// 第二层layer相关函数
+void lcd_add_second_layer(void);
+void lcd_clear_layer2_memory(void);
+void lcd_ensure_second_layer(void);
+
+// CoverBackground 硬件层函数
+void lcd_cover_background_init(void);
+void lcd_cover_background_show(void);
+void lcd_cover_background_hide(void);
+void lcd_cover_background_set_opacity(uint8_t opacity);
+void lcd_cover_background_set_visible(bool visible);
+void lcd_cover_background_set_image(const void* image_data, uint32_t image_size);
+void lcd_cover_background_load_jpeg(const char* jpeg_path);
+void lcd_cover_background_move_to_y(int16_t y_position);
+void lcd_cover_background_animate_to_y(int16_t target_y, uint16_t duration_ms);
+uint8_t lcd_cover_background_get_opacity(void);
+bool lcd_cover_background_is_visible(void);
+
 // #ifdef __cplusplus
 // }
 // #endif

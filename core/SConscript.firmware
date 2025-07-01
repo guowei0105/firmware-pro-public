@@ -15,8 +15,8 @@ USE_THD89 = ARGUMENTS.get('USE_THD89', '0')
 FEATURE_FLAGS = {
     "RDI": True,
     "SECP256K1_ZKP": True,  # required for trezor.crypto.curve.bip340 (BIP340/Taproot)
-    "SYSTEM_VIEW": False,
-    "LVGL_DOUBLE_BUFFER": False,
+    "SYSTEM_VIEW": True,
+    "LVGL_DOUBLE_BUFFER": False,  # 启用双缓冲 - 消除撕裂，提升流畅度
 }
 
 CCFLAGS_MOD = ''
@@ -501,6 +501,7 @@ if PRODUCTION_MODEL == 'H':
         'embed/trezorhal/ble.c',
         'embed/trezorhal/device.c',
         'embed/trezorhal/br_check.c',
+        'embed/trezorhal/dma2d.c',
         'embed/trezorhal/jpeg_dma.c',
         'embed/trezorhal/stm32_it_handler.c',
         'embed/trezorhal/low_power.c',
