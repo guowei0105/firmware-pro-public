@@ -228,7 +228,7 @@ class MainScreen(Screen):
                 # Simple toggle - show CoverBackground
                 print("TEST: Showing CoverBackground...")
                 self.display.cover_background_show()
-                print("TEST: CoverBackground shown - should see blue gradient!")
+                print("TEST: CoverBackground shown")
                 print("TEST: Click again to hide it")
                 
                 # Change button text to indicate next action
@@ -250,20 +250,18 @@ class MainScreen(Screen):
             print("TEST: Display or CoverBackground methods not available")
 
     def hidden_others(self, hidden: bool = True):
-        pass
-        # if hidden:
-        #     self.set_style_bg_img_src(None, 0)
-        #     if hasattr(self, "title"):
-        #         self.title.add_flag(lv.obj.FLAG.HIDDEN)
-        #     if hasattr(self, "subtitle"):
-        #         self.subtitle.add_flag(lv.obj.FLAG.HIDDEN)
-        # else:
-        #     homescreen = device.get_homescreen()
-        #     self.set_style_bg_img_src(homescreen, 0)
-        #     if hasattr(self, "title"):
-        #         self.title.clear_flag(lv.obj.FLAG.HIDDEN)
-        #     if hasattr(self, "subtitle"):
-        #         self.subtitle.clear_flag(lv.obj.FLAG.HIDDEN)
+        if hidden:
+            # 隐藏标题和副标题
+            if hasattr(self, "title"):
+                self.title.add_flag(lv.obj.FLAG.HIDDEN)
+            if hasattr(self, "subtitle"):
+                self.subtitle.add_flag(lv.obj.FLAG.HIDDEN)
+        else:
+            # 显示标题和副标题
+            if hasattr(self, "title"):
+                self.title.clear_flag(lv.obj.FLAG.HIDDEN)
+            if hasattr(self, "subtitle"):
+                self.subtitle.clear_flag(lv.obj.FLAG.HIDDEN)
 
     def change_state(self, busy: bool):
         if busy:
@@ -356,10 +354,21 @@ class MainScreen(Screen):
             self.remove_style_all()
             self.set_pos(0, 0)
             self.set_size(lv.pct(100), lv.pct(100))
+            # 先设置黑色背景作为基础
             self.add_style(
-                StyleWrapper().bg_opa().border_width(0),
+                StyleWrapper().bg_opa(lv.OPA.COVER).bg_color(lv_colors.BLACK).border_width(0),
                 0,
             )
+            
+            # # 使用11111.jpeg作为背景图片
+            self.add_style(
+                StyleWrapper().bg_img_src("A:/res/2222.png").border_width(0),
+                0,
+            )
+            
+                            
+
+
 
             self.add_event_cb(self.on_click, lv.EVENT.CLICKED, None)
 
@@ -597,6 +606,7 @@ class MainScreen(Screen):
                         # UP手势：向上滑出动画
                         if hasattr(display, 'cover_background_is_visible') and display.cover_background_is_visible():
                             if hasattr(display, 'cover_background_animate_to_y'):
+                                # Layer1始终保持不透明，无需设置
                                 # 流畅的向上滑出动画
                                 display.cover_background_animate_to_y(-800, 350)
                                 # 动画完成后隐藏layer
@@ -628,28 +638,20 @@ class MainScreen(Screen):
                                     
                                     display.cover_background_load_jpeg(homescreen_path)
                                 except Exception:
-                                    # 创建测试图案作为备用
+                                    # 使用纯黑色背景作为备用，避免颜色闪动
                                     if hasattr(display, 'cover_background_set_image'):
                                         width, height = 480, 800
-                                        test_image = bytearray(width * height * 2)
-                                        for y in range(height):
-                                            for x in range(width):
-                                                if (y // 50) % 2 == 0:
-                                                    pixel = 0x07E0  # Green
-                                                else:
-                                                    pixel = 0xFFE0  # Yellow
-                                                offset = (y * width + x) * 2
-                                                test_image[offset] = pixel & 0xFF
-                                                test_image[offset + 1] = (pixel >> 8) & 0xFF
-                                        display.cover_background_set_image(bytes(test_image))
+                                        black_image = bytearray(width * height * 2)
+                                        # 所有像素都设置为黑色 (0x0000)
+                                        for i in range(len(black_image)):
+                                            black_image[i] = 0x00
+                                        display.cover_background_set_image(bytes(black_image))
                             
                             # DOWN手势：从顶部滑入动画
                             if hasattr(display, 'cover_background_animate_to_y'):
                                 # 先将layer移动到屏幕上方
                                 display.cover_background_move_to_y(-800)
-                                # 设置为可见但保持透明
-                                if hasattr(display, 'cover_background_set_opacity'):
-                                    display.cover_background_set_opacity(255)
+                                # Layer1始终保持不透明，无需设置
                                 if hasattr(display, 'cover_background_set_visible'):
                                     display.cover_background_set_visible(True)
                                 # 流畅的从顶部滑入动画

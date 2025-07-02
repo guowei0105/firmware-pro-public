@@ -14,6 +14,9 @@
 // 全局变量跟踪第二层layer是否已初始化
 static bool g_layer2_initialized = false;
 
+// 全局动画状态标志
+static volatile bool g_animation_in_progress = false;
+
 static int dummy_dbg_printf(const char* fmt, ...) { return 0; }
 
 static DbgPrintf_t dbg_printf = dummy_dbg_printf;
@@ -223,6 +226,7 @@ static HAL_StatusTypeDef ltdc_init(LTDC_HandleTypeDef* hltdc) {
   hltdc->Init.TotalHeigh =
       lcd_params.vsync + lcd_params.vres + lcd_params.vbp + lcd_params.vfp - 1;
 
+  // 保持原来的黑色背景，避免影响正常显示
   hltdc->Init.Backcolor.Blue = 0x00;
   hltdc->Init.Backcolor.Green = 0x00;
   hltdc->Init.Backcolor.Red = 0x00;
@@ -792,6 +796,17 @@ static volatile uint32_t g_current_display_addr = FMC_SDRAM_LTDC_BUFFER_ADDRESS;
 
 void lcd_set_src_addr(uint32_t addr) {
   static uint32_t animation_counter = 0;
+  static uint32_t last_addr = 0;
+  
+  // 如果地址没有变化则跳过更新，减少不必要的重载
+  if (addr == last_addr) {
+    return;
+  }
+  
+  // 动画期间保持Layer0正常更新，但使用更温和的重载方式
+  // 不跳过更新，确保Layer0内容正常显示
+  
+  last_addr = addr;
   
   hlcd_ltdc.Instance = LTDC;
   LTDC_LAYERCONFIG config;
@@ -807,16 +822,18 @@ void lcd_set_src_addr(uint32_t addr) {
   
   // Ensure first layer is always enabled
   __HAL_LTDC_LAYER_ENABLE(&hlcd_ltdc, 0);
+  // 注意：不要在这里设置Layer0透明度，会干扰正常显示
   // Remove frequent debug output to reduce log spam
   
-  // Force LTDC to reload configuration to ensure both layers work properly
-  __HAL_LTDC_RELOAD_IMMEDIATE_CONFIG(&hlcd_ltdc);
+  // 使用VSync重载减少闪动
+  __HAL_LTDC_RELOAD_CONFIG(&hlcd_ltdc);
   
-  // Ensure second layer remains active and animate
-  // In single buffer mode, call animation every few times to maintain smooth animation
-  animation_counter++;
-  if (animation_counter % 2 == 0) {  // Every other call to maintain 30fps animation
-    lcd_ensure_second_layer();
+  // 动画期间暂停second layer维护，避免干扰Layer0显示
+  if (!g_animation_in_progress) {
+    animation_counter++;
+    if (animation_counter % 2 == 0) {  // Every other call to maintain 30fps animation
+      lcd_ensure_second_layer();
+    }
   }
   
   g_current_display_addr = addr;
@@ -847,20 +864,21 @@ void lcd_add_second_layer(void) {
   // 初始化CoverBackground内容
   lcd_cover_background_init();
   
-  // 初始状态：先设置为完全透明，再启用layer
+  // 初始状态：只配置Layer1，不干扰Layer0
   hlcd_ltdc.Instance = LTDC;
-  HAL_LTDC_SetAlpha(&hlcd_ltdc, 0, 1);  // Layer 1 完全透明
   
-  // Ensure first layer is enabled
+  // 确保Layer0已经启用（但不修改其透明度，避免干扰正常显示）
   __HAL_LTDC_LAYER_ENABLE(&hlcd_ltdc, 0);
-  // Enable second layer  
+  
+  // 只配置Layer1
+  HAL_LTDC_SetAlpha(&hlcd_ltdc, 255, 1);  // Layer 1 完全不透明
   __HAL_LTDC_LAYER_ENABLE(&hlcd_ltdc, 1);
   
   // 将layer初始化到屏幕上方位置
   lcd_cover_background_move_to_y(-800);
   
-  // Force LTDC to reload configuration
-  __HAL_LTDC_RELOAD_IMMEDIATE_CONFIG(&hlcd_ltdc);
+  // 使用VSync重载避免干扰正常显示
+  __HAL_LTDC_RELOAD_CONFIG(&hlcd_ltdc);
   
   // Mark as initialized
   g_layer2_initialized = true;
@@ -929,9 +947,9 @@ void lcd_cover_background_show(void) {
   cover_bg_state.opacity = 255;  // 完全不透明
   cover_bg_state.y_offset = 0;
   
-  // 直接设置硬件透明度
+  // Layer1始终保持不透明
   hlcd_ltdc.Instance = LTDC;
-  HAL_LTDC_SetAlpha(&hlcd_ltdc, cover_bg_state.opacity, 1);
+  HAL_LTDC_SetAlpha(&hlcd_ltdc, 255, 1);  // 始终不透明
   
   // 移动layer到正确位置
   lcd_cover_background_move_to_y(0);
@@ -949,9 +967,9 @@ void lcd_cover_background_hide(void) {
   cover_bg_state.opacity = 0;
   cover_bg_state.y_offset = -800;
   
-  // 直接设置硬件透明度为0（完全透明）
+  // Layer1保持不透明，只通过位置隐藏
   hlcd_ltdc.Instance = LTDC;
-  HAL_LTDC_SetAlpha(&hlcd_ltdc, 0, 1);
+  HAL_LTDC_SetAlpha(&hlcd_ltdc, 255, 1);  // 保持不透明
   
   // 移动layer到隐藏位置
   lcd_cover_background_move_to_y(-800);
@@ -965,11 +983,12 @@ void lcd_cover_background_set_opacity(uint8_t opacity) {
     return;
   }
   
-  cover_bg_state.opacity = opacity;
+  // 不再支持透明度变化，始终保持不透明
+  cover_bg_state.opacity = 255;  // 强制为不透明
   
-  // 直接通过硬件设置透明度
+  // Layer1始终保持不透明
   hlcd_ltdc.Instance = LTDC;
-  HAL_LTDC_SetAlpha(&hlcd_ltdc, opacity, 1);
+  HAL_LTDC_SetAlpha(&hlcd_ltdc, 255, 1);  // 始终不透明
   __HAL_LTDC_RELOAD_IMMEDIATE_CONFIG(&hlcd_ltdc);
 }
 
@@ -1079,23 +1098,33 @@ void lcd_cover_background_move_to_y(int16_t y_position) {
   // 更新状态
   cover_bg_state.y_offset = y_position;
   
-  // 计算实际的窗口位置
+  // 计算实际的窗口位置 - 确保Layer1不会完全遮挡Layer0
   uint32_t window_x0 = 0;
   uint32_t window_y0 = (y_position >= 0) ? y_position : 0;
   uint32_t window_x1 = lcd_params.hres;
-  uint32_t window_y1 = window_y0 + lcd_params.vres;
+  uint32_t window_y1 = (y_position >= 0) ? (y_position + lcd_params.vres) : lcd_params.vres;
   
-  // 如果向上移动超出屏幕，调整窗口大小
+  // 如果向上移动超出屏幕，调整窗口大小或完全禁用
   if (y_position < 0) {
     window_y0 = 0;
     window_y1 = lcd_params.vres + y_position;
     if (window_y1 <= 0) {
-      window_y1 = 1; // 至少保持1像素高度
+      // Layer1完全移出屏幕，禁用Layer1确保Layer0正常显示
+      __HAL_LTDC_LAYER_DISABLE(&hlcd_ltdc, 1);
+      // 立即重载确保Layer1快速消失，避免闪动
+      __HAL_LTDC_RELOAD_IMMEDIATE_CONFIG(&hlcd_ltdc);
+      return; // 禁用后直接返回，不需要重新配置窗口
+    } else if (window_y1 < 10) {
+      // 接近边界时增加缓冲，避免频繁启用/禁用导致的闪动
+      window_y1 = 10;
     }
   }
   
   // printf("Moving CoverBackground to Y=%d (window: %lu,%lu-%lu,%lu)\n", 
   //        y_position, window_x0, window_y0, window_x1, window_y1);
+  
+  // 确保Layer1启用（可能之前被禁用）
+  __HAL_LTDC_LAYER_ENABLE(&hlcd_ltdc, 1);
   
   // 重新配置第二层layer的窗口位置
   LTDC_LAYERCONFIG config;
@@ -1115,9 +1144,19 @@ void lcd_cover_background_move_to_y(int16_t y_position) {
   }
   
   if (ltdc_layer_config(&hlcd_ltdc, 1, &config) == HAL_OK) {
-    __HAL_LTDC_RELOAD_IMMEDIATE_CONFIG(&hlcd_ltdc);
+    // 动画期间使用立即重载提升响应性，非动画期间使用VSync重载保持稳定
+    if (g_animation_in_progress) {
+      __HAL_LTDC_RELOAD_IMMEDIATE_CONFIG(&hlcd_ltdc);
+    } else {
+      __HAL_LTDC_RELOAD_CONFIG(&hlcd_ltdc);
+    }
     // printf("Hardware layer movement completed successfully\n");
   } 
+}
+
+// 检查动画是否正在进行
+bool lcd_cover_background_is_animating(void) {
+  return g_animation_in_progress;
 }
 
 // 平滑移动 CoverBackground - 创建动画效果
@@ -1133,6 +1172,19 @@ void lcd_cover_background_animate_to_y(int16_t target_y, uint16_t duration_ms) {
     return; // 已经在目标位置
   }
   
+  // 设置动画进行中标志
+  g_animation_in_progress = true;
+  
+  // 动画开始前预启用Layer1，确保动画流畅
+  __HAL_LTDC_LAYER_ENABLE(&hlcd_ltdc, 1);
+  
+  // 动画开始前确保Layer1状态正确，不修改Layer0
+  hlcd_ltdc.Instance = LTDC;
+  
+  // 只确保Layer1完全不透明，不修改Layer0透明度
+  HAL_LTDC_SetAlpha(&hlcd_ltdc, 255, 1);  // Layer1不透明
+  cover_bg_state.opacity = 255;
+  
   // printf("开始动画：从Y=%d移动到Y=%d，距离=%d，持续时间=%dms\n", 
   //        start_y, target_y, distance, duration_ms);
   
@@ -1143,17 +1195,31 @@ void lcd_cover_background_animate_to_y(int16_t target_y, uint16_t duration_ms) {
     uint32_t current_time = HAL_GetTick();
     float progress = (float)(current_time - start_time) / duration_ms;
     
-    // 使用缓动函数（ease-out）让动画更自然
-    float eased_progress = 1.0f - (1.0f - progress) * (1.0f - progress);
+    // 确保进度在有效范围内，避免异常值
+    if (progress > 1.0f) progress = 1.0f;
+    if (progress < 0.0f) progress = 0.0f;
+    
+    // 使用cubic ease-in-out缓动函数，提供更丝滑的动画体验
+    float eased_progress;
+    if (progress < 0.5f) {
+      eased_progress = 4.0f * progress * progress * progress;
+    } else {
+      float temp = -2.0f * progress + 2.0f;
+      eased_progress = 1.0f - (temp * temp * temp) / 2.0f;
+    }
     
     int16_t current_y = start_y + (int16_t)(distance * eased_progress);
     lcd_cover_background_move_to_y(current_y);
     
-    HAL_Delay(11); // 约60fps
+    HAL_Delay(8); // 约120fps，提供更丝滑的动画体验
   }
   
   // 确保到达精确的目标位置
   lcd_cover_background_move_to_y(target_y);
+  
+  // 清除动画进行中标志
+  g_animation_in_progress = false;
+  
   // printf("动画完成：layer已移动到Y=%d\n", target_y);
 }
 
