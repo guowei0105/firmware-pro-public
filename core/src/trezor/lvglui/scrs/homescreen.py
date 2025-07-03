@@ -75,75 +75,84 @@ async def lite_card_lock_workflow():
     # 创建context
     ctx = wire.DummyContext()
     
-    try:
+
         # 启用NFC
-        nfc.pwr_ctrl(True)
+    nfc.pwr_ctrl(True)
         
         # 显示开始界面
-        start_flag = await show_start_screen(ctx)
-        if start_flag == LITE_CARD_BUTTON_CANCLE:
-            return
+    start_flag = await show_start_screen(ctx)
+    if start_flag == LITE_CARD_BUTTON_CANCLE:
+        nfc.pwr_ctrl(False)
+        return
         
-        search_flag = await search_device(ctx)
-        if search_flag != LITE_CARD_FIND:
-            await show_fullsize_window(
+    search_flag = await search_device(ctx)
+    if search_flag != LITE_CARD_FIND:
+        await show_fullsize_window(
                 ctx,
                 _(i18n_keys.TITLE__CONNECT_FAILED),
                 _(i18n_keys.CONTENT__MAKE_SURE_THE_CARD_IS_CLOSE_TO_THE_UPPER_LEFT),
                 _(i18n_keys.BUTTON__I_GOT_IT),
                 icon_path="A:/res/danger.png",
             )
-            return
+        nfc.pwr_ctrl(False)
+        return
         
 
-        transfer_scr = TransferDataScreen()
-        transfer_scr.check_card_lock_status()
-        lock_status_result = await ctx.wait(transfer_scr.request())
+    transfer_scr = TransferDataScreen()
+    transfer_scr.check_card_lock_status()
+    lock_status_result = await ctx.wait(transfer_scr.request())
+    
+    # 立即清理检查状态的TransferDataScreen实例
+    transfer_scr.clean()
+    transfer_scr.destroy()
         
         # 解析返回结果
-        if isinstance(lock_status_result, tuple):
-            lock_status, retry_count = lock_status_result
-        else:
-            lock_status = lock_status_result
-            retry_count = None
+    if isinstance(lock_status_result, tuple):
+        lock_status, retry_count = lock_status_result
+    else:
+        lock_status = lock_status_result
+        retry_count = None
         
-        if lock_status == LITE_CARD_DISCONECT_STATUS:
-            await show_fullsize_window(
+    if lock_status == LITE_CARD_DISCONECT_STATUS:
+        await show_fullsize_window(
                 ctx,
                 _(i18n_keys.TITLE__CONNECT_FAILED),
                 _(i18n_keys.CONTENT__MAKE_SURE_THE_CARD_IS_CLOSE_TO_THE_UPPER_LEFT),
                 _(i18n_keys.BUTTON__I_GOT_IT),
                 icon_path="A:/res/danger.png",
             )
-            return
+        nfc.pwr_ctrl(False)
+        return
         
-        if lock_status == "pin_not_set":
+    if lock_status == "pin_not_set":
             # PIN未设置，需要先设置PIN
-            await show_fullsize_window(
+        await show_fullsize_window(
                 ctx,
                 "PIN未设置",
                 "该卡片尚未设置PIN码，请先完成卡片的PIN设置后再使用锁定功能",
                 _(i18n_keys.BUTTON__I_GOT_IT),
                 icon_path="A:/res/danger.png",
             )
-            return
-        elif lock_status == "unsupported":
+        nfc.pwr_ctrl(False)
+        return
+    elif lock_status == "unsupported":
             # 卡片不支持锁定功能
-            await show_fullsize_window(
+        await show_fullsize_window(
                 ctx,
                 "功能不支持",
                 "该卡片不支持锁定功能",
                 _(i18n_keys.BUTTON__I_GOT_IT),
                 icon_path="A:/res/danger.png",
             )
-            return
-        elif lock_status == "locked":
+        nfc.pwr_ctrl(False)
+        return
+    elif lock_status == "locked":
             # 卡已锁定，先显示当前状态
-            status_msg = "该卡片当前已锁定"
-            if retry_count is not None:
+        status_msg = "该卡片当前已锁定"
+        if retry_count is not None:
                 status_msg += f"\nPIN剩余尝试次数: {retry_count}"
             
-            confirm = await show_fullsize_window(
+        confirm = await show_fullsize_window(
                 ctx,
                 "卡片状态",
                 status_msg,
@@ -152,50 +161,102 @@ async def lite_card_lock_workflow():
                 icon_path="A:/res/lock.png",
             )
             
-            if confirm == LITE_CARD_BUTTON_CONFIRM:
+        if confirm == LITE_CARD_BUTTON_CONFIRM:
                 # 输入PIN码
-                pin = await input_pin(ctx)
-                if pin:
+            pin = await input_pin(ctx)
+            if pin:
                     # 发送解锁命令
-                    transfer_scr_unlock = TransferDataScreen()
-                    transfer_scr_unlock.set_card_lock_state(pin, False)
-                    result = await ctx.wait(transfer_scr_unlock.request())
+                transfer_scr_unlock = TransferDataScreen()
+                transfer_scr_unlock.set_card_lock_state(pin, False)
+                result = await ctx.wait(transfer_scr_unlock.request())
                     
-                    if result == LITE_CARD_SUCCESS_STATUS:
-                        return await show_success(
+                if result == LITE_CARD_SUCCESS_STATUS:
+                    # 清理TransferDataScreen实例
+                    transfer_scr_unlock.clean()
+                    transfer_scr_unlock.destroy()
+                    
+                    await show_success(
                             ctx,
                             "卡片状态已更改",
                             "卡片已成功解锁",
                             button=_(i18n_keys.BUTTON__I_GOT_IT),
                         )
-                    else:
+                    # 关闭NFC
+                    nfc.pwr_ctrl(False)
+                    return
+                else:
                         # 处理错误状态码
-                        if isinstance(result, bytes) and len(result) >= 2:
-                            if result[0] == 0x63 and (result[1] & 0xF0) == 0xC0:
-                                retry_count = result[1] & 0x0F
-                                return await show_fullsize_window(
-                                    ctx,
-                                    _(i18n_keys.TITLE__LITE_PIN_ERROR),
-                                    f"PIN码错误，剩余尝试次数: {retry_count}",
-                                    _(i18n_keys.BUTTON__I_GOT_IT),
-                                    icon_path="A:/res/danger.png",
-                                )
+                    print(f"Error result: {result}")
+                    print(f"Result type: {type(result)}")
+                    if isinstance(result, bytes) and len(result) >= 2:
+                        # print(f"Result bytes: {result.hex()}")
+                        print(f"Result[0]: 0x{result[0]:02x}, Result[1]: 0x{result[1]:02x}")
+                        if result[0] == 0x63 and (result[1] & 0xF0) == 0xC0:
+                            retry_count = result[1] & 0x0F
+                            print(f"PIN retry count: {retry_count}")
+                            # 清理TransferDataScreen实例
+                            transfer_scr_unlock.clean()
+                            transfer_scr_unlock.destroy()
+                            
+                            await show_fullsize_window(
+                                        ctx,
+                                        _(i18n_keys.TITLE__LITE_PIN_ERROR),
+                                        f"PIN码错误，剩余尝试次数: {retry_count}",
+                                        _(i18n_keys.BUTTON__I_GOT_IT),
+                                        icon_path="A:/res/danger.png",
+                                    )
+                            nfc.pwr_ctrl(False)
+                            return
+                        elif result[0] == 0x63 and (result[1] & 0xF0) == 0xD0:
+                            retry_count = result[1] & 0x0F
+                            print(f"Card locked retry count: {retry_count}")
+                            # 清理TransferDataScreen实例
+                            transfer_scr_unlock.clean()
+                            transfer_scr_unlock.destroy()
+                            
+                            await show_fullsize_window(
+                                        ctx,
+                                        _(i18n_keys.TITLE__LITE_PIN_ERROR),
+                                        "卡片处于锁定状态,在 {} 次错误尝试后，此卡将被废弃".format(f"#FF0000 {retry_count}#"),
+                                        _(i18n_keys.BUTTON__I_GOT_IT),
+                                        icon_path="A:/res/danger.png",
+                                    )
+                            nfc.pwr_ctrl(False)
+                            return
                         else:
-                            return await show_fullsize_window(
-                                ctx,
-                                _(i18n_keys.TITLE__CONNECT_FAILED),
-                                "操作失败，请重试",
-                                _(i18n_keys.BUTTON__I_GOT_IT),
-                                icon_path="A:/res/danger.png",
-                            )
+                            print(f"Other error status: 0x{result[0]:02x}{result[1]:02x}")
+                            # 清理TransferDataScreen实例
+                            transfer_scr_unlock.clean()
+                            transfer_scr_unlock.destroy()
+                            
+                            await show_fullsize_window(
+                                        ctx,
+                                        _(i18n_keys.TITLE__LITE_PIN_ERROR),
+                                        f"操作失败，状态码: 0x{result[0]:02x}{result[1]:02x}",
+                                        _(i18n_keys.BUTTON__I_GOT_IT),
+                                        icon_path="A:/res/danger.png",
+                                    )
+                            nfc.pwr_ctrl(False)
+                            return
+                    else:
+                        print(f"Result is not bytes or length < 2: {result}")
+                            # await show_fullsize_window(
+                            #         ctx,
+                            #         _(i18n_keys.TITLE__LITE_PIN_ERROR),
+                            #         f"PIN码错误，剩余尝试次数: {retry_count}",
+                            #         _(i18n_keys.BUTTON__I_GOT_IT),
+                            #         icon_path="A:/res/danger.png",
+                            #     )
+                            # nfc.pwr_ctrl(False)
+                            # return
         
-        elif lock_status == "unlocked":
+    elif lock_status == "unlocked":
             # 卡未锁定，先显示当前状态
-            status_msg = "该卡片当前未锁定"
-            if retry_count is not None:
+        status_msg = "该卡片当前未锁定"
+        if retry_count is not None:
                 status_msg += f"\nPIN剩余尝试次数: {retry_count}"
             
-            status_confirm = await show_fullsize_window(
+        status_confirm = await show_fullsize_window(
                 ctx,
                 "卡片状态",
                 status_msg,
@@ -205,76 +266,103 @@ async def lite_card_lock_workflow():
             )
 
             
-            print("status_confirm status_confirm status_confirm",status_confirm)
-            if status_confirm != LITE_CARD_BUTTON_CONFIRM:
+        print("status_confirm status_confirm status_confirm",status_confirm)
+        if status_confirm != LITE_CARD_BUTTON_CONFIRM:
+                nfc.pwr_ctrl(False)
                 return
             
             # 用户选择锁定，显示警告
-            confirm = await show_warning(
+        confirm = await show_warning(
                 ctx,
                 "锁定卡片警告",
                 "开启卡锁定后，PIN尝试次数用尽将导致卡片作废。确定要锁定吗？",
                 button="确认锁定",
-                # danger_button=_(i18n_keys.BUTTON__CANCEL),
+                danger_button=_(i18n_keys.BUTTON__CANCEL),
             )
-            print("confirm confirm confirm",confirm)
+        print("confirm confirm confirm",confirm)
             
-            if confirm is None:
+        if confirm is None:
                 # 输入PIN码
-                print("confirm confirm confirm",confirm)
-                pin = await input_pin(ctx)
-                if pin:
+            print("confirm confirm confirm",confirm)
+            pin = await input_pin(ctx)
+            if pin:
                     # 发送锁定命令
-                    transfer_scr_lock = TransferDataScreen()
-                    transfer_scr_lock.set_card_lock_state(pin, True)
-                    result = await ctx.wait(transfer_scr_lock.request())
+                transfer_scr_lock = TransferDataScreen()
+                transfer_scr_lock.set_card_lock_state(pin, True)
+                result = await ctx.wait(transfer_scr_lock.request())
                     
-                    if result == LITE_CARD_SUCCESS_STATUS:
-                        await show_success(
+                if result == LITE_CARD_SUCCESS_STATUS:
+                    # 清理TransferDataScreen实例
+                    transfer_scr_lock.clean()
+                    transfer_scr_lock.destroy()
+                    
+                    await show_success(
                             ctx,
                             "卡片状态已更改",
                             "卡片已成功锁定",
                             button=_(i18n_keys.BUTTON__I_GOT_IT),
                         )
-                    else:
+                    # 关闭NFC
+                    nfc.pwr_ctrl(False)
+                    return
+                 
+                else:
                         # 处理错误状态码
-                        if isinstance(result, bytes) and len(result) >= 2:
-                            if result[0] == 0x63 and (result[1] & 0xF0) == 0xC0:
-                                retry_count = result[1] & 0x0F
-                                await show_fullsize_window(
-                                    ctx,
-                                    _(i18n_keys.TITLE__LITE_PIN_ERROR),
-                                    f"PIN码错误，剩余尝试次数: {retry_count}",
-                                    _(i18n_keys.BUTTON__I_GOT_IT),
-                                    icon_path="A:/res/danger.png",
-                                )
-                        else:
+                    print(f"Error result: {result}")
+                    print(f"Result type: {type(result)}")
+                    if isinstance(result, bytes) and len(result) >= 2:
+                        # print(f"Result bytes: {result.hex()}")
+                        print(f"Result[0]: 0x{result[0]:02x}, Result[1]: 0x{result[1]:02x}")
+                        if result[0] == 0x63 and (result[1] & 0xF0) == 0xC0:
+                            retry_count = result[1] & 0x0F
+                            print(f"PIN retry count: {retry_count}")
+                            # 清理TransferDataScreen实例
+                            transfer_scr_lock.clean()
+                            transfer_scr_lock.destroy()
+                            
                             await show_fullsize_window(
-                                ctx,
-                                _(i18n_keys.TITLE__CONNECT_FAILED),
-                                "操作失败，请重试",
-                                _(i18n_keys.BUTTON__I_GOT_IT),
-                                icon_path="A:/res/danger.png",
-                            )
+                                        ctx,
+                                        _(i18n_keys.TITLE__LITE_PIN_ERROR),
+                                        _(i18n_keys.TITLE__LITE_PIN_ERROR_DESC).format(
+                                            f"#FF0000 {retry_count}#"
+                                        ),
+                                        _(i18n_keys.BUTTON__I_GOT_IT),
+                                        icon_path="A:/res/danger.png",
+                                    )
+                            nfc.pwr_ctrl(False)
+                            return
+                        elif result[0] == 0x63 and (result[1] & 0xF0) == 0xD0:
+                            retry_count = result[1] & 0x0F
+                            print(f"Card locked retry count: {retry_count}")
+                            # 清理TransferDataScreen实例
+                            transfer_scr_lock.clean()
+                            transfer_scr_lock.destroy()
+                            
+                            await show_fullsize_window(
+                                        ctx,
+                                        _(i18n_keys.TITLE__LITE_PIN_ERROR),
+                                        "卡片处于锁定状态,在 {} 次错误尝试后，此卡将被废弃".format(f"#FF0000 {retry_count}#"),
+                                        _(i18n_keys.BUTTON__I_GOT_IT),
+                                        icon_path="A:/res/danger.png",
+                                     )
+                            nfc.pwr_ctrl(False)
+                            return
+                        else:
+                            print(f"Other error status: 0x{result[0]:02x}{result[1]:02x}")
+                    else:
+                        print(f"Result is not bytes or length < 2: {result}")
+                            # await show_fullsize_window(
+                            #         ctx,
+                            #         _(i18n_keys.TITLE__LITE_PIN_ERROR),
+                            #         f"PIN码错误，剩余尝试次数: {retry_count}",
+                            #         _(i18n_keys.BUTTON__I_GOT_IT),
+                            #         icon_path="A:/res/danger.png",
+                            #     )
+                            # nfc.pwr_ctrl(False)
+                            # return
     
-    except Exception as e:
-        # 处理异常
-        error_msg = f"{type(e).__name__}: {str(e)}"
-        print(f"Exception in lite_card_lock_workflow: {error_msg}")
-        
-        # 尝试显示错误信息
-        try:
-            await show_fullsize_window(
-                ctx,
-                "错误",
-                error_msg,
-                _(i18n_keys.BUTTON__I_GOT_IT),
-                icon_path="A:/res/danger.png",
-            )
-        except Exception as display_error:
-            # 如果显示窗口也失败，至少打印错误
-            print(f"Failed to show error window: {display_error}")
-
+    # 确保所有退出路径都关闭NFC
+    nfc.pwr_ctrl(False)
 
 
 
