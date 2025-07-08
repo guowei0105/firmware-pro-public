@@ -791,3 +791,17 @@ def initialize(
         derive_cardano=derive_cardano,
         btc_test=btc_test
     )
+
+
+@cli.command()
+@with_client
+def unlock(client: "TrezorClient") -> None:
+    """Unlock the device if it is locked.
+    
+    This command will unlock the device using PIN or fingerprint authentication
+    if the device is currently locked.
+    """
+    result = device.unlock_device(client)
+    click.echo(f"Device unlocked: {result.unlocked}")
+    click.echo(f"Attach to PIN enabled: {result.unlocked_attach_pin}")
+    click.echo(f"Passphrase protection: {result.passphrase_protection}")

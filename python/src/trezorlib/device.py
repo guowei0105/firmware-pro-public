@@ -479,3 +479,15 @@ def initialize(
     print(f"btc_test value: {getattr(msg, 'btc_test', None)}")
 
     return client.call(msg)
+
+
+@expect(messages.UnLockDeviceResponse)
+@session
+def unlock_device(client: "TrezorClient") -> "MessageType":
+    """Unlock the device if it is locked.
+    
+    This function sends an UnLockDevice message to unlock the device
+    if it is currently locked with a PIN or fingerprint.
+    Returns device state information including unlock status.
+    """
+    return client.call(messages.UnLockDevice())

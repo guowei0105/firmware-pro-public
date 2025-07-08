@@ -456,6 +456,8 @@ class MessageType(IntEnum):
     WriteSEPrivateKey = 10027
     GetPassphraseState = 10028
     PassphraseState = 10029
+    UnLockDevice = 10030
+    UnLockDeviceResponse = 10031
 
 
 class FailureType(IntEnum):
@@ -5552,6 +5554,30 @@ class PassphraseState(protobuf.MessageType):
         self.passphrase_state = passphrase_state
         self.session_id = session_id
         self.unlocked_attach_pin = unlocked_attach_pin
+
+
+class UnLockDevice(protobuf.MessageType):
+    MESSAGE_WIRE_TYPE = 10030
+
+
+class UnLockDeviceResponse(protobuf.MessageType):
+    MESSAGE_WIRE_TYPE = 10031
+    FIELDS = {
+        1: protobuf.Field("unlocked", "bool", repeated=False, required=False),
+        2: protobuf.Field("unlocked_attach_pin", "bool", repeated=False, required=False),
+        3: protobuf.Field("passphrase_protection", "bool", repeated=False, required=False),
+    }
+
+    def __init__(
+        self,
+        *,
+        unlocked: Optional["bool"] = None,
+        unlocked_attach_pin: Optional["bool"] = None,
+        passphrase_protection: Optional["bool"] = None,
+    ) -> None:
+        self.unlocked = unlocked
+        self.unlocked_attach_pin = unlocked_attach_pin
+        self.passphrase_protection = passphrase_protection
 
 
 class FileInfo(protobuf.MessageType):

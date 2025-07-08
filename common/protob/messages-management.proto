@@ -127,6 +127,7 @@ message Features {
         Capability_Shamir = 15 [(bitcoin_only) = true];
         Capability_ShamirGroups = 16 [(bitcoin_only) = true];
         Capability_PassphraseEntry = 17 [(bitcoin_only) = true];  // the device is capable of passphrase entry directly on the device
+        Capability_AttachToPin = 18 [(bitcoin_only) = true];  // OneKey: Attach passphrase to PIN feature
     }
     optional BackupType backup_type = 31;       // type of device backup (BIP-39 / SLIP-39 basic / SLIP-39 advanced)
     optional bool sd_card_present = 32;         // is SD card present
@@ -821,4 +822,13 @@ message PassphraseState {
     optional string passphrase_state  = 1;  
     optional bytes session_id = 2;      
     optional bool unlocked_attach_pin  = 3;                   
+}
+
+message UnLockDevice {
+}
+
+message UnLockDeviceResponse {
+    optional bool unlocked = 1;
+    optional bool unlocked_attach_pin = 2;
+    optional bool passphrase_protection = 3;
 }
