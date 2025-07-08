@@ -58,6 +58,7 @@ async def _require_confirm_by_type(ctx, transaction, owner_address):
 
         await layout.require_confirm_tx(
             ctx,
+            owner_address,
             contract.transfer_contract.to_address,
             contract.transfer_contract.amount,
         )
@@ -93,7 +94,7 @@ async def _require_confirm_by_type(ctx, transaction, owner_address):
                     ctx, contract.trigger_smart_contract.contract_address
                 )
 
-            if transaction.fee_limit:
+            if transaction.fee_limit and transaction.fee_limit > 300000000:
                 from .layout import format_amount_trx
 
                 if await layout.require_confirm_show_more(
@@ -112,6 +113,7 @@ async def _require_confirm_by_type(ctx, transaction, owner_address):
             else:
                 await layout.require_confirm_tx(
                     ctx,
+                    owner_address,
                     recipient,
                     value,
                     token,

@@ -4,7 +4,7 @@ from trezor import ui
 from trezor.enums import ButtonRequestType, TronResourceCode
 from trezor.lvglui.i18n import gettext as _, keys as i18n_keys
 from trezor.strings import format_amount
-from trezor.ui.layouts import confirm_address, confirm_output, should_show_details
+from trezor.ui.layouts import confirm_address, should_show_details_new
 from trezor.ui.layouts.lvgl.altcoin import confirm_total_tron
 
 from . import tokens
@@ -29,18 +29,30 @@ def require_confirm_data(ctx: Context, data: bytes, data_total: int) -> Awaitabl
 
 def require_confirm_tx(
     ctx: Context,
+    from_address: str,
     to: str,
     value: int,
     token: tokens.TokenInfo | None = None,
 ) -> Awaitable[None]:
-    return confirm_output(
+    from trezor.ui.layouts.lvgl.altcoin import confirm_total_tron_new
+
+    return confirm_total_tron_new(
         ctx,
-        address=to,
-        amount=format_amount_trx(value, token),
-        font_amount=ui.BOLD,
-        color_to=ui.GREY,
-        br_code=ButtonRequestType.SignTx,
+        title=format_amount_trx(value, token),
+        from_address=from_address,
+        to_address=to,
+        banner_key=_(i18n_keys.BANNER_ENERGY_RENTAL)
+        if check_provider(ctx, to)
+        else None,
+        banner_level=4,
     )
+
+
+def check_provider(ctx: Context, to: str) -> bool:
+    from apps.tron.providers import provider_by_address
+
+    provider = provider_by_address(to)
+    return bool(provider)
 
 
 async def require_confirm_unknown_token(ctx: Context, contract_address: str) -> None:
@@ -63,10 +75,14 @@ async def require_confirm_show_more(
 ) -> bool:
     from trezor.strings import strip_amount
 
-    return await should_show_details(
+    return await should_show_details_new(
         ctx,
-        toAddress,
-        _(i18n_keys.TITLE__SEND_MULTILINE).format(strip_amount(amount)[0]),
+        title=_(i18n_keys.TITLE__SEND_MULTILINE).format(strip_amount(amount)[0]),
+        to_address=toAddress,
+        banner_key=_(i18n_keys.BANNER_ENERGY_RENTAL)
+        if toAddress and check_provider(ctx, toAddress)
+        else None,
+        banner_level=4 if toAddress and check_provider(ctx, toAddress) else 0,
     )
 
 
