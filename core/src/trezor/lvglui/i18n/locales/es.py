@@ -955,8 +955,8 @@ translations = [
     "Elige el tipo de copia de seguridad de billetera que se adapte a tus necesidades.",
     "Tipos de copia de seguridad heredados (BIP39)",
     "Tipos avanzados de copia de seguridad (SLIP39)",
-    "Copia de seguridad de un solo recurso compartido",
-    "Copia de seguridad multicompartida",
+    "Copia única",
+    "Copia múltiple",
     "Genera una sola frase de recuperación de 20 palabras o varias partes de 20 palabras (listas de palabras) para recuperar tu billetera.",
     "Número de acciones",
     "Umbral",
@@ -965,7 +965,7 @@ translations = [
     "Falta(n) {num} acción(es) más para compartir.",
     "Ingrese una acción diferente",
     "La frase de recuperación que ingresaste está duplicada. Por favor, ingresa una Share diferente.",
-    "Crear copia de seguridad multicompartida",
+    "Crear copia múltiple",
     "Actualizar a una copia de seguridad de múltiples partes agrega más partes de respaldo para la misma billetera. Tu copia de seguridad original de una sola parte sigue funcionando, así que mantenla a salvo.",
     "A continuación, verifica la propiedad de tu billetera ingresando tu frase de respaldo. Esto es lo que necesitas saber:",
     "Esta es una función avanzada y aceptas la mayor responsabilidad.",
@@ -1014,5 +1014,6 @@ translations = [
     "Hash de transacción",
     "Este token no es reconocido por la billetera de hardware. Por favor, verifícalo cuidadosamente.",
     "El destinatario es una dirección conocida de un proveedor de servicios de alquiler de energía.",
+    "Actualiza a la última versión para usar \"Adjuntar al PIN\".",
 ]
 # fmt: on

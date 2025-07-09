@@ -2228,4 +2228,6 @@ LIST_MORE_TXHASH = 1011
 WARNING_UNRECOGNIZED_TOKEN = 1012
 # Recipient is a known energy rental service provider address.
 BANNER_ENERGY_RENTAL = 1013
+# Update to the latest version to use “Attach to PIN”.
+MSG__ATTACH_TO_PIN_TIPS = 1014
 # fmt: on

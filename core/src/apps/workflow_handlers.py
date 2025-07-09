@@ -1,6 +1,6 @@
 from typing import TYPE_CHECKING
 
-from trezor import utils
+from trezor import utils, wire
 from trezor.enums import MessageType
 
 if TYPE_CHECKING:
@@ -392,6 +392,76 @@ def find_registered_handler(iface: WireInterface, msg_type: int) -> Handler | No
         modname = find_message_handler_module(msg_type)
         handler_name = modname[modname.rfind(".") + 1 :]
         module = __import__(modname, None, None, (handler_name,), 0)
-        return getattr(module, handler_name)
+        handler = getattr(module, handler_name)
+
+        # Wrap address derivation handlers with version checking for external API calls
+        # Only check for external calls (when iface is not None)
+        if iface is not None and _is_address_derivation_message(msg_type):
+            return _wrap_with_version_check(handler)
+
+        return handler
     except ValueError:
         return None
+
+
+def _is_address_derivation_message(msg_type: int) -> bool:
+    """Check if message type is for address derivation that needs version checking."""
+    return msg_type in (
+        MessageType.GetAddress,
+        MessageType.GetPublicKey,
+        MessageType.EthereumGetAddress,
+        MessageType.EthereumGetAddressOneKey,
+        MessageType.MoneroGetAddress,
+        MessageType.NEMGetAddress,
+        MessageType.NeoGetAddress,
+        MessageType.StellarGetAddress,
+        MessageType.RippleGetAddress,
+        MessageType.CardanoGetAddress,
+        MessageType.TezosGetAddress,
+        MessageType.BinanceGetAddress,
+        MessageType.ConfluxGetAddress,
+        MessageType.TonGetAddress,
+        MessageType.TronGetAddress,
+        MessageType.SolanaGetAddress,
+        MessageType.StarcoinGetAddress,
+        MessageType.NearGetAddress,
+        MessageType.AptosGetAddress,
+        MessageType.AlgorandGetAddress,
+        MessageType.PolkadotGetAddress,
+        MessageType.SuiGetAddress,
+        MessageType.FilecoinGetAddress,
+        MessageType.CosmosGetAddress,
+        MessageType.KaspaGetAddress,
+        MessageType.NexaGetAddress,
+        MessageType.NervosGetAddress,
+        MessageType.ScdoGetAddress,
+        MessageType.AlephiumGetAddress,
+        MessageType.BenfenGetAddress,
+        # Add other GetPublicKey variants
+        MessageType.BinanceGetPublicKey,
+        MessageType.CardanoGetPublicKey,
+        MessageType.EthereumGetPublicKey,
+        MessageType.EthereumGetPublicKeyOneKey,
+        MessageType.TezosGetPublicKey,
+        MessageType.StarcoinGetPublicKey,
+        # MessageType.EOSGetPublicKey,
+        MessageType.NostrGetPublicKey,
+    )
+
+
+def _wrap_with_version_check(handler: Handler) -> Handler:
+    """Wrap handler with version compatibility check for external API calls."""
+
+    async def wrapper(ctx: wire.Context, msg: wire.Msg) -> wire.MessageType:
+        # Execute the original handler
+        result = await handler(ctx, msg)
+
+        # Check version compatibility after successful execution
+        # This only affects external API calls, not internal calls
+        from apps.base import check_version_compatibility
+
+        check_version_compatibility()
+
+        return result
+
+    return wrapper

@@ -121,6 +121,11 @@ async def handle_fingerprint():
                             if pin_wind:
                                 pin_wind.refresh_fingerprint_prompt()
                             if config.is_unlocked():
+                                from apps.common import passphrase
+                                import storage.cache
+
+                                if passphrase.is_passphrase_pin_enabled():
+                                    storage.cache.end_current_session()
                                 config.lock()
 
                         warning_level = 1 if failed_count < utils.MAX_FP_ATTEMPTS else 2
@@ -153,7 +158,26 @@ async def handle_fingerprint():
                         res = fingerprints.unlock()
                         if __debug__:
                             print(f"uart unlock result {res}")
-                        await base.unlock_device()
+
+                        if res:
+                            # 指纹解锁成功，设置为标准钱包模式
+                            try:
+                                import storage.device as device
+
+                                device.set_passphrase_pin_enabled(False)
+                                if __debug__:
+                                    print(
+                                        "fingerprint unlock success: set passphrase_pin_enabled to False"
+                                    )
+                            except Exception as e:
+                                if __debug__:
+                                    log.exception(__name__, e)
+                                    print(f"Failed to set passphrase_pin_enabled: {e}")
+
+                            await base.unlock_device()
+                        else:
+                            if __debug__:
+                                print("fingerprint unlock failed, res is False")
                     # await loop.sleep(2000)
                     return
             else:
@@ -205,6 +229,12 @@ async def handle_usb_state():
                         if fingerprints.is_available():
                             fingerprints.lock()
                         else:
+
+                            from apps.common import passphrase
+                            import storage.cache
+
+                            if passphrase.is_passphrase_pin_enabled():
+                                storage.cache.end_current_session()
                             config.lock()
                         await safe_reloop()
                         await workflow.spawn(utils.internal_reloop())
@@ -356,6 +386,12 @@ async def _deal_button_press(value: bytes) -> None:
                         if fingerprints.is_unlocked():
                             fingerprints.lock()
                     else:
+
+                        from apps.common import passphrase
+                        import storage.cache
+
+                        if passphrase.is_passphrase_pin_enabled():
+                            storage.cache.end_current_session()
                         config.lock()
                 await loop.race(safe_reloop(), loop.sleep(200))
                 workflow.spawn(utils.internal_reloop())

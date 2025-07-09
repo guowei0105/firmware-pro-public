@@ -61,9 +61,15 @@ async def recovery_device(
         # for dry run pin needs to be entered
         if msg.dry_run:
             curpin, salt = await request_pin_and_sd_salt(
-                ctx, _(i18n_keys.TITLE__ENTER_PIN), allow_fingerprint=False
+                ctx,
+                _(i18n_keys.TITLE__ENTER_PIN),
+                allow_fingerprint=False,
+                standy_wall_only=True,
             )
-            if not config.check_pin(curpin, salt):
+            from apps.common.pin_constants import PinType
+
+            verified, usertype = config.check_pin(curpin, salt, PinType.USER_CHECK)
+            if not verified:
                 await error_pin_invalid(ctx)
         newpin = None
 

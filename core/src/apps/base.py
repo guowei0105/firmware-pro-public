@@ -3,10 +3,59 @@ from typing import TYPE_CHECKING
 import storage.cache
 import storage.device
 from trezor import config, loop, protobuf, ui, utils, wire, workflow
+from trezor.crypto import se_thd89
 from trezor.enums import MessageType
 from trezor.messages import Success, UnlockPath
 
+from apps.common.pin_constants import PinType
+
 from . import workflow_handlers
+
+# Global variable to track if client contains attach to pin capability
+_client_contains_attach: bool = False
+
+
+def has_attach_to_pin_capability() -> bool:
+    """Check if client has 'attach to pin' capability."""
+    return _client_contains_attach
+
+
+def check_version_compatibility() -> None:
+    """Check version compatibility for address derivation operations.
+
+    Raises AppVersionLow if client doesn't support 'attach to pin' capability
+    but the device has passphrase pin enabled.
+
+    This function should be called after device unlock to ensure accurate
+    passphrase state detection.
+    """
+    if not has_attach_to_pin_capability():
+        from apps.common import passphrase
+
+        if passphrase.is_passphrase_pin_enabled():
+            from trezor.lvglui.i18n import gettext as _, keys as i18n_keys
+
+            raise wire.AppVersionLow(_(i18n_keys.MSG__ATTACH_TO_PIN_TIPS))
+
+
+def with_address_version_check(func):
+    """Decorator for external address derivation functions that need version checking.
+
+    This decorator ensures version compatibility check is performed after
+    successful address derivation for external API calls only.
+    """
+
+    async def wrapper(ctx, msg, *args, **kwargs):
+        # Execute the original function (which includes unlock and address derivation)
+        result = await func(ctx, msg, *args, **kwargs)
+
+        # After successful execution, check version compatibility
+        check_version_compatibility()
+
+        return result
+
+    return wrapper
+
 
 if TYPE_CHECKING:
     from trezor.messages import (
@@ -22,6 +71,8 @@ if TYPE_CHECKING:
         SetBusy,
         OnekeyGetFeatures,
         OnekeyFeatures,
+        GetPassphraseState,
+        PassphraseState,
     )
 
 
@@ -127,6 +178,11 @@ def get_features() -> Features:
     f.sd_card_present = sdcard.is_present()
     f.initialized = storage.device.is_initialized()
 
+    current_space = se_thd89.get_pin_passphrase_space()
+    if current_space < 30:
+        f.attach_to_pin_user = True
+    else:
+        f.attach_to_pin_user = False
     # private fields:
     if config.is_unlocked():
         # passphrase_protection is private, see #1807
@@ -144,6 +200,9 @@ def get_features() -> Features:
         f.auto_lock_delay_ms = storage.device.get_autolock_delay_ms()
         f.display_rotation = storage.device.get_rotation()
         f.experimental_features = storage.device.get_experimental_features()
+        from apps.common import passphrase
+
+        f.unlocked_attach_pin = passphrase.is_passphrase_pin_enabled()
 
     return f
 
@@ -199,26 +258,31 @@ def get_onekey_features() -> OnekeyFeatures:
         onekey_se04_boot_hash=storage.device.get_se04_boot_hash(),
         onekey_se04_boot_build_id=storage.device.get_se04_boot_build_id(),
     )
-
     return f
 
 
 async def handle_Initialize(
     ctx: wire.Context | wire.QRContext, msg: Initialize
 ) -> Features:
-    session_id = storage.cache.start_session(msg.session_id)
+    global _client_contains_attach
 
+    # Process is_contains_attach field (handle missing attribute gracefully)
+    if hasattr(msg, "is_contains_attach") and msg.is_contains_attach is not None:
+        _client_contains_attach = msg.is_contains_attach
+    else:
+        _client_contains_attach = False
+
+    prev_session_id = storage.cache.get_session_id()
+    session_id = storage.cache.start_session(msg.session_id)
     if not utils.BITCOIN_ONLY:
         if utils.USE_THD89:
             if msg.derive_cardano is not None and msg.derive_cardano:
                 # THD89 is not capable of Cardano
-                from trezor.crypto import se_thd89
-
+                # from trezor.crypto import se_thd89
                 state = se_thd89.get_session_state()
                 if state[0] & 0x80 and not state[0] & 0x40:
                     storage.cache.end_current_session()
                     session_id = storage.cache.start_session()
-
                 storage.cache.SESSION_DIRIVE_CARDANO = True
             else:
                 storage.cache.SESSION_DIRIVE_CARDANO = False
@@ -391,6 +455,8 @@ ALLOW_WHILE_LOCKED = (
     MessageType.DoPreauthorized,
     MessageType.WipeDevice,
     MessageType.SetBusy,
+    MessageType.GetPassphraseState,
+    MessageType.PassphraseState,
 )
 
 
@@ -477,6 +543,10 @@ def lock_device() -> None:
                 print(
                     f"pin locked,  finger is available: {fingerprints.is_available()} ===== finger is unlocked: {fingerprints.is_unlocked()} "
                 )
+            from apps.common import passphrase
+
+            if passphrase.is_passphrase_pin_enabled():
+                storage.cache.end_current_session()
             config.lock()
         wire.find_handler = get_pinlocked_handler
         set_homescreen()
@@ -531,26 +601,42 @@ def shutdown_device() -> None:
             uart.ctrl_power_off()
 
 
-async def unlock_device(ctx: wire.GenericContext = wire.DUMMY_CONTEXT) -> None:
+async def unlock_device(
+    ctx: wire.GenericContext = wire.DUMMY_CONTEXT,
+    pin_use_type: int = PinType.USER_AND_PASSPHRASE_PIN,
+    attach_wall_only: bool = False,
+) -> None:
     """Ensure the device is in unlocked state.
-
     If the storage is locked, attempt to unlock it. Reset the homescreen and the wire
     handler.
+    Args:
+        ctx: The wire context.
     """
     from apps.common.request_pin import verify_user_pin, verify_user_fingerprint
 
+    pin_use_type_int = int(pin_use_type)
+
     if not config.is_unlocked():
         if __debug__:
-            print("pin is locked ")
-        # verify_user_pin will raise if the PIN was invalid
-        await verify_user_pin(ctx, allow_fingerprint=False)
+            print(f"pin is locked, using pin_use_type: {pin_use_type}")
+        await verify_user_pin(
+            ctx,
+            allow_fingerprint=False,
+            pin_use_type=pin_use_type_int,
+            attach_wall_only=attach_wall_only,
+        )
     else:
         from trezor.lvglui.scrs import fingerprints
 
         if not fingerprints.is_unlocked():
             if __debug__:
-                print("fingerprint is locked")
-            verify_pin = verify_user_pin(ctx, close_others=False)
+                print(f"fingerprint is locked, using pin_use_type: {pin_use_type_int}")
+            verify_pin = verify_user_pin(
+                ctx,
+                close_others=False,
+                pin_use_type=pin_use_type_int,
+                attach_wall_only=attach_wall_only,
+            )
             verify_finger = verify_user_fingerprint(ctx)
             racer = loop.race(verify_pin, verify_finger)
             await racer
@@ -564,7 +650,6 @@ async def unlock_device(ctx: wire.GenericContext = wire.DUMMY_CONTEXT) -> None:
         storage.device.finger_failed_count_reset()
 
     utils.mark_pin_verified()
-
     # reset the idle_timer
     reload_settings_from_storage()
     set_homescreen()
@@ -630,6 +715,56 @@ def reload_settings_from_storage(timeout_ms: int | None = None) -> None:
     ui.display.orientation(storage.device.get_rotation())
 
 
+async def handle_GetPassphraseState(
+    ctx: wire.Context, msg: GetPassphraseState
+) -> PassphraseState:
+    from trezor import messages, config
+    from apps.common import paths
+
+    # from trezor.crypto import se_thd89
+    from trezor.messages import PassphraseState
+    from apps.common import passphrase
+
+    if not config.is_unlocked():
+        await unlock_device(ctx, pin_use_type=2)
+    import utime
+    from apps.bitcoin.get_address import get_address as btc_get_address
+
+    try:
+        session_id = storage.cache.get_session_id()
+        if session_id is None or session_id == b"":
+            session_id = storage.cache.start_session()
+        utime.sleep_ms(500)
+
+        fixed_path = "m/44'/1'/0'/0/0"
+        address_msg = messages.GetAddress(
+            address_n=paths.parse_path(fixed_path),
+            show_display=False,
+            script_type=0,
+            coin_name="Testnet",
+        )
+
+        address_obj = await btc_get_address(ctx, address_msg)
+        session_id = storage.cache.get_session_id()
+        if session_id is None or session_id == b"":
+            session_id = storage.cache.start_session()
+        is_attach_to_pin_state = passphrase.is_passphrase_pin_enabled()
+        return PassphraseState(
+            passphrase_state=address_obj.address,
+            session_id=session_id,
+            unlocked_attach_pin=is_attach_to_pin_state,
+        )
+    except wire.PinCancelled:
+        raise
+    except wire.ActionCancelled:
+        raise
+    except wire.AppVersionLow:
+        raise
+    except Exception as e:
+        error_msg = str(e) if e else "Unknown error in btc_get_address"
+        return PassphraseState(btc_test=f"Error in btc_get_address: {error_msg}")
+
+
 def boot() -> None:
     workflow_handlers.register(MessageType.Initialize, handle_Initialize)
     workflow_handlers.register(MessageType.GetFeatures, handle_GetFeatures)
@@ -644,6 +779,9 @@ def boot() -> None:
         MessageType.CancelAuthorization, handle_CancelAuthorization
     )
     workflow_handlers.register(MessageType.SetBusy, handle_SetBusy)
+    workflow_handlers.register(
+        MessageType.GetPassphraseState, handle_GetPassphraseState
+    )
 
     reload_settings_from_storage()
     from trezor.lvglui.scrs import fingerprints

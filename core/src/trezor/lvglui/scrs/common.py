@@ -555,7 +555,7 @@ class FullSizeWindow(lv.obj):
         def read_content(self) -> list[str]:
             return [self.layout_title or ""] + [self.layout_subtitle or ""]
 
-    def destroy(self, delay_ms=400):
+    def destroy(self, delay_ms=200):
         try:
             self.del_delayed(delay_ms)
         except Exception:

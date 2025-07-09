@@ -955,8 +955,8 @@ translations = [
     "Choisissez le type de sauvegarde de portefeuille qui correspond à vos besoins.",
     "Types de sauvegarde hérités (BIP39)",
     "Types de sauvegarde avancés (SLIP39)",
-    "Sauvegarde à partage unique",
-    "Sauvegarde multi-partage",
+    "Sauvegarde simple",
+    "Sauvegarde multiple",
     "Génère une phrase de récupération unique de 20 mots ou plusieurs parts de 20 mots (listes de mots) pour récupérer votre portefeuille.",
     "Nombre d'actions",
     "Seuil",
@@ -965,7 +965,7 @@ translations = [
     "{num} partage supplémentaire nécessaire.",
     "Saisir une action différente",
     "La phrase de récupération que vous avez saisie est dupliquée. Veuillez saisir une part différente.",
-    "Créer une sauvegarde multi-partage",
+    "Créer une sauvegarde multiple",
     "La mise à niveau vers une sauvegarde multi-partage ajoute plus de partages de sauvegarde pour le même portefeuille. Votre sauvegarde à partage unique d'origine fonctionne toujours, alors gardez-la en sécurité.",
     "Ensuite, vérifiez la propriété du portefeuille en saisissant votre phrase de récupération. Voici ce que vous devez savoir :",
     "Il s'agit d'une fonctionnalité avancée, et vous acceptez la responsabilité accrue.",
@@ -1014,5 +1014,6 @@ translations = [
     "Transaction Hash",
     "Ce jeton n'est pas reconnu par le portefeuille matériel. Veuillez vérifier attentivement.",
     "Le destinataire est une adresse connue de fournisseur de services de location d'énergie.",
+    "Mettez à jour vers la dernière version pour utiliser « Épingler ».",
 ]
 # fmt: on

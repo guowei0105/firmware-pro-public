@@ -354,6 +354,26 @@ def set_busy(client: "TrezorClient", expiry_ms: Optional[int]) -> "MessageType":
     client.refresh_features()
     return ret
 
+
+
+
+@expect(messages.PassphraseState)
+def get_passphrasestate(client: "TrezorClient", btc_test: Optional[bytes] = None, only_main_pin: bool = False, session_id: Optional[str] = None) -> "MessageType":
+
+
+    session_id_bytes = bytes.fromhex(session_id) if session_id else None
+
+
+    msg = messages.GetPassphraseState(
+        btc_test=btc_test, 
+        onlyMainPin=only_main_pin,
+        session_id=session_id_bytes
+    )
+    return client.call(msg)
+
+
+
+
 # new feautres
 # Reboot
 @session
@@ -419,3 +439,26 @@ def emmc_dir_make(client: "TrezorClient", path_dir: str) -> "MessageType":
 def emmc_dir_remove(client: "TrezorClient", path_dir: str) -> "MessageType":
     resp = client.call(messages.EmmcDirRemove(path=path_dir))
     return resp
+
+@expect(messages.Features)
+def initialize(
+    client: "TrezorClient",
+    session_id: Optional[str] = None,
+    derive_cardano: Optional[bool] = None,
+    btc_test: Optional[str] = None,
+) -> "MessageType":
+
+    session_id_bytes = bytes.fromhex(session_id) if session_id else None
+
+    msg = messages.Initialize(
+        session_id=session_id_bytes,
+        derive_cardano=derive_cardano,
+        btc_test=btc_test
+    )
+    return client.call(msg)
+
+
+@expect(messages.UnLockDeviceResponse)
+@session
+def unlock_device(client: "TrezorClient") -> "MessageType":
+    return client.call(messages.UnLockDevice())

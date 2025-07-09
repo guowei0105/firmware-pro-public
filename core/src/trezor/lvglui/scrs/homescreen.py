@@ -40,6 +40,8 @@ from .components.listitem import (
 from .deviceinfo import DeviceInfoManager
 from .widgets.style import StyleWrapper
 
+_attach_to_pin_task_running = False
+
 
 def brightness2_percent_str(brightness: int) -> str:
     return f"{int(brightness / style.BACKLIGHT_MAX * 100)}%"
@@ -788,28 +790,31 @@ class PasskeysManager(AnimScreen):
 
 
 class ShowAddress(AnimScreen):
+
+    device.set_passphrase_auto_status(True)
+
     def __init__(self, prev_scr=None):
         if not hasattr(self, "_init"):
             self.prev_session_id = storage.cache.get_session_id()
             self.curr_session_id = storage.cache.start_session()
 
-            if passphrase.is_enabled():
-                workflow.spawn(
-                    self._get_passphrase_from_user(init=True, prev_scr=prev_scr)
-                )
-            else:
-                self._init = True
-                self.current_index = 0
-                kwargs = {
-                    "prev_scr": prev_scr,
-                    "title": _(i18n_keys.TITLE__SELECT_NETWORK),
-                    "nav_back": True,
-                }
-                super().__init__(**kwargs)
+            # if passphrase.is_enabled() and not passphrase.is_passphrase_pin_enabled():
+            #     workflow.spawn(
+            #         self._get_passphrase_from_user(init=True, prev_scr=prev_scr)
+            #     )
+            # else:
+            self._init = True
+            self.current_index = 0
+            kwargs = {
+                "prev_scr": prev_scr,
+                "title": _(i18n_keys.TITLE__SELECT_NETWORK),
+                "nav_back": True,
+            }
+            super().__init__(**kwargs)
 
-                self.addr_manager = AddressManager()
+            self.addr_manager = AddressManager()
 
-                self.init_ui()
+            self.init_ui()
 
         else:
             if not self.is_visible():
@@ -908,7 +913,7 @@ class ShowAddress(AnimScreen):
     def init_ui(self):
         """Initialize UI components"""
 
-        if passphrase.is_enabled():
+        if passphrase.is_enabled() and not passphrase.is_passphrase_pin_enabled():
             from .components.navigation import GeneralNavigation
 
             self.nav_passphrase = GeneralNavigation(
@@ -1109,6 +1114,7 @@ class ShowAddress(AnimScreen):
                     passphrase.is_enabled() and target == self.nav_passphrase.select_btn
                 ):
                     # enter new passphrase
+                    device.set_passphrase_auto_status(False)
                     storage.cache.end_current_session()
                     self.curr_session_id = storage.cache.start_session()
                     workflow.spawn(self._get_passphrase_from_user(init=False))
@@ -2001,7 +2007,10 @@ class WalletList(Screen):
         self.add_event_cb(self.on_click, lv.EVENT.CLICKED, None)
         self.okx.clear_flag(lv.obj.FLAG.CLICKABLE)
 
-        if not device.is_passphrase_enabled():
+        if (
+            not device.is_passphrase_enabled()
+            and not passphrase.is_passphrase_pin_enabled()
+        ):
             from trezor.qr import gen_hd_key
 
             if not get_hd_key():
@@ -2182,6 +2191,8 @@ class ConnectWallet(FullSizeWindow):
         self.content_area.set_style_max_height(684, 0)
         self.add_nav_back()
 
+        gc.collect()
+        gc.threshold(int(18248 * 1.5))  # type: ignore["threshold" is not a known member of module]
         from trezor.lvglui.scrs.components.qrcode import QRCode
 
         self.encoder = encoder
@@ -2714,10 +2725,6 @@ if __debug__:
                 "修改主页上滑动画类型",
             )
             self.path_up.enable_bg_color(False)
-            self.path_down = ListItemWithLeadingCheckbox(
-                self.container,
-                "修改主页下滑动画类型",
-            )
             self.path_down.enable_bg_color(False)
             self.path_liner = ListItemBtn(
                 self.container,
@@ -4367,6 +4374,10 @@ class PowerOff(FullSizeWindow):
             # else:
             #     config.lock()
             config.lock()
+            from apps.common import passphrase
+
+            if passphrase.is_passphrase_pin_enabled():
+                storage.cache.end_current_session()
 
     def back(self):
         PowerOff.IS_ACTIVE = False
@@ -4394,6 +4405,7 @@ class PowerOff(FullSizeWindow):
                             allow_cancel=False,
                             callback=self.back,
                             allow_fingerprint=False,
+                            pin_use_type=1,
                         )
                     )
                 else:
@@ -4695,6 +4707,7 @@ class SecurityScreen(AnimScreen):
                         allow_cancel=True,
                         callback=lambda: FingerprintSetting(self),
                         allow_fingerprint=False,
+                        pin_use_type=1,
                     )
                 )
                 # else:
@@ -4847,6 +4860,278 @@ class DeviceAuthTutorial(AnimScreen):
         self.warning_banner.align_to(self.container, lv.ALIGN.OUT_BOTTOM_MID, 0, 8)
         self.load_screen(self)
         gc.collect()
+
+
+class PassphraseScreen(AnimScreen):
+    def collect_animation_targets(self) -> list:  # 收集动画目标
+        targets = []  # 初始化目标列表
+        if hasattr(self, "container") and self.container:  # 如果存在container属性
+            targets.append(self.container)  # 将container添加到目标列表
+        if hasattr(self, "description") and self.description:  # 如果存在description属性
+            targets.append(self.description)  # 将description添加到目标列表
+        if hasattr(self, "advance_label") and self.advance_label:  # 如果存在description属性
+            targets.append(self.advance_label)  # 将description添加到目标列表
+        if hasattr(self, "attach_to_pin") and self.attach_to_pin:  # 如果存在description属性
+            targets.append(self.attach_to_pin)  # 将description添加到目标列表
+        if (
+            hasattr(self, "pin_description") and self.pin_description
+        ):  # 如果存在description属性
+            targets.append(self.pin_description)  # 将description添加到目标列表
+        return targets  # 返回目标列表
+
+    def __init__(self, prev_scr=None):  # 初始化函数，接收前一个屏幕作为参数
+        if not hasattr(self, "_init"):  # 如果没有_init属性
+            self._init = True  # 设置_init为True
+        else:  # 否则
+            if not self.is_visible():
+                self._load_scr(self, lv.scr_act() != self)
+            return  # 直接返回，避免重复初始化
+        super().__init__(  # 调用父类初始化方法
+            prev_scr=prev_scr,
+            title=_(i18n_keys.TITLE__PASSPHRASE),
+            nav_back=True,  # 设置前一个屏幕、标题和返回导航
+        )
+
+        self.container = ContainerFlexCol(self.content_area, self.title)  # 创建一个垂直布局容器
+        self.passphrase = ListItemBtnWithSwitch(  # 创建带开关的列表项按钮
+            self.container, _(i18n_keys.ITEM__PASSPHRASE)  # 设置容器和文本
+        )
+
+        self.description = lv.label(self.content_area)
+        self.description.set_size(456, lv.SIZE.CONTENT)
+        self.description.set_long_mode(lv.label.LONG.WRAP)
+        self.description.set_style_text_color(lv_colors.ONEKEY_GRAY, lv.STATE.DEFAULT)
+        self.description.set_style_text_font(font_GeistRegular26, lv.STATE.DEFAULT)
+        self.description.set_style_text_line_space(3, 0)
+        self.description.align_to(self.container, lv.ALIGN.OUT_BOTTOM_LEFT, 8, 16)
+
+        self.advance_label = lv.label(self.content_area)
+        self.advance_label.set_text(_(i18n_keys.PASSPHRASE__ADVANCE))
+        self.advance_label.set_style_text_color(lv_colors.WHITE, lv.STATE.DEFAULT)
+        self.advance_label.set_style_text_font(font_GeistRegular26, lv.STATE.DEFAULT)
+
+        self.attach_to_pin = ListItemBtn(
+            self.content_area,
+            _(i18n_keys.PASSPHRASE__ATTACH_TO_PIN),
+            left_img_src="A:/res/icon-attach-to-pin.png",
+        )
+        self.attach_to_pin.add_style(
+            StyleWrapper().bg_color(lv_colors.ONEKEY_GRAY_3).bg_opa(lv.OPA.COVER), 0
+        )
+        self.attach_to_pin.set_style_radius(40, 0)
+
+        self.pin_description = lv.label(self.content_area)
+        self.pin_description.set_text(_(i18n_keys.PASSPHRASE__ATTACH_TO_PIN_DESC))
+        self.pin_description.set_size(456, lv.SIZE.CONTENT)
+        self.pin_description.set_long_mode(lv.label.LONG.WRAP)
+        self.pin_description.set_style_text_color(
+            lv_colors.ONEKEY_GRAY, lv.STATE.DEFAULT
+        )
+        self.pin_description.set_style_text_font(font_GeistRegular26, lv.STATE.DEFAULT)
+
+        passphrase_enable = device.is_passphrase_enabled()
+        if passphrase_enable:
+            self.passphrase.add_state()
+            self.description.set_text(_(i18n_keys.PASSPHRASE__ENABLE_DESC))
+            self.advance_label.clear_flag(lv.obj.FLAG.HIDDEN)
+            self.attach_to_pin.clear_flag(lv.obj.FLAG.HIDDEN)
+            self.pin_description.clear_flag(lv.obj.FLAG.HIDDEN)
+        else:
+            self.passphrase.clear_state()
+            self.description.set_text(_(i18n_keys.CONTENT__PASSPHRASE_DISABLED__HINT))
+            self.advance_label.add_flag(lv.obj.FLAG.HIDDEN)
+            self.attach_to_pin.add_flag(lv.obj.FLAG.HIDDEN)
+            self.pin_description.add_flag(lv.obj.FLAG.HIDDEN)
+
+        self._update_layout()
+
+        self.container.add_event_cb(
+            self.on_value_changed, lv.EVENT.VALUE_CHANGED, None
+        )  # 添加值变化事件回调
+        self.attach_to_pin.add_event_cb(self.on_click, lv.EVENT.CLICKED, None)
+        self.add_event_cb(self.on_value_changed, lv.EVENT.READY, None)
+        self.add_event_cb(self.on_value_changed, lv.EVENT.CANCEL, None)
+        self.load_screen(self)
+        gc.collect()
+
+    def _update_layout(self):
+        self.description.refresh_self_size()
+
+        import lvgl as lv
+
+        lv.timer_handler()
+
+        desc_height = self.description.get_height()
+
+        advance_y_offset = 40
+
+        self.advance_label.align_to(
+            self.description, lv.ALIGN.OUT_BOTTOM_LEFT, 0, advance_y_offset
+        )
+
+        self.attach_to_pin.align_to(
+            self.advance_label, lv.ALIGN.OUT_BOTTOM_LEFT, -8, 12
+        )
+
+        self.pin_description.align_to(
+            self.attach_to_pin, lv.ALIGN.OUT_BOTTOM_LEFT, 8, 8
+        )
+
+    def on_value_changed(self, event_obj):
+        code = event_obj.code
+        target = event_obj.get_target()
+        if code == lv.EVENT.VALUE_CHANGED:
+            if target == self.passphrase.switch:
+                if target.has_state(lv.STATE.CHECKED):
+                    screen = PassphraseTipsConfirm(
+                        _(i18n_keys.TITLE__ENABLE_PASSPHRASE),
+                        _(i18n_keys.SUBTITLE__ENABLE_PASSPHRASE),
+                        _(i18n_keys.BUTTON__ENABLE),
+                        self,
+                        primary_color=lv_colors.ONEKEY_YELLOW,
+                    )
+                    screen.btn_yes.enable(
+                        lv_colors.ONEKEY_YELLOW, lv_colors.BLACK
+                    )  # 启用确认按钮
+                else:
+                    PassphraseTipsConfirm(
+                        _(i18n_keys.TITLE__DISABLE_PASSPHRASE),
+                        _(i18n_keys.SUBTITLE__DISABLE_PASSPHRASE),
+                        _(i18n_keys.BUTTON__DISABLE),
+                        self,
+                        icon_path="",
+                    )
+            elif target == self.attach_to_pin.switch:
+
+                device.set_passphrase_always_on_device(
+                    target.has_state(lv.STATE.CHECKED)
+                )  # 设置密码短语是否总是在设备上
+
+        elif code == lv.EVENT.READY:
+            if self.passphrase.switch.has_state(lv.STATE.CHECKED):
+                self.description.set_text(_(i18n_keys.PASSPHRASE__ENABLE_DESC))
+                device.set_passphrase_enabled(True)  # 启用密码短语
+                device.set_passphrase_always_on_device(False)  # 设置密码短语不总是在设备上
+                self.advance_label.clear_flag(lv.obj.FLAG.HIDDEN)
+                self.attach_to_pin.clear_flag(lv.obj.FLAG.HIDDEN)
+                self.pin_description.clear_flag(lv.obj.FLAG.HIDDEN)
+                self._update_layout()
+            else:  # 如果密码短语开关未被选中
+                self.description.set_text(  # 设置描述文本
+                    _(i18n_keys.CONTENT__PASSPHRASE_DISABLED__HINT)
+                )
+                device.set_passphrase_enabled(False)  # 禁用密码短语
+                if device.is_passphrase_pin_enabled():
+                    from apps.base import unlock_device, lock_device
+                    from trezor.wire import DUMMY_CONTEXT
+                    from apps.base import lock_device_if_unlocked
+
+                    device.set_passphrase_pin_enabled(False)
+                    lock_device_if_unlocked()
+                    return
+
+                self.advance_label.add_flag(lv.obj.FLAG.HIDDEN)
+                self.attach_to_pin.add_flag(lv.obj.FLAG.HIDDEN)
+                self.pin_description.add_flag(lv.obj.FLAG.HIDDEN)
+                # 更新布局
+                self._update_layout()
+
+        elif code == lv.EVENT.CANCEL:  # 如果是取消事件
+            if self.passphrase.switch.has_state(lv.STATE.CHECKED):  # 如果密码短语开关被选中
+                self.passphrase.clear_state()  # 设置密码短语开关为关闭状态
+                # 隐藏 Attach to PIN 选项
+                self.advance_label.add_flag(lv.obj.FLAG.HIDDEN)
+                self.attach_to_pin.add_flag(lv.obj.FLAG.HIDDEN)
+                self.pin_description.add_flag(lv.obj.FLAG.HIDDEN)
+                # 更新布局
+                self._update_layout()
+            else:  # 如果密码短语开关未被选中
+                self.passphrase.add_state()  # 设置密码短语开关为开启状态
+                # 显示 Attach to PIN 选项并恢复其状态
+                self.attach_to_pin.clear_flag(
+                    lv.obj.FLAG.HIDDEN
+                )  # 使用 clear_flag 替代 set_visible
+                self.advance_label.clear_flag(lv.obj.FLAG.HIDDEN)
+                self.attach_to_pin.clear_flag(lv.obj.FLAG.HIDDEN)
+                self.pin_description.clear_flag(lv.obj.FLAG.HIDDEN)
+                # 更新布局
+                self._update_layout()
+
+    def on_click(self, event_obj):
+        code = event_obj.code
+        target = event_obj.get_target()
+        print(f"PassphraseScreen.on_click: code={code}, target={target}")
+        if code == lv.EVENT.CLICKED:
+            if target == self.attach_to_pin:
+                # 使用全局变量来跟踪任务状态
+                global _attach_to_pin_task_running
+
+                if _attach_to_pin_task_running:
+                    print("Task already running, ignoring click")
+                    return
+
+                # 设置标志，防止重复启动任务
+                _attach_to_pin_task_running = True
+                print("Setting _attach_to_pin_task_running to True")
+
+                from trezor import workflow
+
+                async def handle_attach_to_pin():
+                    print("handle_attach_to_pin started")
+                    try:
+                        from trezor import wire
+                        from trezor.ui.layouts.lvgl.attach_to_pin import (
+                            show_attach_to_pin_window,
+                        )
+
+                        print("Creating context and calling show_attach_to_pin_window")
+                        ctx = wire.DUMMY_CONTEXT
+                        result = await show_attach_to_pin_window(ctx)
+
+                        print(f"show_attach_to_pin_window returned: {result}")
+
+                        if result == True:
+                            print("PIN success")
+                            # 直接处理导航，不使用事件
+                            if hasattr(self, "prev_scr") and self.prev_scr:
+                                print(f"Loading previous screen: {self.prev_scr}")
+                                self.load_screen(self)
+                            else:
+                                print("No previous screen, reloading current screen")
+                                self.load_screen(self)
+                        else:
+                            print("PIN error or cancelled")
+                            # 直接处理导航，不使用事件
+                            if hasattr(self, "prev_scr") and self.prev_scr:
+                                print(f"Loading previous screen: {self.prev_scr}")
+                                # self.load_screen(self)
+                            else:
+                                print("No previous screen, reloading current screen")
+                                # self.load_screen(self)
+
+                        return result
+                    except Exception as e:
+                        print(f"Exception in handle_attach_to_pin: {e}")
+                        # 直接处理导航，不使用事件self.load_screen(self)
+                        if hasattr(self, "prev_scr") and self.prev_scr:
+                            print(
+                                f"Loading previous screen due to exception: {self.prev_scr}"
+                            )
+                            self.load_screen(self)
+                        else:
+                            print(
+                                "No previous screen, reloading current screen due to exception"
+                            )
+                            self.load_screen(self)
+                        return False
+                    finally:
+                        # 无论成功还是失败，都重置任务运行标志
+                        global _attach_to_pin_task_running
+                        print("Setting _attach_to_pin_task_running to False")
+                        _attach_to_pin_task_running = False
+
+                print("Spawning handle_attach_to_pin task")
+                workflow.spawn(handle_attach_to_pin())
 
 
 class UsbLockSetting(AnimScreen):
@@ -5444,88 +5729,262 @@ class FidoKeysToggle(FullSizeWindow):
                 workflow.spawn(restart_delay())
 
 
-class PassphraseScreen(AnimScreen):
-    def collect_animation_targets(self) -> list:
-        targets = []
-        if hasattr(self, "container") and self.container:
-            targets.append(self.container)
-        if hasattr(self, "description") and self.description:
-            targets.append(self.description)
-        return targets
+# class PassphraseScreen(AnimScreen):
+#     def collect_animation_targets(self) -> list:  # 收集动画目标
+#         targets = []  # 初始化目标列表
+#         if hasattr(self, "container") and self.container:  # 如果存在container属性
+#             targets.append(self.container)  # 将container添加到目标列表
+#         if hasattr(self, "description") and self.description:  # 如果存在description属性
+#             targets.append(self.description)  # 将description添加到目标列表
+#         if hasattr(self, "advance_label") and self.advance_label:  # 如果存在description属性
+#             targets.append(self.advance_label)  # 将description添加到目标列表
+#         if hasattr(self, "attach_to_pin") and self.attach_to_pin:  # 如果存在description属性
+#             targets.append(self.attach_to_pin)  # 将description添加到目标列表
+#         if hasattr(self, "pin_description") and self.pin_description:  # 如果存在description属性
+#             targets.append(self.pin_description)  # 将description添加到目标列表
+#         return targets  # 返回目标列表
 
-    def __init__(self, prev_scr=None):
-        if not hasattr(self, "_init"):
-            self._init = True
-        else:
-            return
-        super().__init__(
-            prev_scr=prev_scr, title=_(i18n_keys.TITLE__PASSPHRASE), nav_back=True
-        )
+#     def __init__(self, prev_scr=None):  # 初始化函数，接收前一个屏幕作为参数
+#         if not hasattr(self, "_init"):  # 如果没有_init属性
+#             self._init = True  # 设置_init为True
+#         else:  # 否则
+#             return  # 直接返回，避免重复初始化
+#         super().__init__(  # 调用父类初始化方法
+#             prev_scr=prev_scr, title=_(i18n_keys.TITLE__PASSPHRASE), nav_back=True  # 设置前一个屏幕、标题和返回导航
+#         )
 
-        self.container = ContainerFlexCol(self.content_area, self.title)
-        self.passphrase = ListItemBtnWithSwitch(
-            self.container, _(i18n_keys.ITEM__PASSPHRASE)
-        )
-        self.description = lv.label(self.content_area)
-        self.description.set_size(456, lv.SIZE.CONTENT)
-        self.description.set_long_mode(lv.label.LONG.WRAP)
-        self.description.set_style_text_color(lv_colors.ONEKEY_GRAY, lv.STATE.DEFAULT)
-        self.description.set_style_text_font(font_GeistRegular26, lv.STATE.DEFAULT)
-        self.description.set_style_text_line_space(3, 0)
-        self.description.align_to(self.container, lv.ALIGN.OUT_BOTTOM_LEFT, 8, 16)
+#         self.container = ContainerFlexCol(self.content_area, self.title)  # 创建一个垂直布局容器
+#         self.passphrase = ListItemBtnWithSwitch(  # 创建带开关的列表项按钮
+#             self.container, _(i18n_keys.ITEM__PASSPHRASE)  # 设置容器和文本
+#         )
 
-        passphrase_enable = device.is_passphrase_enabled()
-        if passphrase_enable:
-            self.passphrase.add_state()
-            self.description.set_text(_(i18n_keys.CONTENT__PASSPHRASE_ENABLED__HINT))
-        else:
-            self.passphrase.clear_state()
-            self.description.set_text(_(i18n_keys.CONTENT__PASSPHRASE_DISABLED__HINT))
-        self.container.add_event_cb(self.on_value_changed, lv.EVENT.VALUE_CHANGED, None)
-        self.add_event_cb(self.on_value_changed, lv.EVENT.READY, None)
-        self.add_event_cb(self.on_value_changed, lv.EVENT.CANCEL, None)
-        self.load_screen(self)
-        gc.collect()
+#         # 添加描述文本
+#         self.description = lv.label(self.content_area)
+#         self.description.set_size(456, lv.SIZE.CONTENT)
+#         self.description.set_long_mode(lv.label.LONG.WRAP)
+#         self.description.set_style_text_color(lv_colors.ONEKEY_GRAY, lv.STATE.DEFAULT)
+#         self.description.set_style_text_font(font_GeistRegular26, lv.STATE.DEFAULT)
+#         self.description.set_style_text_line_space(3, 0)
+#         self.description.align_to(self.container, lv.ALIGN.OUT_BOTTOM_LEFT, 8, 16)
 
-    def on_value_changed(self, event_obj):
-        code = event_obj.code
-        target = event_obj.get_target()
-        if code == lv.EVENT.VALUE_CHANGED:
-            if target == self.passphrase.switch:
-                if target.has_state(lv.STATE.CHECKED):
-                    screen = PassphraseTipsConfirm(
-                        _(i18n_keys.TITLE__ENABLE_PASSPHRASE),
-                        _(i18n_keys.SUBTITLE__ENABLE_PASSPHRASE),
-                        _(i18n_keys.BUTTON__ENABLE),
-                        self,
-                        primary_color=lv_colors.ONEKEY_YELLOW,
-                    )
-                    screen.btn_yes.enable(lv_colors.ONEKEY_YELLOW, lv_colors.BLACK)
-                else:
-                    PassphraseTipsConfirm(
-                        _(i18n_keys.TITLE__DISABLE_PASSPHRASE),
-                        _(i18n_keys.SUBTITLE__DISABLE_PASSPHRASE),
-                        _(i18n_keys.BUTTON__DISABLE),
-                        self,
-                        icon_path="",
-                    )
-        elif code == lv.EVENT.READY:
-            if self.passphrase.switch.has_state(lv.STATE.CHECKED):
-                self.description.set_text(
-                    _(i18n_keys.CONTENT__PASSPHRASE_ENABLED__HINT)
-                )
-                device.set_passphrase_enabled(True)
-                device.set_passphrase_always_on_device(False)
-            else:
-                self.description.set_text(
-                    _(i18n_keys.CONTENT__PASSPHRASE_DISABLED__HINT)
-                )
-                device.set_passphrase_enabled(False)
-        elif code == lv.EVENT.CANCEL:
-            if self.passphrase.switch.has_state(lv.STATE.CHECKED):
-                self.passphrase.clear_state()
-            else:
-                self.passphrase.add_state()
+#         # 添加 Advance 标签
+#         self.advance_label = lv.label(self.content_area)
+#         self.advance_label.set_text(_(i18n_keys.PASSPHRASE__ADVANCE))
+#         self.advance_label.set_style_text_color(lv_colors.WHITE, lv.STATE.DEFAULT)
+#         self.advance_label.set_style_text_font(font_GeistRegular26, lv.STATE.DEFAULT)
+
+#         # 添加 Attach to PIN 按钮（不带开关）
+#         self.attach_to_pin = ListItemBtn(
+#             self.content_area, _(i18n_keys.PASSPHRASE__ATTACH_TO_PIN), left_img_src="A:/res/icon-attach-to-pin.png")
+#         self.attach_to_pin.add_style(
+#             StyleWrapper().bg_color(lv_colors.ONEKEY_GRAY_3).bg_opa(lv.OPA.COVER), 0
+#         )
+
+#         # 添加 Attach to PIN 描述文本
+#         self.pin_description = lv.label(self.content_area)
+#         self.pin_description.set_text(_(i18n_keys.PASSPHRASE__ATTACH_TO_PIN_DESC))
+#         self.pin_description.set_size(456, lv.SIZE.CONTENT)
+#         self.pin_description.set_long_mode(lv.label.LONG.WRAP)
+#         self.pin_description.set_style_text_color(lv_colors.ONEKEY_GRAY, lv.STATE.DEFAULT)
+#         self.pin_description.set_style_text_font(font_GeistRegular26, lv.STATE.DEFAULT)
+
+#         passphrase_enable = device.is_passphrase_enabled()  # 获取密码短语是否启用
+#         if passphrase_enable:  # 如果密码短语已启用
+#             self.passphrase.add_state()  # 设置密码短语开关为开启状态
+#             self.description.set_text(_(i18n_keys.PASSPHRASE__ENABLE_DESC))  # 设置描述文本
+#             # 显示 Attach to PIN 选项
+#             self.advance_label.clear_flag(lv.obj.FLAG.HIDDEN)
+#             self.attach_to_pin.clear_flag(lv.obj.FLAG.HIDDEN)
+#             self.pin_description.clear_flag(lv.obj.FLAG.HIDDEN)
+#         else:  # 如果密码短语未启用
+#             self.passphrase.clear_state()  # 设置密码短语开关为关闭状态
+#             self.description.set_text(_(i18n_keys.CONTENT__PASSPHRASE_DISABLED__HINT))  # 设置描述文本
+#             # 隐藏 Attach to PIN 选项
+#             self.advance_label.add_flag(lv.obj.FLAG.HIDDEN)
+#             self.attach_to_pin.add_flag(lv.obj.FLAG.HIDDEN)
+#             self.pin_description.add_flag(lv.obj.FLAG.HIDDEN)
+
+#         # 初始化布局 - 在设置完文本后调用
+#         self._update_layout()
+
+#         self.container.add_event_cb(self.on_value_changed, lv.EVENT.VALUE_CHANGED, None)  # 添加值变化事件回调
+#         self.attach_to_pin.add_event_cb(self.on_click, lv.EVENT.CLICKED, None)
+#         self.add_event_cb(self.on_value_changed, lv.EVENT.READY, None)
+#         self.add_event_cb(self.on_value_changed, lv.EVENT.CANCEL, None)
+#         self.load_screen(self)  # 加载当前屏幕
+#         gc.collect()  # 执行垃圾回收
+
+#     def _update_layout(self):
+#         """动态更新布局，根据description的实际高度调整其他元素位置"""
+#         # 强制刷新description的尺寸
+#         self.description.refresh_self_size()
+
+#         # 等待一帧以确保尺寸计算完成
+#         import lvgl as lv
+#         lv.timer_handler()
+
+#         # 获取description的实际高度
+#         desc_height = self.description.get_height()
+
+#         # 计算advance_label的位置（在description下方16像素）
+#         advance_y_offset = 16
+
+#         # 重新对齐advance_label
+#         self.advance_label.align_to(self.description, lv.ALIGN.OUT_BOTTOM_LEFT, 0, advance_y_offset)
+
+#         # 重新对齐attach_to_pin（在advance_label下方12像素）
+#         self.attach_to_pin.align_to(self.advance_label, lv.ALIGN.OUT_BOTTOM_LEFT, -8, 12)
+
+#         # 重新对齐pin_description（在attach_to_pin下方8像素）
+#         self.pin_description.align_to(self.attach_to_pin, lv.ALIGN.OUT_BOTTOM_LEFT, 8, 8)
+
+#     def on_value_changed(self, event_obj):  # 值变化事件处理函数
+#         code = event_obj.code  # 获取事件代码
+#         target = event_obj.get_target()  # 获取事件目标
+#         if code == lv.EVENT.VALUE_CHANGED:  # 如果是值变化事件
+#             if target == self.passphrase.switch:  # 如果目标是密码短语开关
+#                 if target.has_state(lv.STATE.CHECKED):  # 如果开关被选中
+#                     screen = PassphraseTipsConfirm(  # 创建密码短语提示确认屏幕
+#                         _(i18n_keys.TITLE__ENABLE_PASSPHRASE),  # 设置标题
+#                         _(i18n_keys.SUBTITLE__ENABLE_PASSPHRASE),  # 设置副标题
+#                         _(i18n_keys.BUTTON__ENABLE),  # 设置确认按钮文本
+#                         self,  # 设置回调对象
+#                         primary_color=lv_colors.ONEKEY_YELLOW,  # 设置主要颜色
+#                     )
+#                     screen.btn_yes.enable(lv_colors.ONEKEY_YELLOW, lv_colors.BLACK)  # 启用确认按钮
+#                 else:  # 如果开关未被选中
+#                     PassphraseTipsConfirm(  # 创建密码短语提示确认屏幕
+#                         _(i18n_keys.TITLE__DISABLE_PASSPHRASE),  # 设置标题
+#                         _(i18n_keys.SUBTITLE__DISABLE_PASSPHRASE),  # 设置副标题
+#                         _(i18n_keys.BUTTON__DISABLE),  # 设置确认按钮文本
+#                         self,  # 设置回调对象
+#                         icon_path="",  # 设置图标路径为空
+#                     )
+#             elif target == self.attach_to_pin.switch:  # 如果目标是PIN附加开关
+#                 # 处理 Attach to PIN 开关状态变化
+#                 device.set_passphrase_always_on_device(target.has_state(lv.STATE.CHECKED))  # 设置密码短语是否总是在设备上
+
+#         elif code == lv.EVENT.READY:  # 如果是就绪事件
+#             if self.passphrase.switch.has_state(lv.STATE.CHECKED):  # 如果密码短语开关被选中
+#                 self.description.set_text(  # 设置描述文本
+#                     _(i18n_keys.PASSPHRASE__ENABLE_DESC)
+#                 )
+#                 device.set_passphrase_enabled(True)  # 启用密码短语
+#                 device.set_passphrase_always_on_device(False)  # 设置密码短语不总是在设备上
+#                 self.advance_label.clear_flag(lv.obj.FLAG.HIDDEN)
+#                 self.attach_to_pin.clear_flag(lv.obj.FLAG.HIDDEN)
+#                 self.pin_description.clear_flag(lv.obj.FLAG.HIDDEN)
+#                 # 更新布局
+#                 self._update_layout()
+#             else:  # 如果密码短语开关未被选中
+#                 self.description.set_text(  # 设置描述文本
+#                     _(i18n_keys.CONTENT__PASSPHRASE_DISABLED__HINT)
+#                 )
+#                 device.set_passphrase_enabled(False)  # 禁用密码短语
+#                 if device.is_passphrase_pin_enabled():
+#                     from apps.base import unlock_device,lock_device
+#                     from trezor.wire import DUMMY_CONTEXT
+#                     from apps.base import lock_device_if_unlocked
+
+
+#                     device.set_passphrase_pin_enabled(False)
+#                     lock_device_if_unlocked()
+#                     return
+
+#                 self.advance_label.add_flag(lv.obj.FLAG.HIDDEN)
+#                 self.attach_to_pin.add_flag(lv.obj.FLAG.HIDDEN)
+#                 self.pin_description.add_flag(lv.obj.FLAG.HIDDEN)
+#                 # 更新布局
+#                 self._update_layout()
+
+#         elif code == lv.EVENT.CANCEL:  # 如果是取消事件
+#             if self.passphrase.switch.has_state(lv.STATE.CHECKED):  # 如果密码短语开关被选中
+#                 self.passphrase.clear_state()  # 设置密码短语开关为关闭状态
+#                 # 隐藏 Attach to PIN 选项
+#                 self.advance_label.add_flag(lv.obj.FLAG.HIDDEN)
+#                 self.attach_to_pin.add_flag(lv.obj.FLAG.HIDDEN)
+#                 self.pin_description.add_flag(lv.obj.FLAG.HIDDEN)
+#                 # 更新布局
+#                 self._update_layout()
+#             else:  # 如果密码短语开关未被选中
+#                 self.passphrase.add_state()  # 设置密码短语开关为开启状态
+#                 # 显示 Attach to PIN 选项并恢复其状态
+#                 self.attach_to_pin.clear_flag(lv.obj.FLAG.HIDDEN)  # 使用 clear_flag 替代 set_visible
+#                 self.advance_label.clear_flag(lv.obj.FLAG.HIDDEN)
+#                 self.attach_to_pin.clear_flag(lv.obj.FLAG.HIDDEN)
+#                 self.pin_description.clear_flag(lv.obj.FLAG.HIDDEN)
+#                 # 更新布局
+#                 self._update_layout()
+
+#     def on_click(self, event_obj):
+#         code = event_obj.code
+#         target = event_obj.get_target()
+#         print(f"PassphraseScreen.on_click: code={code}, target={target}")
+#         if code == lv.EVENT.CLICKED:
+#             if target == self.attach_to_pin:
+#                 # 使用全局变量来跟踪任务状态
+#                 global _attach_to_pin_task_running
+
+#                 if _attach_to_pin_task_running:
+#                     print("Task already running, ignoring click")
+#                     return
+
+#                 # 设置标志，防止重复启动任务
+#                 _attach_to_pin_task_running = True
+#                 print("Setting _attach_to_pin_task_running to True")
+
+#                 from trezor import workflow
+
+#                 async def handle_attach_to_pin():
+#                     print("handle_attach_to_pin started")
+#                     try:
+#                         from trezor import wire
+#                         from trezor.ui.layouts.lvgl.attach_to_pin import show_attach_to_pin_window
+
+#                         print("Creating context and calling show_attach_to_pin_window")
+#                         ctx = wire.DUMMY_CONTEXT
+#                         result = await show_attach_to_pin_window(ctx)
+
+#                         print(f"show_attach_to_pin_window returned: {result}")
+
+#                         if result == True:
+#                             print("PIN success")
+#                             # 直接处理导航，不使用事件
+#                             if hasattr(self, "prev_scr") and self.prev_scr:
+#                                 print(f"Loading previous screen: {self.prev_scr}")
+#                                 self.load_screen(self)
+#                             else:
+#                                 print("No previous screen, reloading current screen")
+#                                 self.load_screen(self)
+#                         else:
+#                             print("PIN error or cancelled")
+#                             # 直接处理导航，不使用事件
+#                             if hasattr(self, "prev_scr") and self.prev_scr:
+#                                 print(f"Loading previous screen: {self.prev_scr}")
+#                                 self.load_screen(self)
+#                             else:
+#                                 print("No previous screen, reloading current screen")
+#                                 self.load_screen(self)
+
+#                         return result
+#                     except Exception as e:
+#                         print(f"Exception in handle_attach_to_pin: {e}")
+#                         # 直接处理导航，不使用事件self.load_screen(self)
+#                         if hasattr(self, "prev_scr") and self.prev_scr:
+#                             print(f"Loading previous screen due to exception: {self.prev_scr}")
+#                             self.load_screen(self)
+#                         else:
+#                             print("No previous screen, reloading current screen due to exception")
+#                             self.load_screen(self)
+#                         return False
+#                     finally:
+#                         # 无论成功还是失败，都重置任务运行标志
+#                         global _attach_to_pin_task_running
+#                         print("Setting _attach_to_pin_task_running to False")
+#                         _attach_to_pin_task_running = False
+
+#                 print("Spawning handle_attach_to_pin task")
+#                 workflow.spawn(handle_attach_to_pin())
 
 
 class PassphraseTipsConfirm(FullSizeWindow):
@@ -5562,6 +6021,29 @@ class PassphraseTipsConfirm(FullSizeWindow):
             else:
                 return
             self.show_dismiss_anim()
+
+
+class CryptoScreen(Screen):
+    def __init__(self, prev_scr=None):
+        if not hasattr(self, "_init"):
+            self._init = True
+        else:
+            return
+        super().__init__(prev_scr, title=_(i18n_keys.TITLE__CRYPTO), nav_back=True)
+
+        self.container = ContainerFlexCol(self, self.title, padding_row=2)
+        self.ethereum = ListItemBtn(self.container, _(i18n_keys.TITLE__ETHEREUM))
+        self.solana = ListItemBtn(self.container, _(i18n_keys.TITLE__SOLANA))
+        self.container.add_event_cb(self.on_click, lv.EVENT.CLICKED, None)
+
+    def on_click(self, event_obj):
+        code = event_obj.code
+        target = event_obj.get_target()
+        if code == lv.EVENT.CLICKED:
+            if target == self.ethereum:
+                EthereumSetting(self)
+            elif target == self.solana:
+                SolanaSetting(self)
 
 
 class TurboModeScreen(AnimScreen):
@@ -5982,6 +6464,9 @@ class SecurityProtection(AnimScreen):
             self.container,
             _(i18n_keys.ITEM__PASSPHRASE_ACCESS_HIDDEN_WALLETS),
         )
+        self.attach_to_pin = ListItemBtn(
+            self.container, _(i18n_keys.PASSPHRASE__ATTACH_TO_PIN)
+        )
         self.passkeys = ListItemBtn(
             self.container,
             _(i18n_keys.FIDO_FIDO_KEYS_LABEL),
@@ -6001,6 +6486,7 @@ class SecurityProtection(AnimScreen):
         self.passphrase.label_left.set_text(
             _(i18n_keys.ITEM__PASSPHRASE_ACCESS_HIDDEN_WALLETS)
         )
+        self.attach_to_pin.label_left.set_text(_(i18n_keys.PASSPHRASE__ATTACH_TO_PIN))
         self.passkeys.label_left.set_text(_(i18n_keys.FIDO_FIDO_KEYS_LABEL))
 
     def on_click(self, event_obj):
@@ -6017,6 +6503,8 @@ class SecurityProtection(AnimScreen):
                 PassphraseDetails()
             elif target == self.fingerprint:
                 FingerprintDetails()
+            elif target == self.attach_to_pin:
+                AttachToPinDetails()
             elif target == self.passkeys:
                 from .app_passkeys import PasskeysRegister
 
@@ -6024,6 +6512,26 @@ class SecurityProtection(AnimScreen):
             else:
                 if __debug__:
                     print("Unknown")
+
+
+class AttachToPinDetails(FullSizeWindow):
+    def __init__(self):
+        super().__init__(
+            None,
+            None,
+            cancel_text=_(i18n_keys.BUTTON__CLOSE),
+            icon_path="A:/res/attach-to-pin-guide.png",
+        )
+        self.container = ContainerFlexCol(self.content_area, self.icon, pos=(0, 24))
+        self.item = DisplayItemWithFont_30(
+            self.container,
+            _(i18n_keys.PASSPHRASE__ATTACH_TO_PIN),
+            _(i18n_keys.ITEM__ATTACH_TO_PIN_DESC),
+        )
+        self.item.label_top.set_style_text_color(lv_colors.WHITE, 0)
+        self.item.label.set_style_text_color(lv_colors.WHITE_2, 0)
+        self.item.label.align_to(self.item.label_top, lv.ALIGN.OUT_BOTTOM_LEFT, 0, 16)
+        self.item.label.set_long_mode(lv.label.LONG.WRAP)
 
 
 class PowerOnOffDetails(FullSizeWindow):

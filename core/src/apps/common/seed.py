@@ -67,8 +67,13 @@ if not utils.BITCOIN_ONLY:
 
             if not need_seed and not need_cardano_secret:
                 return
+            from apps.common import passphrase
 
-            passphrase = await get_passphrase(ctx)
+            if not passphrase.is_passphrase_auto_status():
+                passphrase = await get_passphrase(ctx)
+                device.set_passphrase_auto_status(False)
+            else:
+                passphrase = ""
 
             if need_seed:
                 common_seed = mnemonic.get_seed(passphrase, progress_bar=False)
@@ -81,9 +86,17 @@ if not utils.BITCOIN_ONLY:
         else:
             from trezor.crypto import se_thd89
 
+            passphrase = ""
             state = se_thd89.get_session_state()
-
             if not state[0] & 0x80:
+                import utime
+                import storage.cache
+
+                session_id = storage.cache.get_session_id()
+                session_id = storage.cache.start_session(session_id)
+                if session_id is None or session_id == b"":
+                    session_id = storage.cache.start_session()
+                    utime.sleep_ms(500)
                 passphrase = await get_passphrase(ctx)
                 mnemonic.get_seed(passphrase, progress_bar=False)
 

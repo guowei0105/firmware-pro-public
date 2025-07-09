@@ -955,8 +955,8 @@ translations = [
     "Scegli il tipo di backup del portafoglio che meglio si adatta alle tue esigenze.",
     "Tipi di backup legacy (BIP39)",
     "Tipi di backup avanzati (SLIP39)",
-    "Backup a singola condivisione",
-    "Backup multi-condivisione",
+    "Backup singolo",
+    "Backup multiplo",
     "Genera una singola frase di recupero di 20 parole o più condivisioni da 20 parole (elenchi di parole) per recuperare il tuo portafoglio.",
     "Numero di azioni",
     "Soglia",
@@ -1014,5 +1014,6 @@ translations = [
     "Hash della transazione",
     "Questo token non è riconosciuto dal wallet hardware. Si prega di verificare attentamente.",
     "Il destinatario è un indirizzo noto di un fornitore di servizi di noleggio di energia.",
+    "Aggiorna all'ultima versione per utilizzare \"Allega al PIN\".",
 ]
 # fmt: on
