@@ -805,6 +805,7 @@ int main(void) {
     check_firmware_from_file(USB_IFACE_NULL);
   }
 
+
   vendor_header vhdr;
   image_header hdr;
   secbool vhdr_valid = secfalse;

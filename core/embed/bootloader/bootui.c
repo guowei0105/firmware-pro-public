@@ -433,11 +433,15 @@ void ui_screen_wipe(void) {
   display_text_center(DISPLAY_RESX / 2, TITLE_OFFSET_Y, "Wipe Device", -1,
                       FONT_PJKS_BOLD_38, COLOR_BL_FG, COLOR_BL_BG);
 
-  display_progress("Wiping device...", 0);
+  // Move "Wiping device..." to the progress bar area (around y=720)
+  display_text_center(DISPLAY_RESX / 2, 720, "Wiping device...", -1,
+                      FONT_NORMAL, COLOR_BL_SUBTITLE, COLOR_BL_BG);
 }
 
 void ui_screen_wipe_progress(int pos, int len) {
-  display_progress(NULL, 100 * pos / len);
+  // Progress bar removed - wipe process is fast enough
+  (void)pos;
+  (void)len;
 }
 
 void ui_screen_wipe_done(void) {
@@ -603,15 +607,15 @@ int ui_input_poll(int zones, bool poll) {
           x < BOARD_OFFSET_X + BUTTON_FULL_WIDTH && y >= 90 && y < 150) {
         return INPUT_MENU_DEVICE_INFO;
       }
-      // Generate TRNG menu item
-      if ((zones & INPUT_MENU_GENERATE_TRNG) && x >= BOARD_OFFSET_X && 
-          x < BOARD_OFFSET_X + BUTTON_FULL_WIDTH && y >= 183 && y < 243) {
-        return INPUT_MENU_GENERATE_TRNG;
-      }
-      // Reboot Device menu item
+      // Reboot Device menu item (now second)
       if ((zones & INPUT_MENU_REBOOT) && x >= BOARD_OFFSET_X && 
-          x < BOARD_OFFSET_X + BUTTON_FULL_WIDTH && y >= 276 && y < 336) {
+          x < BOARD_OFFSET_X + BUTTON_FULL_WIDTH && y >= 183 && y < 243) {
         return INPUT_MENU_REBOOT;
+      }
+      // Generate TRNG menu item (now third)
+      if ((zones & INPUT_MENU_GENERATE_TRNG) && x >= BOARD_OFFSET_X && 
+          x < BOARD_OFFSET_X + BUTTON_FULL_WIDTH && y >= 276 && y < 336) {
+        return INPUT_MENU_GENERATE_TRNG;
       }
       // Factory Reset menu item
       if ((zones & INPUT_MENU_FACTORY_RESET) && x >= BOARD_OFFSET_X && 
@@ -942,14 +946,14 @@ void ui_bootloader_main_menu(const image_header* const hdr) {  // 定义显示�
 
   offset_y += offset_line;
   offset_y += off_n;
-  display_text(offset_x, offset_y, "Generate TRNG", -1, FONT_PJKS_BOLD_26, COLOR_BL_FG,  // 显示设备型号
+  display_text(offset_x, offset_y, "Reboot Device", -1, FONT_PJKS_BOLD_26, COLOR_BL_FG,  // 显示设备型号
                COLOR_BL_PANEL);
   
   offset_y += offset_line;
   display_bar(0, offset_y, DISPLAY_RESX, 3, COLOR_BLACK);
   offset_y += offset_line;
   offset_y += off_n;
-  display_text(offset_x, offset_y, "Reboot Device", -1, FONT_PJKS_BOLD_26, COLOR_BL_FG,  // 显示设备型号
+  display_text(offset_x, offset_y, "Generate TRNG", -1, FONT_PJKS_BOLD_26, COLOR_BL_FG,  // 显示设备型号
                COLOR_BL_PANEL);
   offset_y += offset_line;
   display_bar(0, offset_y, DISPLAY_RESX, 3, COLOR_BLACK);
@@ -1065,11 +1069,11 @@ void ui_bootloader_restart_confirm(void) {
   ui_statusbar_update();
   
   // 标题：Restart Device?
-  display_text(12, 276, "Restart Device?", -1,
+  display_text(12, 276, "Reboot Device?", -1,
                FONT_PJKS_BOLD_38, COLOR_BL_FG, COLOR_BL_BG);
 
   // 副标题：灰色，字体大小26，距离标题38像素（字体大小38+间距16=54）
-  display_text(12, 276 + 38 + 16, "Restarting will exit the device from", -1, 
+  display_text(12, 276 + 38 + 16, "Rebooting will exit the device from", -1, 
                FONT_PJKS_BOLD_26, COLOR_BL_SUBTITLE, COLOR_BL_BG);
   display_text(12, 276 + 38 + 16 + 30, "update mode and interrupt the", -1,
                FONT_PJKS_BOLD_26, COLOR_BL_SUBTITLE, COLOR_BL_BG);
@@ -1083,17 +1087,18 @@ void ui_bootloader_restart_confirm(void) {
   display_text_center(DISPLAY_RESX / 4, 755, "Cancel", -1, FONT_PJKS_BOLD_26, 
                       COLOR_BL_FG, COLOR_BL_DARK);
   
-  // 右边按钮：红色背景，黑色字体
+  // 右边按钮：白色背景，黑色字体
   display_bar_radius_ex(BUTTON_RIGHT_OFFSET_X, BUTTON_OFFSET_Y, 
-                        BUTTON_HALF_WIDTH, BUTTON_HEIGHT, COLOR_BL_DANGER, 
+                        BUTTON_HALF_WIDTH, BUTTON_HEIGHT, COLOR_BL_FG, 
                         COLOR_BL_BG, BUTTON_RADIUS);
-  display_text_center(DISPLAY_RESX - DISPLAY_RESX / 4, 755, "Restart", -1, 
-                      FONT_PJKS_BOLD_26, COLOR_BL_BG, COLOR_BL_DANGER);
+  display_text_center(DISPLAY_RESX - DISPLAY_RESX / 4, 755, "Reboot", -1, 
+                      FONT_PJKS_BOLD_26, COLOR_BL_BG, COLOR_BL_FG);
 }
 
 void ui_bootloader_factory_reset_confirm(void) {
   ui_bootloader_page_current = 6;  // 新的页面状态
 
+  display_clear();  // Clear screen to remove any previous content
   ui_statusbar_update();
   
   // 标题：Are you sure you want to factory reset the device?
@@ -1276,17 +1281,20 @@ void ui_bootloader_page_switch(const image_header* const hdr) {
       ui_bootloader_main_menu(hdr);
     } else if (INPUT_RESTART == response) {
       // 点击Reset，直接执行工厂重置，跳过wipe确认界面
+      ui_fadeout();
       ui_screen_wipe();
       ui_fadein();
       
       // 调用真正的存储重置函数
       if (sectrue != se_reset_storage()) {
+        ui_fadeout();
         ui_screen_fail();
         ui_fadein();
         while (!touch_click()) {
         }
         HAL_NVIC_SystemReset();
       } else {
+        ui_fadeout();
         ui_screen_wipe_done();
         ui_fadein();
         while (!ui_input_poll(INPUT_NEXT, true)) {
