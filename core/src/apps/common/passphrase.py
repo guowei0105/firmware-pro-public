@@ -22,7 +22,10 @@ def is_passphrase_auto_status() -> bool:
 async def get(ctx: wire.Context) -> str:
 
     if is_enabled():
-        if is_passphrase_pin_enabled():
+        passphrase_pin_enabled = is_passphrase_pin_enabled()
+        if __debug__:
+            print(f"passphrase.get: is_enabled=True, is_passphrase_pin_enabled={passphrase_pin_enabled}")
+        if passphrase_pin_enabled:
             return ""
         if isinstance(ctx, wire.QRContext) and ctx.passphrase is not None:
             return ctx.passphrase

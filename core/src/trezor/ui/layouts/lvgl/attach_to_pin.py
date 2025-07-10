@@ -7,7 +7,7 @@ from trezor.lvglui.scrs.components.container import ContainerFlexCol
 from trezor.lvglui.scrs.components.listitem import ListItemWithLeadingCheckbox
 
 from apps.base import lock_device_if_unlocked
-from apps.common.pin_constants import PinResult, PinType
+from apps.common.pin_constants import PinResult, PinType,AttachCommon
 
 
 async def show_attach_to_pin_window(ctx: wire.Context):
@@ -35,15 +35,17 @@ async def show_attach_to_pin_window(ctx: wire.Context):
             standy_wall_only=True,
         )
 
-        pinstatus, result = config.check_pin(curpin, None, 1)
+        pinstatus, result = config.check_pin(curpin, None, PinType.USER_CHECK)
         if pinstatus == False:
             return await error_pin_invalid(ctx)
 
         passphrase_pin = await request_passphrase_pin_confirm(ctx)
+        if passphrase_pin == 0:
+            return False
         if curpin == passphrase_pin:
             return await error_pin_used(ctx)
 
-        if len(passphrase_pin) >= 6:
+        if len(passphrase_pin) >= AttachCommon.ATTACH_TO_PIN_MIN_LEN:
             passphrase_pin_str = (
                 str(passphrase_pin)
                 if not isinstance(passphrase_pin, str)
@@ -59,8 +61,10 @@ async def show_attach_to_pin_window(ctx: wire.Context):
                     if result == 1:
                         while True:
                             passphrase_pin = await request_passphrase_pin(
-                                ctx, _(i18n_keys.TITLE__ENTER_PASSPHRASE)
+                                ctx, _(i18n_keys.TITLE__ENTER_HIDDEN_WALLET_PIN)
                             )
+                            if passphrase_pin == 0:
+                                return
                             passphrase_pin_str = (
                                 str(passphrase_pin)
                                 if not isinstance(passphrase_pin, str)

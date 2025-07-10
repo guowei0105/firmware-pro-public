@@ -11,13 +11,11 @@ from apps.common.pin_constants import PinType
 
 from . import workflow_handlers
 
-# Global variable to track if client contains attach to pin capability
-_client_contains_attach: bool = False
-
 
 def has_attach_to_pin_capability() -> bool:
     """Check if client has 'attach to pin' capability."""
-    return _client_contains_attach
+    # Get the value from sessionless cache
+    return storage.cache.get(storage.cache.APP_COMMON_CLIENT_CONTAINS_ATTACH) == b"\x01"
 
 
 def check_version_compatibility() -> None:
@@ -29,13 +27,29 @@ def check_version_compatibility() -> None:
     This function should be called after device unlock to ensure accurate
     passphrase state detection.
     """
+    if __debug__:
+        print(f"check_version_compatibility: Called")
+        client_contains_attach = has_attach_to_pin_capability()
+        print(f"check_version_compatibility: client_contains_attach={client_contains_attach}")
+        print(f"check_version_compatibility: has_attach_to_pin_capability()={has_attach_to_pin_capability()}")
+    
     if not has_attach_to_pin_capability():
         from apps.common import passphrase
 
-        if passphrase.is_passphrase_pin_enabled():
+        passphrase_pin_enabled = passphrase.is_passphrase_pin_enabled()
+        if __debug__:
+            print(f"check_version_compatibility: passphrase_pin_enabled={passphrase_pin_enabled}")
+            print(f"check_version_compatibility: Client does not support attach to pin, but passphrase pin is enabled")
+            
+        if passphrase_pin_enabled:
             from trezor.lvglui.i18n import gettext as _, keys as i18n_keys
 
+            if __debug__:
+                print(f"check_version_compatibility: Raising AppVersionLow error")
             raise wire.AppVersionLow(_(i18n_keys.MSG__ATTACH_TO_PIN_TIPS))
+    else:
+        if __debug__:
+            print(f"check_version_compatibility: Client supports attach to pin, version check passed")
 
 
 def with_address_version_check(func):
@@ -264,16 +278,55 @@ def get_onekey_features() -> OnekeyFeatures:
 async def handle_Initialize(
     ctx: wire.Context | wire.QRContext, msg: Initialize
 ) -> Features:
-    global _client_contains_attach
+    # Print whether is_contains_attach exists and its value
+    if __debug__:
+        print(f"handle_Initialize: Has is_contains_attach attribute: {hasattr(msg, 'is_contains_attach')}")
+        if hasattr(msg, "is_contains_attach"):
+            print(f"handle_Initialize: is_contains_attach value: {msg.is_contains_attach}")
 
-    # Process is_contains_attach field (handle missing attribute gracefully)
+    # Process is_contains_attach field - check if it's actually set (not None)
     if hasattr(msg, "is_contains_attach") and msg.is_contains_attach is not None:
-        _client_contains_attach = msg.is_contains_attach
+        # Store in sessionless cache - will persist across session restarts
+        storage.cache.set(storage.cache.APP_COMMON_CLIENT_CONTAINS_ATTACH, b"\x01")
+        if __debug__:
+            print(f"handle_Initialize: Client set is_contains_attach={msg.is_contains_attach}, storing as supported in cache")
     else:
-        _client_contains_attach = False
+        # Clear the cache value if field is not set or is None
+        storage.cache.delete(storage.cache.APP_COMMON_CLIENT_CONTAINS_ATTACH)
+        if __debug__:
+            print(f"handle_Initialize: is_contains_attach not set or is None, cleared from cache")
+    
+    # Always print the final state for debugging
+    if __debug__:
+        client_contains_attach = has_attach_to_pin_capability()
+        print(f"handle_Initialize: Final client_contains_attach={client_contains_attach}")
 
     prev_session_id = storage.cache.get_session_id()
-    session_id = storage.cache.start_session(msg.session_id)
+    from trezor.crypto import se_thd89
+    # Check if passphrase_state exists and is valid before using it
+    # if __debug__:
+    #     print(f"device_is_unlocked: {device_is_unlocked()}")
+    #     print(f"prev_session_id != msg.session_id: {prev_session_id != msg.session_id}")
+    #     print(f"has passphrase_state: {hasattr(msg, 'passphrase_state')}")
+    #     if hasattr(msg, 'passphrase_state'):
+    #         print(f"passphrase_state value: {msg.passphrase_state}")
+    #         passphrase_to_check = msg.passphrase_state.encode() if isinstance(msg.passphrase_state, str) else msg.passphrase_state
+    #         check_result = se_thd89.check_passphrase_btc_test_address(passphrase_to_check)
+    #         print(f"check_passphrase_btc_test_address result: {check_result}")
+
+    if (device_is_unlocked() and 
+        prev_session_id != msg.session_id and 
+        hasattr(msg, 'passphrase_state') and 
+        msg.passphrase_state is not None and
+        se_thd89.check_passphrase_btc_test_address(msg.passphrase_state.encode() if isinstance(msg.passphrase_state, str) else msg.passphrase_state)):
+            print("1111111111111111111111111111111111111")
+            session_id = None
+    else:
+        print("2222222222222222222222222222222222")
+        session_id = storage.cache.start_session(msg.session_id)
+
+    # prev_session_id = storage.cache.get_session_id()
+    # session_id = storage.cache.start_session(msg.session_id)
     if not utils.BITCOIN_ONLY:
         if utils.USE_THD89:
             if msg.derive_cardano is not None and msg.derive_cardano:
@@ -725,13 +778,34 @@ async def handle_GetPassphraseState(
     from trezor.messages import PassphraseState
     from apps.common import passphrase
 
-    if not config.is_unlocked():
+    # if not con
+    # fig.is_unlocked():
+    if not device_is_unlocked():
         await unlock_device(ctx, pin_use_type=2)
+        session_id = storage.cache.start_session()
+    
+    # Ensure passphrase pin state is correctly set after unlock
+    # This fixes the issue where fingerprint unlock doesn't properly sync the state
+    from trezor.lvglui.scrs import fingerprints
+    import storage.device as device
+    
+    # Only fix the state if we're sure it was a fingerprint unlock
+    # Check if PIN is also unlocked - if not, it was likely a fingerprint-only unlock
+    if fingerprints.is_available() and fingerprints.is_unlocked() and not config.is_unlocked():
+        # If unlocked via fingerprint only, ensure we're in standard wallet mode
+        if device.is_passphrase_pin_enabled():
+            if __debug__:
+                print("GetPassphraseState: Fixing fingerprint-only unlock state - setting passphrase_pin_enabled to False")
+            device.set_passphrase_pin_enabled(False)
+    elif __debug__:
+        print(f"GetPassphraseState: PIN unlocked={config.is_unlocked()}, fingerprint unlocked={fingerprints.is_unlocked() if fingerprints.is_available() else 'N/A'}, passphrase_pin_enabled={device.is_passphrase_pin_enabled()}")
+
     import utime
     from apps.bitcoin.get_address import get_address as btc_get_address
 
     try:
         session_id = storage.cache.get_session_id()
+        print("current session_id",session_id)
         if session_id is None or session_id == b"":
             session_id = storage.cache.start_session()
         utime.sleep_ms(500)

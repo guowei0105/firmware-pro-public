@@ -397,6 +397,8 @@ def find_registered_handler(iface: WireInterface, msg_type: int) -> Handler | No
         # Wrap address derivation handlers with version checking for external API calls
         # Only check for external calls (when iface is not None)
         if iface is not None and _is_address_derivation_message(msg_type):
+            if __debug__:
+                print(f"find_registered_handler: Wrapping handler for message type {msg_type} with version check")
             return _wrap_with_version_check(handler)
 
         return handler
@@ -453,14 +455,23 @@ def _wrap_with_version_check(handler: Handler) -> Handler:
     """Wrap handler with version compatibility check for external API calls."""
 
     async def wrapper(ctx: wire.Context, msg: wire.Msg) -> wire.MessageType:
+        if __debug__:
+            print(f"_wrap_with_version_check: Executing handler for message type {msg.MESSAGE_WIRE_TYPE}")
+        
         # Execute the original handler
         result = await handler(ctx, msg)
+
+        if __debug__:
+            print(f"_wrap_with_version_check: Handler executed successfully, now checking version compatibility")
 
         # Check version compatibility after successful execution
         # This only affects external API calls, not internal calls
         from apps.base import check_version_compatibility
 
         check_version_compatibility()
+
+        if __debug__:
+            print(f"_wrap_with_version_check: Version check passed, returning result")
 
         return result
 

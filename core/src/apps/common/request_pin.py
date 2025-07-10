@@ -268,11 +268,13 @@ async def verify_user_fingerprint(
         return
     if await fingerprints.request():
         fingerprints.unlock()
-        from apps.common import storage
         import storage.device as device
 
         # if storage.device.is_passphrase_enabled():
         print("zhiwen success")
+        # Ensure fingerprint unlock always sets to standard wallet mode
+        if __debug__:
+            print(f"verify_user_fingerprint: setting passphrase_pin_enabled to False (was: {device.is_passphrase_pin_enabled()})")
         device.set_passphrase_pin_enabled(False)
         if re_loop:
             loop.clear()

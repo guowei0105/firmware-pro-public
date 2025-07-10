@@ -164,6 +164,8 @@ async def handle_fingerprint():
                             try:
                                 import storage.device as device
 
+                                if __debug__:
+                                    print(f"uart fingerprint unlock: setting passphrase_pin_enabled to False (was: {device.is_passphrase_pin_enabled()})")
                                 device.set_passphrase_pin_enabled(False)
                                 if __debug__:
                                     print(
