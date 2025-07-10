@@ -196,7 +196,6 @@ static const uint8_t cornertable[CORNER_RADIUS * CORNER_RADIUS] = {
 
 void display_bar_radius_ex(int x, int y, int w, int h, uint16_t c, uint16_t b,
                            int r) {
-  // 改进的抗锯齿圆角矩形绘制函数
   uint16_t colortable[16] = {0};
   set_color_table(colortable, c, b);
 
@@ -205,39 +204,32 @@ void display_bar_radius_ex(int x, int y, int w, int h, uint16_t c, uint16_t b,
   int x0 = 0, y0 = 0, x1 = 0, y1 = 0;
   clamp_coords(x, y, w, h, &x0, &y0, &x1, &y1);
 
-  // 计算实际的圆角半径（浮点数）
   float radius = (float)r;
 
   for (int j = y0; j <= y1; j++) {
     for (int i = x0; i <= x1; i++) {
       int rx = i - x;
       int ry = j - y;
-      uint8_t alpha = 15;  // 默认完全不透明
+      uint8_t alpha = 15;
 
-      // 左上角
       if (rx < r && ry < r) {
-        // 计算像素中心到圆心的距离
         float dx = (float)(rx - r) + 0.5f;
         float dy = (float)(ry - r) + 0.5f;
         float pixel_distance = sqrtf(dx * dx + dy * dy);
         float edge_distance = pixel_distance - radius;
 
-        // 动态计算抗锯齿alpha值
         if (edge_distance < -1.0f) {
-          alpha = 15;  // 完全在圆内
+          alpha = 15;
         } else if (edge_distance > 1.0f) {
-          fb_write_pixel(i, j, b);  // 完全在圆外，使用背景色
+          fb_write_pixel(i, j, b);
           continue;
         } else {
-          // 边缘区域，平滑过渡
           float coverage = (1.0f - edge_distance) * 0.5f;
           alpha = (uint8_t)(coverage * 15.0f);
           if (alpha > 15) alpha = 15;
           if (alpha < 0) alpha = 0;
         }
-      }
-      // 右上角
-      else if (rx >= w - r && ry < r) {
+      } else if (rx >= w - r && ry < r) {
         float dx = (float)(rx - (w - r)) + 0.5f;
         float dy = (float)(ry - r) + 0.5f;
         float pixel_distance = sqrtf(dx * dx + dy * dy);
@@ -254,9 +246,7 @@ void display_bar_radius_ex(int x, int y, int w, int h, uint16_t c, uint16_t b,
           if (alpha > 15) alpha = 15;
           if (alpha < 0) alpha = 0;
         }
-      }
-      // 左下角
-      else if (rx < r && ry >= h - r) {
+      } else if (rx < r && ry >= h - r) {
         float dx = (float)(rx - r) + 0.5f;
         float dy = (float)(ry - (h - r)) + 0.5f;
         float pixel_distance = sqrtf(dx * dx + dy * dy);
@@ -273,9 +263,7 @@ void display_bar_radius_ex(int x, int y, int w, int h, uint16_t c, uint16_t b,
           if (alpha > 15) alpha = 15;
           if (alpha < 0) alpha = 0;
         }
-      }
-      // 右下角
-      else if (rx >= w - r && ry >= h - r) {
+      } else if (rx >= w - r && ry >= h - r) {
         float dx = (float)(rx - (w - r)) + 0.5f;
         float dy = (float)(ry - (h - r)) + 0.5f;
         float pixel_distance = sqrtf(dx * dx + dy * dy);
@@ -294,7 +282,6 @@ void display_bar_radius_ex(int x, int y, int w, int h, uint16_t c, uint16_t b,
         }
       }
 
-      // 使用计算出的alpha值绘制像素
       fb_write_pixel(i, j, colortable[alpha]);
     }
   }
