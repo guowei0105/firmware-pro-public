@@ -42,12 +42,12 @@
 #include "common.h"
 #include "flash.h"
 #include "fw_keys.h"
-#include "icon_onekey.h"
-#include "icon_optimized.h"
-#include "icon_sharp.h"
 #include "icon_msg.h"
 #include "icon_msg_dots.h"
 #include "icon_msg_highquality.h"
+#include "icon_onekey.h"
+#include "icon_optimized.h"
+#include "icon_sharp.h"
 #include "image.h"
 #include "mipi_lcd.h"
 #include "se_thd89.h"
@@ -63,12 +63,13 @@
 #define COLOR_BL_DANGER RGB16(0xFF, 0x11, 0x00)  // onekey red
 #define COLOR_BL_DONE RGB16(0x00, 0xFF, 0x33)    // green
 #define COLOR_BL_PROCESS COLOR_PROCESS
-#define COLOR_BL_GRAY RGB16(0x99, 0x99, 0x99)          // gray
-#define COLOR_BL_DARK RGB16(0x2D, 0x2D, 0x2D)          // gray
-#define COLOR_BL_PANEL RGB16(0x1E, 0x1E, 0x1E)         //
-#define COLOR_BL_TAGVALUE RGB16(0xB4, 0xB4, 0xB4)      //
-#define COLOR_BL_SUBTITLE RGB16(0xD2, 0xD2, 0xD2)      //
-#define COLOR_BL_FG_INFO_ICON COLOR_WHITE  // info icon foreground - changed to white
+#define COLOR_BL_GRAY RGB16(0x99, 0x99, 0x99)      // gray
+#define COLOR_BL_DARK RGB16(0x2D, 0x2D, 0x2D)      // gray
+#define COLOR_BL_PANEL RGB16(0x1E, 0x1E, 0x1E)     //
+#define COLOR_BL_TAGVALUE RGB16(0xB4, 0xB4, 0xB4)  //
+#define COLOR_BL_SUBTITLE RGB16(0xD2, 0xD2, 0xD2)  //
+#define COLOR_BL_FG_INFO_ICON \
+  COLOR_WHITE  // info icon foreground - changed to white
 
 #define COLOR_WELCOME_BG COLOR_WHITE  // welcome background
 #define COLOR_WELCOME_FG COLOR_BLACK  // welcome foreground
@@ -141,7 +142,8 @@ char* format_progress_value(char* prefix) {
 int get_ui_bootloader_page_current(void) { return ui_bootloader_page_current; }
 
 // Helper function to display raw RGB565 pixel data
-static void display_raw_rgb565(int x, int y, int w, int h, const uint16_t *data) {
+static void display_raw_rgb565(int x, int y, int w, int h,
+                               const uint16_t* data) {
   for (int j = 0; j < h; j++) {
     for (int i = 0; i < w; i++) {
       fb_write_pixel(x + i, y + j, data[j * w + i]);
@@ -603,22 +605,22 @@ int ui_input_poll(int zones, bool poll) {
       }
       // Menu items detection
       // Device Info menu item (y=90 + line height 30)
-      if ((zones & INPUT_MENU_DEVICE_INFO) && x >= BOARD_OFFSET_X && 
+      if ((zones & INPUT_MENU_DEVICE_INFO) && x >= BOARD_OFFSET_X &&
           x < BOARD_OFFSET_X + BUTTON_FULL_WIDTH && y >= 90 && y < 150) {
         return INPUT_MENU_DEVICE_INFO;
       }
       // Reboot Device menu item (now second)
-      if ((zones & INPUT_MENU_REBOOT) && x >= BOARD_OFFSET_X && 
+      if ((zones & INPUT_MENU_REBOOT) && x >= BOARD_OFFSET_X &&
           x < BOARD_OFFSET_X + BUTTON_FULL_WIDTH && y >= 183 && y < 243) {
         return INPUT_MENU_REBOOT;
       }
       // Generate TRNG menu item (now third)
-      if ((zones & INPUT_MENU_GENERATE_TRNG) && x >= BOARD_OFFSET_X && 
+      if ((zones & INPUT_MENU_GENERATE_TRNG) && x >= BOARD_OFFSET_X &&
           x < BOARD_OFFSET_X + BUTTON_FULL_WIDTH && y >= 276 && y < 336) {
         return INPUT_MENU_GENERATE_TRNG;
       }
       // Factory Reset menu item
-      if ((zones & INPUT_MENU_FACTORY_RESET) && x >= BOARD_OFFSET_X && 
+      if ((zones & INPUT_MENU_FACTORY_RESET) && x >= BOARD_OFFSET_X &&
           x < BOARD_OFFSET_X + BUTTON_FULL_WIDTH && y >= 369 && y < 429) {
         return INPUT_MENU_FACTORY_RESET;
       }
@@ -867,10 +869,11 @@ void ui_update_info_show(update_info_t update_info) {
   ui_confirm_cancel_buttons("Cancel", "Install", COLOR_BL_DARK, COLOR_BL_DONE);
 }
 
-void ui_bootloader_first(const image_header* const hdr) {  // 显示引导程序首页界面函数
-  ui_bootloader_page_current = 0;  // 设置当前页面为0
-  uint8_t se_state;  // 安全元件状态变量
-  char se_info[64] = {0};  // 安全元件信息字符串缓冲区
+void ui_bootloader_first(
+    const image_header* const hdr) {  // 显示引导程序首页界面函数
+  ui_bootloader_page_current = 0;     // 设置当前页面为0
+  uint8_t se_state;                   // 安全元件状态变量
+  char se_info[64] = {0};             // 安全元件信息字符串缓冲区
 
   static image_header* current_hdr = NULL;  // 静态当前镜像头指针
 
@@ -888,57 +891,67 @@ void ui_bootloader_first(const image_header* const hdr) {  // 显示引导程序
   //                COLOR_BL_FG, boot_background);
 
   ui_logo_onekey();  // 显示OneKey标志
-  display_text_center(DISPLAY_RESX / 2, TITLE_OFFSET_Y, "Update Mode", -1,  // 显示居中的"更新模式"标题
+  display_text_center(DISPLAY_RESX / 2, TITLE_OFFSET_Y, "Update Mode",
+                      -1,  // 显示居中的"更新模式"标题
                       FONT_PJKS_BOLD_38, COLOR_BL_FG, COLOR_BL_BG);
 
-  if (ble_name_state()) {  // 如果蓝牙名称状态有效
-    char* ble_name;  // 蓝牙名称字符串指针
+  if (ble_name_state()) {       // 如果蓝牙名称状态有效
+    char* ble_name;             // 蓝牙名称字符串指针
     ble_name = ble_get_name();  // 获取蓝牙名称
-    display_text_center(DISPLAY_RESX / 2, SUBTITLE_OFFSET_Y, ble_name, -1,  // 显示蓝牙名称作为副标题
+    display_text_center(DISPLAY_RESX / 2, SUBTITLE_OFFSET_Y, ble_name,
+                        -1,  // 显示蓝牙名称作为副标题
                         FONT_NORMAL, COLOR_BL_SUBTITLE, COLOR_BL_BG);
     ble_name_show = true;  // 设置蓝牙名称显示标志
   }
 
-  display_text_center(DISPLAY_RESX / 2, DISPLAY_RESY - 92, "SafeOS", -1,  // 显示SafeOS文本
+  display_text_center(DISPLAY_RESX / 2, DISPLAY_RESY - 92, "SafeOS",
+                      -1,  // 显示SafeOS文本
                       FONT_PJKS_BOLD_38, COLOR_BL_FG, COLOR_BL_BG);
   if (current_hdr) {  // 如果有当前头信息
-    const char* ver_str = format_ver("%d.%d.%d", (current_hdr->onekey_version));  // 格式化版本字符串
-    display_text_center(DISPLAY_RESX / 2, DISPLAY_RESY - 50, ver_str, -1,  // 显示版本信息
+    const char* ver_str = format_ver(
+        "%d.%d.%d", (current_hdr->onekey_version));  // 格式化版本字符串
+    display_text_center(DISPLAY_RESX / 2, DISPLAY_RESY - 50, ver_str,
+                        -1,  // 显示版本信息
                         FONT_NORMAL, COLOR_BL_SUBTITLE, COLOR_BL_BG);
   }
-  se_state = se_get_state();  // 获取安全元件状态
-  if (se_state != 0) {  // 如果安全元件不在正常状态
-    strcat(se_info, "SE ");  // 添加SE前缀
+  se_state = se_get_state();             // 获取安全元件状态
+  if (se_state != 0) {                   // 如果安全元件不在正常状态
+    strcat(se_info, "SE ");              // 添加SE前缀
     if (se_state & THD89_1ST_IN_BOOT) {  // 检查第一个SE是否在引导模式
-      strcat(se_info, "1st ");  // 添加1st标识
+      strcat(se_info, "1st ");           // 添加1st标识
     }
     if (se_state & THD89_2ND_IN_BOOT) {  // 检查第二个SE是否在引导模式
-      strcat(se_info, "2nd ");  // 添加2nd标识
+      strcat(se_info, "2nd ");           // 添加2nd标识
     }
     if (se_state & THD89_3RD_IN_BOOT) {  // 检查第三个SE是否在引导模式
-      strcat(se_info, "3rd ");  // 添加3rd标识
+      strcat(se_info, "3rd ");           // 添加3rd标识
     }
     if (se_state & THD89_4TH_IN_BOOT) {  // 检查第四个SE是否在引导模式
-      strcat(se_info, "4th ");  // 添加4th标识
+      strcat(se_info, "4th ");           // 添加4th标识
     }
     strcat(se_info, "in boot");  // 添加in boot后缀
-    display_text_center(DISPLAY_RESX / 2, 300, se_info, -1, FONT_NORMAL,  // 显示SE状态信息
+    display_text_center(DISPLAY_RESX / 2, 300, se_info, -1,
+                        FONT_NORMAL,  // 显示SE状态信息
                         COLOR_BL_SUBTITLE, COLOR_BL_BG);
-    display_text_center(DISPLAY_RESX / 2, 330, "please install se firmware", -1,  // 显示SE固件安装提示
+    display_text_center(DISPLAY_RESX / 2, 330, "please install se firmware",
+                        -1,  // 显示SE固件安装提示
                         FONT_NORMAL, COLOR_BL_SUBTITLE, COLOR_BL_BG);
   }
 }
 
-
-void ui_bootloader_main_menu(const image_header* const hdr) {  // 定义显示引导加载程序详细信息的函数
+void ui_bootloader_main_menu(
+    const image_header* const hdr) {  // 定义显示引导加载程序详细信息的函数
   ui_bootloader_page_current = 5;  // 设置当前页面为5（主菜单页面）
 
-  int offset_x = 32, offset_y = 90,off_n = 28,  offset_line = 30;  // 定义布局相关的偏移量变量
+  int offset_x = 32, offset_y = 90, off_n = 28,
+      offset_line = 30;   // 定义布局相关的偏移量变量
   ui_statusbar_update();  // 更新状态栏
-  display_bar_radius_ex(BOARD_OFFSET_X, 60, BUTTON_FULL_WIDTH, 362,  // 显示带圆角的背景面板
+  display_bar_radius_ex(BOARD_OFFSET_X, 60, BUTTON_FULL_WIDTH,
+                        362,  // 显示带圆角的背景面板
                         COLOR_BL_PANEL, COLOR_BL_BG, BUTTON_RADIUS);
   offset_y += offset_line;
-  display_text(offset_x, offset_y, "Device Info", -1, FONT_PJKS_BOLD_26, COLOR_BL_FG,  // 显示设备型号
+  display_text(offset_x, offset_y, "Device Info", -1, FONT_PJKS_BOLD_26,
+               COLOR_BL_FG,  // 显示设备型号
                COLOR_BL_PANEL);
   offset_y += offset_line;
 
@@ -946,27 +959,32 @@ void ui_bootloader_main_menu(const image_header* const hdr) {  // 定义显示�
 
   offset_y += offset_line;
   offset_y += off_n;
-  display_text(offset_x, offset_y, "Reboot Device", -1, FONT_PJKS_BOLD_26, COLOR_BL_FG,  // 显示设备型号
+  display_text(offset_x, offset_y, "Reboot Device", -1, FONT_PJKS_BOLD_26,
+               COLOR_BL_FG,  // 显示设备型号
                COLOR_BL_PANEL);
-  
+
   offset_y += offset_line;
   display_bar(0, offset_y, DISPLAY_RESX, 3, COLOR_BLACK);
   offset_y += offset_line;
   offset_y += off_n;
-  display_text(offset_x, offset_y, "Generate TRNG", -1, FONT_PJKS_BOLD_26, COLOR_BL_FG,  // 显示设备型号
+  display_text(offset_x, offset_y, "Generate TRNG", -1, FONT_PJKS_BOLD_26,
+               COLOR_BL_FG,  // 显示设备型号
                COLOR_BL_PANEL);
   offset_y += offset_line;
   display_bar(0, offset_y, DISPLAY_RESX, 3, COLOR_BLACK);
   offset_y += offset_line;
   offset_y += off_n;
-  display_text(offset_x, offset_y, "Factory Reset", -1, FONT_PJKS_BOLD_26, COLOR_BL_FG,  // 显示设备型号
+  display_text(offset_x, offset_y, "Factory Reset", -1, FONT_PJKS_BOLD_26,
+               COLOR_BL_FG,  // 显示设备型号
                COLOR_BL_PANEL);
   offset_y += offset_line;
 
-  display_bar_radius_ex(BUTTON_LEFT_OFFSET_X, BUTTON_OFFSET_Y, BUTTON_FULL_WIDTH, BUTTON_HEIGHT, COLOR_BL_FG, COLOR_BL_BG, BUTTON_RADIUS);
-  display_text_center(DISPLAY_RESX / 2, 755, "Back", -1, FONT_PJKS_BOLD_26, COLOR_BL_BG, COLOR_BL_FG);
+  display_bar_radius_ex(BUTTON_LEFT_OFFSET_X, BUTTON_OFFSET_Y,
+                        BUTTON_FULL_WIDTH, BUTTON_HEIGHT, COLOR_BL_FG,
+                        COLOR_BL_BG, BUTTON_RADIUS);
+  display_text_center(DISPLAY_RESX / 2, 755, "Back", -1, FONT_PJKS_BOLD_26,
+                      COLOR_BL_BG, COLOR_BL_FG);
 }
-
 
 void ui_bootloader_view_details(const image_header* const hdr) {
   ui_bootloader_page_current = 1;
@@ -1052,28 +1070,28 @@ void ui_bootloader_view_details(const image_header* const hdr) {
   display_text(offset_x, offset_y, "BuildID", -1, FONT_PJKS_BOLD_26,
                COLOR_BL_TAGVALUE, COLOR_BL_PANEL);
   offset_y += offset_line;
-  display_text(offset_x, offset_y, "8be3971", -1,
-               FONT_NORMAL, COLOR_BL_FG, COLOR_BL_PANEL);
+  display_text(offset_x, offset_y, "8be3971", -1, FONT_NORMAL, COLOR_BL_FG,
+               COLOR_BL_PANEL);
 
   // 使用与主菜单相同的全宽白色Back按钮
-  display_bar_radius_ex(BUTTON_LEFT_OFFSET_X, BUTTON_OFFSET_Y, BUTTON_FULL_WIDTH, BUTTON_HEIGHT, COLOR_BL_FG, COLOR_BL_BG, BUTTON_RADIUS);
-  display_text_center(DISPLAY_RESX / 2, 755, "Back", -1, FONT_PJKS_BOLD_26, COLOR_BL_BG, COLOR_BL_FG);
+  display_bar_radius_ex(BUTTON_LEFT_OFFSET_X, BUTTON_OFFSET_Y,
+                        BUTTON_FULL_WIDTH, BUTTON_HEIGHT, COLOR_BL_FG,
+                        COLOR_BL_BG, BUTTON_RADIUS);
+  display_text_center(DISPLAY_RESX / 2, 755, "Back", -1, FONT_PJKS_BOLD_26,
+                      COLOR_BL_BG, COLOR_BL_FG);
 }
-
-
-
 
 void ui_bootloader_restart_confirm(void) {
   ui_bootloader_page_current = 4;
 
   ui_statusbar_update();
-  
+
   // 标题：Restart Device?
-  display_text(12, 276, "Reboot Device?", -1,
-               FONT_PJKS_BOLD_38, COLOR_BL_FG, COLOR_BL_BG);
+  display_text(12, 276, "Reboot Device?", -1, FONT_PJKS_BOLD_38, COLOR_BL_FG,
+               COLOR_BL_BG);
 
   // 副标题：灰色，字体大小26，距离标题38像素（字体大小38+间距16=54）
-  display_text(12, 276 + 38 + 16, "Rebooting will exit the device from", -1, 
+  display_text(12, 276 + 38 + 16, "Rebooting will exit the device from", -1,
                FONT_PJKS_BOLD_26, COLOR_BL_SUBTITLE, COLOR_BL_BG);
   display_text(12, 276 + 38 + 16 + 30, "update mode and interrupt the", -1,
                FONT_PJKS_BOLD_26, COLOR_BL_SUBTITLE, COLOR_BL_BG);
@@ -1081,17 +1099,17 @@ void ui_bootloader_restart_confirm(void) {
                FONT_PJKS_BOLD_26, COLOR_BL_SUBTITLE, COLOR_BL_BG);
 
   // 左边按钮：灰色背景，白色字体
-  display_bar_radius_ex(BUTTON_LEFT_OFFSET_X, BUTTON_OFFSET_Y, 
-                        BUTTON_HALF_WIDTH, BUTTON_HEIGHT, COLOR_BL_DARK, 
+  display_bar_radius_ex(BUTTON_LEFT_OFFSET_X, BUTTON_OFFSET_Y,
+                        BUTTON_HALF_WIDTH, BUTTON_HEIGHT, COLOR_BL_DARK,
                         COLOR_BL_BG, BUTTON_RADIUS);
-  display_text_center(DISPLAY_RESX / 4, 755, "Cancel", -1, FONT_PJKS_BOLD_26, 
+  display_text_center(DISPLAY_RESX / 4, 755, "Cancel", -1, FONT_PJKS_BOLD_26,
                       COLOR_BL_FG, COLOR_BL_DARK);
-  
+
   // 右边按钮：白色背景，黑色字体
-  display_bar_radius_ex(BUTTON_RIGHT_OFFSET_X, BUTTON_OFFSET_Y, 
-                        BUTTON_HALF_WIDTH, BUTTON_HEIGHT, COLOR_BL_FG, 
+  display_bar_radius_ex(BUTTON_RIGHT_OFFSET_X, BUTTON_OFFSET_Y,
+                        BUTTON_HALF_WIDTH, BUTTON_HEIGHT, COLOR_BL_FG,
                         COLOR_BL_BG, BUTTON_RADIUS);
-  display_text_center(DISPLAY_RESX - DISPLAY_RESX / 4, 755, "Reboot", -1, 
+  display_text_center(DISPLAY_RESX - DISPLAY_RESX / 4, 755, "Reboot", -1,
                       FONT_PJKS_BOLD_26, COLOR_BL_BG, COLOR_BL_FG);
 }
 
@@ -1100,33 +1118,33 @@ void ui_bootloader_factory_reset_confirm(void) {
 
   display_clear();  // Clear screen to remove any previous content
   ui_statusbar_update();
-  
+
   // 标题：Are you sure you want to factory reset the device?
-  display_text(12, 276, "Are you sure you want to", -1,
-               FONT_PJKS_BOLD_38, COLOR_BL_FG, COLOR_BL_BG);
-  display_text(12, 276 + 38, "factory reset the device?", -1,
-               FONT_PJKS_BOLD_38, COLOR_BL_FG, COLOR_BL_BG);
+  display_text(12, 276, "Are you sure you want to", -1, FONT_PJKS_BOLD_38,
+               COLOR_BL_FG, COLOR_BL_BG);
+  display_text(12, 276 + 38, "factory reset the device?", -1, FONT_PJKS_BOLD_38,
+               COLOR_BL_FG, COLOR_BL_BG);
 
   // 副标题：灰色，字体大小26，距离标题16像素
-  display_text(12, 276 + 38 + 38 + 16, "Please keep your Secret Recovery", -1, 
+  display_text(12, 276 + 38 + 38 + 16, "Please keep your Secret Recovery", -1,
                FONT_PJKS_BOLD_26, COLOR_BL_SUBTITLE, COLOR_BL_BG);
-  display_text(12, 276 + 38 + 38 + 16 + 30, "Phrase handy to recover access", -1,
-               FONT_PJKS_BOLD_26, COLOR_BL_SUBTITLE, COLOR_BL_BG);
+  display_text(12, 276 + 38 + 38 + 16 + 30, "Phrase handy to recover access",
+               -1, FONT_PJKS_BOLD_26, COLOR_BL_SUBTITLE, COLOR_BL_BG);
   display_text(12, 276 + 38 + 38 + 16 + 60, "to your wallet.", -1,
                FONT_PJKS_BOLD_26, COLOR_BL_SUBTITLE, COLOR_BL_BG);
 
   // 左边按钮：灰色背景，白色字体
-  display_bar_radius_ex(BUTTON_LEFT_OFFSET_X, BUTTON_OFFSET_Y, 
-                        BUTTON_HALF_WIDTH, BUTTON_HEIGHT, COLOR_BL_DARK, 
+  display_bar_radius_ex(BUTTON_LEFT_OFFSET_X, BUTTON_OFFSET_Y,
+                        BUTTON_HALF_WIDTH, BUTTON_HEIGHT, COLOR_BL_DARK,
                         COLOR_BL_BG, BUTTON_RADIUS);
-  display_text_center(DISPLAY_RESX / 4, 755, "Cancel", -1, FONT_PJKS_BOLD_26, 
+  display_text_center(DISPLAY_RESX / 4, 755, "Cancel", -1, FONT_PJKS_BOLD_26,
                       COLOR_BL_FG, COLOR_BL_DARK);
-  
+
   // 右边按钮：红色背景，黑色字体
-  display_bar_radius_ex(BUTTON_RIGHT_OFFSET_X, BUTTON_OFFSET_Y, 
-                        BUTTON_HALF_WIDTH, BUTTON_HEIGHT, COLOR_BL_DANGER, 
+  display_bar_radius_ex(BUTTON_RIGHT_OFFSET_X, BUTTON_OFFSET_Y,
+                        BUTTON_HALF_WIDTH, BUTTON_HEIGHT, COLOR_BL_DANGER,
                         COLOR_BL_BG, BUTTON_RADIUS);
-  display_text_center(DISPLAY_RESX - DISPLAY_RESX / 4, 755, "Reset", -1, 
+  display_text_center(DISPLAY_RESX - DISPLAY_RESX / 4, 755, "Reset", -1,
                       FONT_PJKS_BOLD_26, COLOR_BL_BG, COLOR_BL_DANGER);
 }
 
@@ -1164,7 +1182,7 @@ void ui_bootloader_page_switch(const image_header* const hdr) {
       display_clear();
 
       ui_bootloader_main_menu(hdr);
-      
+
       // ui_bootloader_view_details(hdr);
     }
     if (!ble_name_show && ble_name_state()) {
@@ -1175,9 +1193,8 @@ void ui_bootloader_page_switch(const image_header* const hdr) {
     if ((click_now - click_pre) > (1000 / 2)) {
       click = 0;
     }
-    response = ui_input_poll(INPUT_PREVIOUS |
-                                 INPUT_BOOT_VERSION_TEXT | INPUT_BUILD_ID_TEXT,
-                             false);
+    response = ui_input_poll(
+        INPUT_PREVIOUS | INPUT_BOOT_VERSION_TEXT | INPUT_BUILD_ID_TEXT, false);
     if (INPUT_PREVIOUS == response) {
       display_clear();
       ui_bootloader_main_menu(hdr);  // 返回到主菜单
@@ -1226,7 +1243,7 @@ void ui_bootloader_page_switch(const image_header* const hdr) {
     } else if (INPUT_CONFIRM == response) {
       device_generate_trng_data();  // 点击OK开始生成随机数
     }
-    
+
     // 只有从Build ID进入时才自动返回
     if (!trng_from_menu) {
       click_now = HAL_GetTick();
@@ -1247,9 +1264,10 @@ void ui_bootloader_page_switch(const image_header* const hdr) {
     }
   } else if (ui_bootloader_page_current == 5) {
     // 主菜单页面处理
-    response = ui_input_poll(INPUT_PREVIOUS | INPUT_MENU_DEVICE_INFO | 
-                            INPUT_MENU_GENERATE_TRNG | INPUT_MENU_REBOOT | 
-                            INPUT_MENU_FACTORY_RESET, false);
+    response = ui_input_poll(INPUT_PREVIOUS | INPUT_MENU_DEVICE_INFO |
+                                 INPUT_MENU_GENERATE_TRNG | INPUT_MENU_REBOOT |
+                                 INPUT_MENU_FACTORY_RESET,
+                             false);
     if (INPUT_PREVIOUS == response) {
       // 返回到首页
       display_clear();
@@ -1284,7 +1302,7 @@ void ui_bootloader_page_switch(const image_header* const hdr) {
       ui_fadeout();
       ui_screen_wipe();
       ui_fadein();
-      
+
       // 调用真正的存储重置函数
       if (sectrue != se_reset_storage()) {
         ui_fadeout();
@@ -1304,4 +1322,3 @@ void ui_bootloader_page_switch(const image_header* const hdr) {
     }
   }
 }
-
