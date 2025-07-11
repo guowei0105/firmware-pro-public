@@ -791,12 +791,16 @@ class PasskeysManager(AnimScreen):
 
 class ShowAddress(AnimScreen):
 
-    device.set_passphrase_auto_status(True)
+    # device.set_passphrase_auto_status(True)
 
     def __init__(self, prev_scr=None):
         if not hasattr(self, "_init"):
             self.prev_session_id = storage.cache.get_session_id()
-            self.curr_session_id = storage.cache.start_session()
+            if not self.prev_session_id:
+                self.curr_session_id = storage.cache.start_session()
+                self.prev_session_id = self.curr_session_id
+            else:
+                self.curr_session_id = storage.cache.start_session()
 
             # if passphrase.is_enabled() and not passphrase.is_passphrase_pin_enabled():
             #     workflow.spawn(
@@ -1105,6 +1109,7 @@ class ShowAddress(AnimScreen):
                 return
             if isinstance(target, lv.imgbtn):
                 if target == self.nav_back.nav_btn:
+                    print(f"prev_session_id: {self.prev_session_id}")
                     storage.cache.end_current_session()
                     storage.cache.start_session(self.prev_session_id)
                     if self.prev_scr is not None:
@@ -1114,7 +1119,7 @@ class ShowAddress(AnimScreen):
                     passphrase.is_enabled() and target == self.nav_passphrase.select_btn
                 ):
                     # enter new passphrase
-                    device.set_passphrase_auto_status(False)
+                    # device.set_passphrase_auto_status(False)
                     storage.cache.end_current_session()
                     self.curr_session_id = storage.cache.start_session()
                     workflow.spawn(self._get_passphrase_from_user(init=False))

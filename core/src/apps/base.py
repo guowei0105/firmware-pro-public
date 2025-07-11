@@ -27,12 +27,6 @@ def check_version_compatibility() -> None:
     This function should be called after device unlock to ensure accurate
     passphrase state detection.
     """
-    if __debug__:
-        print(f"check_version_compatibility: Called")
-        client_contains_attach = has_attach_to_pin_capability()
-        print(f"check_version_compatibility: client_contains_attach={client_contains_attach}")
-        print(f"check_version_compatibility: has_attach_to_pin_capability()={has_attach_to_pin_capability()}")
-    
     if not has_attach_to_pin_capability():
         from apps.common import passphrase
 

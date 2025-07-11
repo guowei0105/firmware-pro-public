@@ -69,11 +69,11 @@ if not utils.BITCOIN_ONLY:
                 return
             from apps.common import passphrase
 
-            if not passphrase.is_passphrase_auto_status():
-                passphrase = await get_passphrase(ctx)
-                device.set_passphrase_auto_status(False)
-            else:
-                passphrase = ""
+            # if not passphrase.is_passphrase_auto_status():
+            #     passphrase = await get_passphrase(ctx)
+            #     device.set_passphrase_auto_status(False)
+            # else:
+            #     passphrase = ""
 
             if need_seed:
                 common_seed = mnemonic.get_seed(passphrase, progress_bar=False)
