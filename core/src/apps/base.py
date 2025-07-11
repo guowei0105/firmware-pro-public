@@ -5,7 +5,7 @@ import storage.device
 from trezor import config, loop, protobuf, ui, utils, wire, workflow
 from trezor.crypto import se_thd89
 from trezor.enums import MessageType
-from trezor.messages import Success, UnlockPath
+from trezor.messages import Success, UnlockPath, UnLockDevice, UnLockDeviceResponse
 
 from apps.common.pin_constants import PinType
 
@@ -183,6 +183,11 @@ def get_features() -> Features:
     if utils.MODEL in ("T",):
         f.capabilities.append(Capability.PassphraseEntry)
 
+    # Add AttachToPin capability if the feature is available
+    # This allows new clients to detect the feature while old clients ignore it
+    if storage.device.is_initialized():
+        f.capabilities.append(Capability.AttachToPin)
+
     f.sd_card_present = sdcard.is_present()
     f.initialized = storage.device.is_initialized()
 
@@ -312,6 +317,7 @@ async def handle_Initialize(
         prev_session_id != msg.session_id and 
         hasattr(msg, 'passphrase_state') and 
         msg.passphrase_state is not None and
+        msg.passphrase_state != "" and
         se_thd89.check_passphrase_btc_test_address(msg.passphrase_state.encode() if isinstance(msg.passphrase_state, str) else msg.passphrase_state)):
             print("1111111111111111111111111111111111111")
             session_id = None
@@ -504,6 +510,7 @@ ALLOW_WHILE_LOCKED = (
     MessageType.SetBusy,
     MessageType.GetPassphraseState,
     MessageType.PassphraseState,
+    MessageType.UnLockDevice,
 )
 
 
@@ -772,6 +779,10 @@ async def handle_GetPassphraseState(
     from trezor.messages import PassphraseState
     from apps.common import passphrase
 
+    # Check if client supports attach to pin feature
+    # Old clients won't have the allow_create_attach_pin field
+    client_supports_attach_pin = hasattr(msg, 'allow_create_attach_pin') and msg.allow_create_attach_pin is not None
+
     # if not con
     # fig.is_unlocked():
     if not device_is_unlocked():
@@ -832,6 +843,23 @@ async def handle_GetPassphraseState(
         error_msg = str(e) if e else "Unknown error in btc_get_address"
         return PassphraseState(btc_test=f"Error in btc_get_address: {error_msg}")
 
+async def handle_UnLockDevice(ctx: wire.Context, msg: UnLockDevice) -> UnLockDeviceResponse:
+    """Handle UnLockDevice message to unlock the device if needed."""
+    if not config.is_unlocked():
+        await unlock_device(ctx, pin_use_type=2)
+    
+    # Get current device state after unlock attempt
+    from apps.common import passphrase
+    unlocked = config.is_unlocked()
+    unlocked_attach_pin = passphrase.is_passphrase_pin_enabled() if unlocked else False
+    passphrase_protection = storage.device.is_passphrase_enabled() if unlocked else False
+    
+    return UnLockDeviceResponse(
+        unlocked=unlocked,
+        unlocked_attach_pin=unlocked_attach_pin,
+        passphrase_protection=passphrase_protection
+    )
+
 
 def boot() -> None:
     workflow_handlers.register(MessageType.Initialize, handle_Initialize)
@@ -850,6 +878,7 @@ def boot() -> None:
     workflow_handlers.register(
         MessageType.GetPassphraseState, handle_GetPassphraseState
     )
+    workflow_handlers.register(MessageType.UnLockDevice, handle_UnLockDevice)
 
     reload_settings_from_storage()
     from trezor.lvglui.scrs import fingerprints

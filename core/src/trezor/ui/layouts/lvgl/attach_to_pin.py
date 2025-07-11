@@ -364,7 +364,7 @@ async def show_has_attached_window(ctx: wire.Context):
             screen.channel.publish(-1)
 
     close_btn.add_event_cb(on_close_clicked, lv.EVENT.CLICKED, None)
-    screen.btn_no.enable(lv_colors.ONEKEY_RED_1, text_color=lv_colors.BLACK)
+    # screen.btn_no.enable(lv_colors.ONEKEY_RED_1, text_color=lv_colors.BLACK)
     result = await ctx.wait(screen.request())
     return result
 
