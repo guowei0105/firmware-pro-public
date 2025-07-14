@@ -5,7 +5,7 @@ from trezor import utils, wire
 from trezor.crypto import bip32, hmac
 
 from . import mnemonic
-from .passphrase import get as get_passphrase
+from .passphrase import get as get_passphrase               
 
 if TYPE_CHECKING:
     from .paths import Bip32Path, Slip21Path
@@ -76,17 +76,24 @@ if not utils.BITCOIN_ONLY:
             #     passphrase = ""
 
             if need_seed:
-                common_seed = mnemonic.get_seed(passphrase, progress_bar=False)
+                from apps.common import passphrase
+                passphrase_pin_enabled = passphrase.is_passphrase_pin_enabled()
+                if not passphrase_pin_enabled:
+                    passphrase_str = await get_passphrase(ctx)
+                else:
+                    passphrase_str = ""
+                common_seed = mnemonic.get_seed(passphrase_str, progress_bar=False)
                 cache.set(cache.APP_COMMON_SEED, common_seed)
 
             if need_cardano_secret:
                 from apps.cardano.seed import derive_and_store_secrets
 
-                derive_and_store_secrets(passphrase)
+                derive_and_store_secrets(passphrase_str)
         else:
             from trezor.crypto import se_thd89
 
-            passphrase = ""
+            from apps.common import passphrase
+            passphrase_str = ""
             state = se_thd89.get_session_state()
             if not state[0] & 0x80:
                 import utime
@@ -97,13 +104,19 @@ if not utils.BITCOIN_ONLY:
                 if session_id is None or session_id == b"":
                     session_id = storage.cache.start_session()
                     utime.sleep_ms(500)
-                passphrase = await get_passphrase(ctx)
-                mnemonic.get_seed(passphrase, progress_bar=False)
+                from apps.common import passphrase
+                passphrase_pin_enabled = passphrase.is_passphrase_pin_enabled()
+                if not passphrase_pin_enabled:
+                    passphrase_str = await get_passphrase(ctx)
+                else:
+                    passphrase_str = ""
+
+                mnemonic.get_seed(passphrase_str, progress_bar=False)
 
                 if cache.SESSION_DIRIVE_CARDANO:
                     from apps.cardano.seed import derive_and_store_secrets
 
-                    derive_and_store_secrets(passphrase)
+                    derive_and_store_secrets(passphrase_str)
 
     @cache.stored_async(cache.APP_COMMON_SEED)
     async def get_seed(ctx: wire.Context) -> bytes:
@@ -122,16 +135,20 @@ else:
     @cache.stored_async(cache.APP_COMMON_SEED)
     async def get_seed(ctx: wire.Context) -> bytes:
         if not utils.USE_THD89:
-            passphrase = await get_passphrase(ctx)
-            return mnemonic.get_seed(passphrase, progress_bar=False)
+            passphrase_str = await get_passphrase(ctx)
+            return mnemonic.get_seed(passphrase_str, progress_bar=False)
         else:
             from trezor.crypto import se_thd89
 
             state = se_thd89.get_session_state()
 
             if not state[0] & 0x80:
-                passphrase = await get_passphrase(ctx)
-                return mnemonic.get_seed(passphrase, progress_bar=False)
+                from apps.common import passphrase
+                passphrase_pin_enabled = passphrase.is_passphrase_pin_enabled()
+                if not passphrase_pin_enabled:
+                    passphrase_str = await get_passphrase(ctx)
+                else: passphrase_str = ""
+                return mnemonic.get_seed(passphrase_str, progress_bar=False)
             else:
                 return b""
 

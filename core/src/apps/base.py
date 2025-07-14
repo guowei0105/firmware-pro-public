@@ -303,25 +303,41 @@ async def handle_Initialize(
     prev_session_id = storage.cache.get_session_id()
     from trezor.crypto import se_thd89
     # Check if passphrase_state exists and is valid before using it
-    # if __debug__:
-    #     print(f"device_is_unlocked: {device_is_unlocked()}")
-    #     print(f"prev_session_id != msg.session_id: {prev_session_id != msg.session_id}")
-    #     print(f"has passphrase_state: {hasattr(msg, 'passphrase_state')}")
-    #     if hasattr(msg, 'passphrase_state'):
-    #         print(f"passphrase_state value: {msg.passphrase_state}")
-    #         passphrase_to_check = msg.passphrase_state.encode() if isinstance(msg.passphrase_state, str) else msg.passphrase_state
-    #         check_result = se_thd89.check_passphrase_btc_test_address(passphrase_to_check)
-    #         print(f"check_passphrase_btc_test_address result: {check_result}")
+    if __debug__:
+        print(f"handle_Initialize DEBUG: device_is_unlocked: {device_is_unlocked()}")
+        print(f"handle_Initialize DEBUG: prev_session_id: {prev_session_id}")
+        print(f"handle_Initialize DEBUG: msg.session_id: {msg.session_id}")
+        print(f"handle_Initialize DEBUG: prev_session_id != msg.session_id: {prev_session_id != msg.session_id}")
+        print(f"handle_Initialize DEBUG: has passphrase_state: {hasattr(msg, 'passphrase_state')}")
+        if hasattr(msg, 'passphrase_state'):
+            print(f"handle_Initialize DEBUG: passphrase_state value: {msg.passphrase_state}")
+            print(f"handle_Initialize DEBUG: passphrase_state type: {type(msg.passphrase_state)}")
+            print(f"handle_Initialize DEBUG: passphrase_state is not None: {msg.passphrase_state is not None}")
+            print(f"handle_Initialize DEBUG: passphrase_state != '': {msg.passphrase_state != ''}")
+            if msg.passphrase_state is not None and msg.passphrase_state != "":
+                passphrase_to_check = msg.passphrase_state.encode() if isinstance(msg.passphrase_state, str) else msg.passphrase_state
+                check_result = se_thd89.check_passphrase_btc_test_address(passphrase_to_check)
+                print(f"handle_Initialize DEBUG: check_passphrase_btc_test_address result: {check_result}")
+    from apps.common import passphrase
+    passphrase_pin_enabled = passphrase.is_passphrase_pin_enabled()
+
 
     if (device_is_unlocked() and 
         prev_session_id != msg.session_id and 
         hasattr(msg, 'passphrase_state') and 
         msg.passphrase_state is not None and
+        passphrase_pin_enabled and
         msg.passphrase_state != "" and
         se_thd89.check_passphrase_btc_test_address(msg.passphrase_state.encode() if isinstance(msg.passphrase_state, str) else msg.passphrase_state)):
+            if __debug__:
+                print("handle_Initialize DEBUG: All conditions met, setting session_id = None")
+                print("handle_Initialize DEBUG: This means client provided valid passphrase_state")
             print("1111111111111111111111111111111111111")
-            session_id = None
+            # session_id = None
+            session_id = storage.cache.start_session()  #
     else:
+        if __debug__:
+            print("handle_Initialize DEBUG: Conditions not met, starting normal session")
         print("2222222222222222222222222222222222")
         session_id = storage.cache.start_session(msg.session_id)
 
@@ -779,15 +795,30 @@ async def handle_GetPassphraseState(
     from trezor.messages import PassphraseState
     from apps.common import passphrase
 
+    if __debug__:
+        print(f"handle_GetPassphraseState DEBUG: Function called")
+        print(f"handle_GetPassphraseState DEBUG: device_is_unlocked: {device_is_unlocked()}")
+        print(f"handle_GetPassphraseState DEBUG: msg: {msg}")
+
     # Check if client supports attach to pin feature
     # Old clients won't have the allow_create_attach_pin field
     client_supports_attach_pin = hasattr(msg, 'allow_create_attach_pin') and msg.allow_create_attach_pin is not None
 
+    if __debug__:
+        print(f"handle_GetPassphraseState DEBUG: client_supports_attach_pin: {client_supports_attach_pin}")
+
     # if not con
     # fig.is_unlocked():
     if not device_is_unlocked():
+        if __debug__:
+            print("handle_GetPassphraseState DEBUG: Device not unlocked, calling unlock_device")
         await unlock_device(ctx, pin_use_type=2)
         session_id = storage.cache.start_session()
+        if __debug__:
+            print(f"handle_GetPassphraseState DEBUG: After unlock, session_id: {session_id}")
+    else:
+        if __debug__:
+            print("handle_GetPassphraseState DEBUG: Device already unlocked")
     
     # Ensure passphrase pin state is correctly set after unlock
     # This fixes the issue where fingerprint unlock doesn't properly sync the state
@@ -811,10 +842,16 @@ async def handle_GetPassphraseState(
     try:
         session_id = storage.cache.get_session_id()
         print("current session_id",session_id)
+        if __debug__:
+            print(f"handle_GetPassphraseState DEBUG: Got session_id: {session_id}")
         if session_id is None or session_id == b"":
             session_id = storage.cache.start_session()
+            if __debug__:
+                print(f"handle_GetPassphraseState DEBUG: Started new session_id: {session_id}")
         utime.sleep_ms(500)
 
+        if __debug__:
+            print("handle_GetPassphraseState DEBUG: About to call btc_get_address")
         fixed_path = "m/44'/1'/0'/0/0"
         address_msg = messages.GetAddress(
             address_n=paths.parse_path(fixed_path),
@@ -824,10 +861,15 @@ async def handle_GetPassphraseState(
         )
 
         address_obj = await btc_get_address(ctx, address_msg)
+        if __debug__:
+            print(f"handle_GetPassphraseState DEBUG: btc_get_address returned: {address_obj.address}")
         session_id = storage.cache.get_session_id()
         if session_id is None or session_id == b"":
             session_id = storage.cache.start_session()
         is_attach_to_pin_state = passphrase.is_passphrase_pin_enabled()
+        if __debug__:
+            print(f"handle_GetPassphraseState DEBUG: is_attach_to_pin_state: {is_attach_to_pin_state}")
+            print(f"handle_GetPassphraseState DEBUG: Returning PassphraseState with address: {address_obj.address}")
         return PassphraseState(
             passphrase_state=address_obj.address,
             session_id=session_id,

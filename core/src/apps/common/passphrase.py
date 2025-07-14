@@ -21,16 +21,28 @@ def is_passphrase_auto_status() -> bool:
 
 async def get(ctx: wire.Context) -> str:
 
+    if __debug__:
+        print(f"passphrase.get DEBUG: Function called")
+        print(f"passphrase.get DEBUG: is_enabled(): {is_enabled()}")
+    
     if is_enabled():
-        passphrase_pin_enabled = is_passphrase_pin_enabled()
-        if __debug__:
-            print(f"passphrase.get: is_enabled=True, is_passphrase_pin_enabled={passphrase_pin_enabled}")
-        if passphrase_pin_enabled:
-            return ""
+        # passphrase_pin_enabled = is_passphrase_pin_enabled()
+        # if __debug__:
+        #     print(f"passphrase.get DEBUG: is_enabled=True, is_passphrase_pin_enabled={passphrase_pin_enabled}")
+        # if passphrase_pin_enabled:
+        #     if __debug__:
+        #         print("passphrase.get DEBUG: passphrase_pin_enabled=True, returning empty string")
+        #     return ""
         if isinstance(ctx, wire.QRContext) and ctx.passphrase is not None:
+            if __debug__:
+                print("passphrase.get DEBUG: QRContext with passphrase, returning ctx.passphrase")
             return ctx.passphrase
+        if __debug__:
+            print("passphrase.get DEBUG: Calling _request_from_user")
         return await _request_from_user(ctx)
     else:
+        if __debug__:
+            print("passphrase.get DEBUG: is_enabled=False, returning empty string")
         return ""
 
 
