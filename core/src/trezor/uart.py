@@ -392,6 +392,7 @@ async def _deal_button_press(value: bytes) -> None:
                             storage.cache.end_current_session()
                         config.lock()
                 await loop.race(safe_reloop(), loop.sleep(200))
+                await loop.sleep(300)
                 workflow.spawn(utils.internal_reloop())
                 base.set_homescreen()
                 return
