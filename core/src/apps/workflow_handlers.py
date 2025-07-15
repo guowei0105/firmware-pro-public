@@ -1,6 +1,6 @@
 from typing import TYPE_CHECKING
 
-from trezor import utils, wire
+from trezor import utils
 from trezor.enums import MessageType
 
 if TYPE_CHECKING:
@@ -105,12 +105,10 @@ def find_message_handler_module(msg_type: int) -> str:
         return "apps.misc.cipher_key_value"
     if msg_type == MessageType.GetFirmwareHash:
         return "apps.misc.get_firmware_hash"
+    if msg_type == MessageType.BatchGetPublickeys:
+        return "apps.misc.batch_get_pubkeys"
 
     if not utils.BITCOIN_ONLY:
-
-        if msg_type == MessageType.BatchGetPublickeys:
-            return "apps.misc.batch_get_pubkeys"
-
         if msg_type == MessageType.SetU2FCounter:
             return "apps.management.set_u2f_counter"
         if msg_type == MessageType.GetNextU2FCounter:
@@ -386,7 +384,6 @@ def find_message_handler_module(msg_type: int) -> str:
 
 def find_registered_handler(iface: WireInterface, msg_type: int) -> Handler | None:
     if msg_type in workflow_handlers:
-        # Message has a handler available, return it directly.
         return workflow_handlers[msg_type]
 
     try:
@@ -395,13 +392,7 @@ def find_registered_handler(iface: WireInterface, msg_type: int) -> Handler | No
         module = __import__(modname, None, None, (handler_name,), 0)
         handler = getattr(module, handler_name)
 
-        # Wrap address derivation handlers with version checking for external API calls
-        # Only check for external calls (when iface is not None)
         if iface is not None and _is_address_derivation_message(msg_type):
-            if __debug__:
-                print(
-                    f"find_registered_handler: Wrapping handler for message type {msg_type} with version check"
-                )
             return _wrap_with_version_check(handler)
 
         return handler
@@ -410,7 +401,6 @@ def find_registered_handler(iface: WireInterface, msg_type: int) -> Handler | No
 
 
 def _is_address_derivation_message(msg_type: int) -> bool:
-    """Check if message type is for address derivation that needs version checking."""
     return msg_type in (
         MessageType.GetAddress,
         MessageType.GetPublicKey,
@@ -455,31 +445,12 @@ def _is_address_derivation_message(msg_type: int) -> bool:
 
 
 def _wrap_with_version_check(handler):
-    """Wrap handler with version compatibility check for external API calls."""
-
-    async def wrapper(ctx: wire.Context, msg) -> wire.protobuf.MessageType:
-        if __debug__:
-            print(
-                f"_wrap_with_version_check: Executing handler for message type {msg.MESSAGE_WIRE_TYPE}"
-            )
-
+    async def wrapper(ctx, msg):
         # Execute the original handler
         result = await handler(ctx, msg)
-
-        if __debug__:
-            print(
-                "_wrap_with_version_check: Handler executed successfully, now checking version compatibility"
-            )
-
-        # Check version compatibility after successful execution
-        # This only affects external API calls, not internal calls
         from apps.base import check_version_compatibility
 
         check_version_compatibility()
-
-        if __debug__:
-            print("_wrap_with_version_check: Version check passed, returning result")
-
         return result
 
     return wrapper
