@@ -449,6 +449,7 @@ async def show_passphrase_set_and_attached_to_pin_window(ctx: wire.Context):
         icon_path="A:/res/success.png",
         anim_dir=0,
     )
+    screen.title.set_style_text_line_space(0, 0)
     result = await ctx.wait(screen.request())
     return result
 

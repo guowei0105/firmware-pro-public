@@ -1015,5 +1015,8 @@ translations = [
     "This token is not recognized by the hardware wallet. Please verify carefully.",
     "Recipient is a known energy rental service provider address.",
     "Update to the latest version to use “Attach to PIN”.",
+    "Request Confirmation",
+    "Abort Recovery Phrase Creation?",
+    "Write down the following {num} words in order for Share {num1} of {num2}.",
 ]
 # fmt: on

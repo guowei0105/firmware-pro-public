@@ -1015,5 +1015,8 @@ translations = [
     "Questo token non è riconosciuto dal wallet hardware. Si prega di verificare attentamente.",
     "Il destinatario è un indirizzo noto di un fornitore di servizi di noleggio di energia.",
     "Aggiorna all'ultima versione per utilizzare \"Allega al PIN\".",
+    "Conferma richiesta",
+    "Annullare la creazione della frase di recupero?",
+    "Scrivi le seguenti {num} parole in ordine per la Parte {num1} di {num2}.",
 ]
 # fmt: on

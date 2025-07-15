@@ -1015,5 +1015,8 @@ translations = [
     "Ce jeton n'est pas reconnu par le portefeuille matériel. Veuillez vérifier attentivement.",
     "Le destinataire est une adresse connue de fournisseur de services de location d'énergie.",
     "Mettez à jour vers la dernière version pour utiliser « Épingler ».",
+    "Demande de confirmation",
+    "Abandonner la création de la phrase de récupération ?",
+    "Écrivez les {num} mots suivants dans l'ordre pour la Part {num1} sur {num2}.",
 ]
 # fmt: on

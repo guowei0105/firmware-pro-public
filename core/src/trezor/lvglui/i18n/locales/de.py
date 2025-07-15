@@ -1015,5 +1015,8 @@ translations = [
     "Dieses Token wird von der Hardware-Wallet nicht erkannt. Bitte überprüfen Sie dies sorgfältig.",
     "Der Empfänger ist eine bekannte Adresse eines Energie-Mietdienstleisters.",
     "Aktualisieren Sie auf die neueste Version, um „An PIN anheften“ zu verwenden.",
+    "Anfragebestätigung",
+    "Wiederherstellungsphrase-Erstellung abbrechen?",
+    "Schreiben Sie die folgenden {num} Wörter der Reihe nach für Anteil {num1} von {num2} auf.",
 ]
 # fmt: on
