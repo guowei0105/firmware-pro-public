@@ -75,14 +75,13 @@ if not utils.BITCOIN_ONLY:
             # else:
             #     passphrase = ""
 
-            if need_seed:
-                from apps.common import passphrase
+            passphrase_pin_enabled = passphrase.is_passphrase_pin_enabled()
+            if not passphrase_pin_enabled:
+                passphrase_str = await get_passphrase(ctx)
+            else:
+                passphrase_str = ""
 
-                passphrase_pin_enabled = passphrase.is_passphrase_pin_enabled()
-                if not passphrase_pin_enabled:
-                    passphrase_str = await get_passphrase(ctx)
-                else:
-                    passphrase_str = ""
+            if need_seed:
                 common_seed = mnemonic.get_seed(passphrase_str, progress_bar=False)
                 cache.set(cache.APP_COMMON_SEED, common_seed)
 
@@ -99,12 +98,11 @@ if not utils.BITCOIN_ONLY:
             state = se_thd89.get_session_state()
             if not state[0] & 0x80:
                 import utime
-                import storage.cache
 
-                session_id = storage.cache.get_session_id()
-                session_id = storage.cache.start_session(session_id)
+                session_id = cache.get_session_id()
+                session_id = cache.start_session(session_id)
                 if session_id is None or session_id == b"":
-                    session_id = storage.cache.start_session()
+                    session_id = cache.start_session()
                     utime.sleep_ms(500)
                 from apps.common import passphrase
 

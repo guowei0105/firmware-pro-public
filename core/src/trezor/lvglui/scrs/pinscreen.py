@@ -510,21 +510,6 @@ class InputPassphrasePinConfirm(FullSizeWindow):
         self.destroy()
 
 
-async def pin_mismatch(ctx) -> None:
-    from trezor.ui.layouts import show_warning
-
-    await show_warning(
-        ctx=ctx,
-        br_type="pin_not_match",
-        header=_(i18n_keys.TITLE__NOT_MATCH),
-        content=_(
-            i18n_keys.CONTENT__THE_TWO_ONEKEY_LITE_USED_FOR_CONNECTION_ARE_NOT_THE_SAME
-        ),
-        icon="A:/res/danger.png",
-        btn_yes_bg_color=lv_colors.ONEKEY_BLACK,
-    )
-
-
 async def request_passphrase_pin(ctx, prompt: str) -> str:
     pin_screen = InputPassphrasePinConfirm(prompt)
     pin = await ctx.wait(pin_screen.request())

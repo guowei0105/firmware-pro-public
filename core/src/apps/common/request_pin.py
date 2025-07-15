@@ -150,53 +150,49 @@ async def verify_user_pin(
                 attach_wall_only=attach_wall_only,
             )
             config.ensure_not_wipe_code(pin)
-        except Exception as e:
+        except Exception:
             raise wire.PinCancelled("cancle")
     else:
         pin = ""
     try:
         salt = await request_sd_salt(ctx)
-    except SdCardUnavailable as e:
+    except SdCardUnavailable:
         raise wire.PinCancelled("SD salt is unavailable")
-    except Exception as e:
+    except Exception:
         raise wire.PinCancelled("cancle")
 
     if not config.is_unlocked():
         try:
-            verified, usertype = config.unlock(pin, salt, pin_use_type)
+            result = config.unlock(pin, salt, pin_use_type)
+            if isinstance(result, tuple):
+                verified, usertype = result
+            else:
+                verified = result
+                usertype = PinResult.USER_PIN_ENTERED
             print("usertype", usertype)
-            from storage import device
 
             if verified:
                 if usertype == PinResult.PASSPHRASE_PIN_ENTERED:
-                    print("device.set_passphrase_pin_enabled(True)0")
                     device.set_passphrase_pin_enabled(True)
                 elif usertype == PinResult.USER_PIN_ENTERED:
-                    print("device.set_passphrase_pin_enabled(False)0")
                     device.set_passphrase_pin_enabled(False)
-                else:
-                    print(
-                        f"[DEBUG] Unhandled usertype: {usertype}, passphrase PIN status unchanged"
-                    )
 
-        except Exception as e:
+        except Exception:
             raise wire.PinCancelled("cancle")
     else:
         try:
-            verified, usertype = config.check_pin(pin, salt, pin_use_type)
-            print("usertype000", usertype)
+            result = config.check_pin(pin, salt, pin_use_type)
+            if isinstance(result, tuple):
+                verified, usertype = result
+            else:
+                verified = result
+                usertype = PinResult.USER_PIN_ENTERED
             if verified:
                 if usertype == PinResult.PASSPHRASE_PIN_ENTERED:
-                    print("device.set_passphrase_pin_enabled(True)0")
                     device.set_passphrase_pin_enabled(True)
                 elif usertype == PinResult.USER_PIN_ENTERED:
-                    print("device.set_passphrase_pin_enabled(False)0")
                     device.set_passphrase_pin_enabled(False)
-                else:
-                    print(
-                        f"[DEBUG] Unhandled usertype: {usertype}, passphrase PIN status unchanged"
-                    )
-        except Exception as e:
+        except Exception:
             raise wire.PinCancelled("cancle")
 
     if verified:
@@ -223,30 +219,33 @@ async def verify_user_pin(
                 standy_wall_only=standy_wall_only,
                 attach_wall_only=attach_wall_only,
             )
-        except Exception as e:
+        except Exception:
             raise wire.PinCancelled("cancle")
 
         try:
             if not config.is_unlocked():
-                verified, usertype = config.unlock(pin, salt, pin_use_type)
-                print("usertype22:", usertype)
+                result = config.unlock(pin, salt, pin_use_type)
+                if isinstance(result, tuple):
+                    verified, usertype = result
+                else:
+                    verified = result
+                    usertype = PinResult.USER_PIN_ENTERED
             else:
-                verified, usertype = config.check_pin(pin, salt, pin_use_type)
-                print("usertype33:", usertype)
-        except Exception as e:
+                result = config.check_pin(pin, salt, pin_use_type)
+            if isinstance(result, tuple):
+                verified, usertype = result
+            else:
+                verified = result
+                usertype = PinResult.USER_PIN_ENTERED
+        except Exception:
             raise wire.PinCancelled("cal cale ..")
 
         if verified:
             if usertype == PinResult.PASSPHRASE_PIN_ENTERED:
-                print("device.set_passphrase_pin_enabled(True)")
                 device.set_passphrase_pin_enabled(True)
             elif usertype == PinResult.USER_PIN_ENTERED:
-                print("device.set_passphrase_pin_enabled(False)")
                 device.set_passphrase_pin_enabled(False)
-            else:
-                print(
-                    f"[DEBUG] Unhandled usertype: {usertype}, passphrase PIN status unchanged"
-                )
+
             if re_loop:
                 loop.clear()
             elif callback:
@@ -270,13 +269,6 @@ async def verify_user_fingerprint(
         fingerprints.unlock()
         import storage.device as device
 
-        # if storage.device.is_passphrase_enabled():
-        print("zhiwen success")
-        # Ensure fingerprint unlock always sets to standard wallet mode
-        if __debug__:
-            print(
-                f"verify_user_fingerprint: setting passphrase_pin_enabled to False (was: {device.is_passphrase_pin_enabled()})"
-            )
         device.set_passphrase_pin_enabled(False)
         if re_loop:
             loop.clear()

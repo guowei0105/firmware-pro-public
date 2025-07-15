@@ -1,5 +1,6 @@
 from micropython import const
 
+import storage.cache
 import storage.device
 from trezor import wire, workflow
 from trezor.lvglui.i18n import gettext as _, keys as i18n_keys
@@ -21,28 +22,11 @@ def is_passphrase_auto_status() -> bool:
 
 async def get(ctx: wire.Context) -> str:
 
-    if __debug__:
-        print(f"passphrase.get DEBUG: Function called")
-        print(f"passphrase.get DEBUG: is_enabled(): {is_enabled()}")
-    
     if is_enabled():
-        # passphrase_pin_enabled = is_passphrase_pin_enabled()
-        # if __debug__:
-        #     print(f"passphrase.get DEBUG: is_enabled=True, is_passphrase_pin_enabled={passphrase_pin_enabled}")
-        # if passphrase_pin_enabled:
-        #     if __debug__:
-        #         print("passphrase.get DEBUG: passphrase_pin_enabled=True, returning empty string")
-        #     return ""
         if isinstance(ctx, wire.QRContext) and ctx.passphrase is not None:
-            if __debug__:
-                print("passphrase.get DEBUG: QRContext with passphrase, returning ctx.passphrase")
             return ctx.passphrase
-        if __debug__:
-            print("passphrase.get DEBUG: Calling _request_from_user")
         return await _request_from_user(ctx)
     else:
-        if __debug__:
-            print("passphrase.get DEBUG: is_enabled=False, returning empty string")
         return ""
 
 
@@ -55,7 +39,7 @@ async def _request_from_user(ctx: wire.Context) -> str:
 
         from trezor.crypto import se_thd89
 
-        current_space = se_thd89.get_pin_passphrase_space()
+        se_thd89.get_pin_passphrase_space()
 
         passphrase = await request_passphrase_on_device(ctx, _MAX_PASSPHRASE_LEN)
         if isinstance(ctx, wire.QRContext):
@@ -110,7 +94,7 @@ async def _request_on_host(ctx: wire.Context) -> str:
         return await request_passphrase_on_device(ctx, _MAX_PASSPHRASE_LEN)
     if ack.passphrase is None:
         raise wire.DataError(
-            "Passphrase not provided and on_device is False. Use empty string to set an empty passphrase."  # 错误信息：未提供密码短语且on_device为False，使用空字符串设置空密码短语
+            "Passphrase not provided and on_device is False. Use empty string to set an empty passphrase."
         )
     # # non-empty passphrase
     if ack.passphrase:

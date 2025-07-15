@@ -34,10 +34,15 @@ async def change_pin(ctx: wire.Context, msg: ChangePin) -> Success:
         standy_wall_only=True,
     )
     # if changing pin, pre-check the entered pin before getting new pin
-    from apps.common.pin_constants import PinType
+    from apps.common.pin_constants import PinType, PinResult
 
     if curpin and not msg.remove:
-        verified, usertype = config.check_pin(curpin, salt, PinType.USER_CHECK)
+        result = config.check_pin(curpin, salt, PinType.USER_CHECK)
+        if isinstance(result, tuple):
+            verified, usertype = result
+        else:
+            verified = result
+            usertype = PinType.USER_CHECK
         if not verified:
             await error_pin_invalid(ctx)
 
@@ -50,8 +55,13 @@ async def change_pin(ctx: wire.Context, msg: ChangePin) -> Success:
         newpin = ""
 
     if newpin:
-        verified, usertype = config.check_pin(newpin, salt, 3)
-        if usertype == 3:
+        result = config.check_pin(newpin, salt, PinType.PASSPHRASE_PIN)
+        if isinstance(result, tuple):
+            verified, usertype = result
+        else:
+            verified = result
+            usertype = PinResult.PASSPHRASE_PIN_ENTERED
+        if usertype == PinResult.PASSPHRASE_PIN_ENTERED:
             return await error_pin_used(ctx)
 
     # write into storage

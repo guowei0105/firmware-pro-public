@@ -1203,7 +1203,7 @@ async def request_passphrase_on_device(
     from trezor.lvglui.scrs.passphrase import PassphraseRequest
 
     while True:
-        screen = PassphraseRequest(max_len, result, min_len)  # 传入最小长度参数
+        screen = PassphraseRequest(max_len, result, min_len)
         result = await ctx.wait(screen.request())
         if result is None and min_len == 1:
             return None

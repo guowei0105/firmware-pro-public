@@ -1,7 +1,7 @@
-from trezor import config, loop, wire
+from trezor import config, wire
 from trezor.lvglui.i18n import gettext as _, keys as i18n_keys
 from trezor.lvglui.lv_colors import lv_colors
-from trezor.lvglui.scrs import font_GeistRegular30, font_GeistSemiBold64, lv_colors
+from trezor.lvglui.scrs import font_GeistRegular30, font_GeistSemiBold64
 from trezor.lvglui.scrs.common import FullSizeWindow, lv
 from trezor.lvglui.scrs.components.container import ContainerFlexCol
 from trezor.lvglui.scrs.components.listitem import ListItemWithLeadingCheckbox
@@ -10,7 +10,7 @@ from apps.base import lock_device_if_unlocked
 from apps.common.pin_constants import AttachCommon, PinResult, PinType
 
 
-async def show_attach_to_pin_window(ctx: wire.Context):
+async def show_attach_to_pin_window(ctx):
     from trezor.lvglui.scrs.pinscreen import (
         request_passphrase_pin_confirm,
         request_passphrase_pin,
@@ -21,14 +21,13 @@ async def show_attach_to_pin_window(ctx: wire.Context):
         from apps.common.request_pin import (
             error_pin_invalid,
             request_pin_and_sd_salt,
-            request_pin_confirm,
             error_pin_used,
         )
 
         pin_screen_result = await show_pin_input_screen(ctx)
         if not pin_screen_result:
             return False
-        curpin, salt = await request_pin_and_sd_salt(
+        curpin, _salt = await request_pin_and_sd_salt(
             ctx,
             _(i18n_keys.TITLE__ENTER_PIN),
             allow_fingerprint=False,
@@ -36,7 +35,7 @@ async def show_attach_to_pin_window(ctx: wire.Context):
         )
 
         pinstatus, result = config.check_pin(curpin, None, PinType.USER_CHECK)
-        if pinstatus == False:
+        if not pinstatus:
             return await error_pin_invalid(ctx)
 
         passphrase_pin = await request_passphrase_pin_confirm(ctx)
@@ -90,7 +89,7 @@ async def show_attach_to_pin_window(ctx: wire.Context):
                                     ) = se_thd89.delete_pin_passphrase(
                                         passphrase_pin_str
                                     )
-                                    if remove_result == True:
+                                    if remove_result:
                                         await showr_remove_pin_success_window(ctx)
                                         if is_current:
                                             return lock_device_if_unlocked()
@@ -140,7 +139,7 @@ async def show_attach_to_pin_window(ctx: wire.Context):
                         save_result, save_status = se_thd89.save_pin_passphrase(
                             curpin_str, passphrase_pin_str, passphrase_content_str
                         )
-                        if save_result == True:
+                        if save_result:
                             await show_passphrase_set_and_attached_to_pin_window(ctx)
                             return True
                         else:
@@ -199,12 +198,12 @@ async def show_attach_to_pin_window(ctx: wire.Context):
                                     pinstatus, result = config.check_pin(
                                         passphrase_pin_str, None, 2
                                     )
-                                if save_result == True and save_status == False:
+                                if save_result and save_status:
                                     await show_passphrase_set_and_attached_to_pin_window(
                                         ctx
                                     )
                                     return True
-                                if save_result == True and save_status == True:
+                                if save_result and save_status:
                                     await show_passphrase_set_and_attached_to_pin_window(
                                         ctx
                                     )
@@ -221,7 +220,7 @@ async def show_attach_to_pin_window(ctx: wire.Context):
                             remove_result, is_current = se_thd89.delete_pin_passphrase(
                                 passphrase_pin_str
                             )
-                            if remove_result == True:
+                            if remove_result:
                                 await showr_remove_pin_success_window(ctx)
                                 if is_current:
                                     return lock_device_if_unlocked()

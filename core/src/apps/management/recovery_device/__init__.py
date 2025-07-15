@@ -4,7 +4,7 @@ import storage
 import storage.recovery
 from trezor import config, loop, utils, wire
 from trezor.enums import ButtonRequestType
-from trezor.lvglui.i18n import gettext as _, i18n_refresh, keys as i18n_keys
+from trezor.lvglui.i18n import gettext, i18n_refresh, keys as i18n_keys
 from trezor.lvglui.scrs import fingerprints
 from trezor.messages import Success
 from trezor.ui.layouts import confirm_action, confirm_reset_device
@@ -44,7 +44,7 @@ async def recovery_device(
 
         if msg.language is not None:
             i18n_refresh(msg.language)
-        await show_popup(_(i18n_keys.TITLE__PLEASE_WAIT), None, timeout_ms=1000)
+        await show_popup(gettext("Please wait"), None, timeout_ms=1000)
         # wipe storage to make sure the device is in a clear state
         storage.reset()
         if msg.language is not None:
@@ -62,13 +62,17 @@ async def recovery_device(
         if msg.dry_run:
             curpin, salt = await request_pin_and_sd_salt(
                 ctx,
-                _(i18n_keys.TITLE__ENTER_PIN),
+                gettext("Enter PIN"),
                 allow_fingerprint=False,
                 standy_wall_only=True,
             )
             from apps.common.pin_constants import PinType
 
-            verified, usertype = config.check_pin(curpin, salt, PinType.USER_CHECK)
+            result = config.check_pin(curpin, salt, PinType.USER_CHECK)
+            if isinstance(result, tuple):
+                verified, _ = result
+            else:
+                verified = result
             if not verified:
                 await error_pin_invalid(ctx)
         newpin = None
@@ -125,17 +129,19 @@ def _validate(msg: RecoveryDevice) -> None:
 async def _continue_dialog(ctx: wire.Context, msg: RecoveryDevice) -> None:
     if not msg.dry_run:
         await confirm_reset_device(
-            ctx, _(i18n_keys.SUBTITLE__DEVICE_RECOVER_RESTORE_WALLET), recovery=True
+            ctx,
+            gettext(i18n_keys.SUBTITLE__DEVICE_RECOVER_RESTORE_WALLET),
+            recovery=True,
         )
     else:
         await confirm_action(
             ctx,
             "confirm_seedcheck",
-            title=_(i18n_keys.TITLE__CHECK_RECOVERY_PHRASE),
-            description=_(
+            title=gettext(i18n_keys.TITLE__CHECK_RECOVERY_PHRASE),
+            description=gettext(
                 i18n_keys.SUBTITLE__DEVICE_RECOVER_CHECK_CHECK_RECOVERY_PHRASE
             ),
-            verb=_(i18n_keys.BUTTON__CONTINUE),
+            verb=gettext(i18n_keys.BUTTON__CONTINUE),
             icon="A:/res/check-seed.png",
             br_code=ButtonRequestType.ProtectCall,
             anim_dir=2,

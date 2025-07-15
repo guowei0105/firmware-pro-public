@@ -157,15 +157,12 @@ async def handle_fingerprint():
                             print(f"uart unlock result {res}")
 
                         if res:
-                            # 指纹解锁成功，设置为标准钱包模式
                             try:
-                                import storage.device as storage_device
-
                                 if __debug__:
                                     print(
-                                        f"uart fingerprint unlock: setting passphrase_pin_enabled to False (was: {storage_device.is_passphrase_pin_enabled()})"
+                                        f"uart fingerprint unlock: setting passphrase_pin_enabled to False (was: {device.is_passphrase_pin_enabled()})"
                                     )
-                                storage_device.set_passphrase_pin_enabled(False)
+                                device.set_passphrase_pin_enabled(False)
                                 if __debug__:
                                     print(
                                         "fingerprint unlock success: set passphrase_pin_enabled to False"
@@ -178,7 +175,6 @@ async def handle_fingerprint():
                             if __debug__:
                                 print("fingerprint unlock failed, res is False")
 
-                        # 无论成功失败都调用unlock_device，让它处理UI显示
                         await base.unlock_device()
                     # await loop.sleep(2000)
                     return

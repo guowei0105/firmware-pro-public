@@ -1173,7 +1173,6 @@ STATIC const mp_rom_map_elem_t mod_trezorcrypto_se_thd89_globals_table[] = {
     {MP_ROM_QSTR(MP_QSTR_PASSPHRASE_PIN_ENTERED),
      MP_ROM_INT(PASSPHRASE_PIN_ENTERED)},
 
-     
 };
 STATIC MP_DEFINE_CONST_DICT(mod_trezorcrypto_se_thd89_globals,
                             mod_trezorcrypto_se_thd89_globals_table);
