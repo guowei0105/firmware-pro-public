@@ -5,7 +5,7 @@ from trezor import utils, wire
 from trezor.crypto import bip32, hmac
 
 from . import mnemonic
-from .passphrase import get as get_passphrase               
+from .passphrase import get as get_passphrase
 
 if TYPE_CHECKING:
     from .paths import Bip32Path, Slip21Path
@@ -77,6 +77,7 @@ if not utils.BITCOIN_ONLY:
 
             if need_seed:
                 from apps.common import passphrase
+
                 passphrase_pin_enabled = passphrase.is_passphrase_pin_enabled()
                 if not passphrase_pin_enabled:
                     passphrase_str = await get_passphrase(ctx)
@@ -93,6 +94,7 @@ if not utils.BITCOIN_ONLY:
             from trezor.crypto import se_thd89
 
             from apps.common import passphrase
+
             passphrase_str = ""
             state = se_thd89.get_session_state()
             if not state[0] & 0x80:
@@ -105,6 +107,7 @@ if not utils.BITCOIN_ONLY:
                     session_id = storage.cache.start_session()
                     utime.sleep_ms(500)
                 from apps.common import passphrase
+
                 passphrase_pin_enabled = passphrase.is_passphrase_pin_enabled()
                 if not passphrase_pin_enabled:
                     passphrase_str = await get_passphrase(ctx)
@@ -144,10 +147,12 @@ else:
 
             if not state[0] & 0x80:
                 from apps.common import passphrase
+
                 passphrase_pin_enabled = passphrase.is_passphrase_pin_enabled()
                 if not passphrase_pin_enabled:
                     passphrase_str = await get_passphrase(ctx)
-                else: passphrase_str = ""
+                else:
+                    passphrase_str = ""
                 return mnemonic.get_seed(passphrase_str, progress_bar=False)
             else:
                 return b""

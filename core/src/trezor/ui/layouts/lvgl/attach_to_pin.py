@@ -7,7 +7,7 @@ from trezor.lvglui.scrs.components.container import ContainerFlexCol
 from trezor.lvglui.scrs.components.listitem import ListItemWithLeadingCheckbox
 
 from apps.base import lock_device_if_unlocked
-from apps.common.pin_constants import PinResult, PinType,AttachCommon
+from apps.common.pin_constants import AttachCommon, PinResult, PinType
 
 
 async def show_attach_to_pin_window(ctx: wire.Context):
@@ -179,16 +179,18 @@ async def show_attach_to_pin_window(ctx: wire.Context):
                                     if not isinstance(passphrase, str)
                                     else passphrase
                                 )
-                                (
-                                    remove_result,
-                                    is_current,
-                                ) = se_thd89.delete_pin_passphrase(passphrase_pin_str)
+                                # (
+                                #     remove_result,
+                                #     is_current,
+                                # ) = se_thd89.delete_pin_passphrase(passphrase_pin_str)
                                 save_result, save_status = se_thd89.save_pin_passphrase(
                                     curpin_str,
                                     passphrase_pin_str,
                                     passphrase_content_str,
                                 )
-                                if is_current:
+                                print("save_status", save_status)
+                                print("save_result", save_result)
+                                if save_result:
                                     passphrase_pin_str = (
                                         str(passphrase_pin)
                                         if not isinstance(passphrase_pin, str)
@@ -197,12 +199,16 @@ async def show_attach_to_pin_window(ctx: wire.Context):
                                     pinstatus, result = config.check_pin(
                                         passphrase_pin_str, None, 2
                                     )
-
-                                if save_result == True:
+                                if save_result == True and save_status == False:
                                     await show_passphrase_set_and_attached_to_pin_window(
                                         ctx
                                     )
                                     return True
+                                if save_result == True and save_status == True:
+                                    await show_passphrase_set_and_attached_to_pin_window(
+                                        ctx
+                                    )
+                                    return lock_device_if_unlocked()
 
                     elif next_status == 0:
                         remove_status = await show_confirm_remove_pin_window(ctx)

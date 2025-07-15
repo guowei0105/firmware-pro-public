@@ -22,5 +22,6 @@ class PinType:
     PASSPHRASE_PIN_CHECK = 4
     MAX = 5
 
+
 class AttachCommon:
     ATTACH_TO_PIN_MIN_LEN = 6
