@@ -2322,6 +2322,7 @@ class ScanScreen(Screen):
             self.desc.set_text(
                 _(i18n_keys.CONTENT__SCAN_THE_QR_CODE_DISPLAYED_ON_THE_APP)
             )
+            self.desc.clear_flag(lv.obj.FLAG.HIDDEN)
             self.desc.align_to(self.camera_bg, lv.ALIGN.OUT_BOTTOM_MID, 0, 14)
 
         elif state == ScanScreen.SCAN_STATE_SCANNING:
