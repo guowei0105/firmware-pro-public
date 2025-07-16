@@ -816,21 +816,39 @@ message UnlockedPathRequest {
     optional bytes mac = 1;   
 }
 
+/**
+ * Request: Get current passphrase state
+ * @start
+ * @next PassphraseState
+ */
 message GetPassphraseState {
     optional string passphrase_state = 1;
     optional bool _only_main_pin = 2; 
     optional bool allow_create_attach_pin = 3; 
 }
 
+/**
+ * Response: Current passphrase state
+ * @end
+ */
 message PassphraseState {
     optional string passphrase_state  = 1;  
     optional bytes session_id = 2;      
     optional bool unlocked_attach_pin  = 3;                   
 }
 
+/**
+ * Request: Unlock device
+ * @start
+ * @next UnLockDeviceResponse
+ */
 message UnLockDevice {
 }
 
+/**
+ * Response: Device unlock status
+ * @end
+ */
 message UnLockDeviceResponse {
     optional bool unlocked = 1;
     optional bool unlocked_attach_pin = 2;

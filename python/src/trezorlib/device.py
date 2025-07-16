@@ -357,21 +357,6 @@ def set_busy(client: "TrezorClient", expiry_ms: Optional[int]) -> "MessageType":
 
 
 
-@expect(messages.PassphraseState)
-def get_passphrasestate(client: "TrezorClient", btc_test: Optional[bytes] = None, only_main_pin: bool = False, session_id: Optional[str] = None) -> "MessageType":
-
-
-    session_id_bytes = bytes.fromhex(session_id) if session_id else None
-
-
-    msg = messages.GetPassphraseState(
-        btc_test=btc_test, 
-        onlyMainPin=only_main_pin,
-        session_id=session_id_bytes
-    )
-    return client.call(msg)
-
-
 
 
 # new feautres

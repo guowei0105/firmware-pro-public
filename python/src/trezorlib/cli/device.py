@@ -203,24 +203,6 @@ def recover(
 
 
 
-@cli.command()
-@click.option("-t", "--btc-test", help="Bitcoin test address", type=str)
-@click.option("-m", "--only-main-pin", is_flag=True, help="Only verify main PIN, not passphrase PIN")
-@click.option("-s", "--session-id", help="Session ID for the request", type=str)
-@with_client
-def get_passphrase_state(client: "TrezorClient", btc_test: Optional[str], only_main_pin: bool = False, session_id: Optional[str] = None) -> None:
-    """Get current passphrase state of the device.
-    Shows whether passphrase protection is enabled and returns the current passphrase address.
-    
-    If --only-main-pin is specified, only the main PIN will be verified, not the passphrase PIN.
-    Session ID can be provided to identify the session.
-    """
-    print(f"BTC test address: {btc_test}")
-    print(f"Only verify main PIN: {only_main_pin}")
-    print(f"Session ID: {session_id}")
-
-    return device.get_passphrasestate(client, btc_test=btc_test, only_main_pin=only_main_pin, session_id=session_id)
-
 
 
 
