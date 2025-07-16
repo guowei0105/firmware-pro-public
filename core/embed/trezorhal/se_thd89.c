@@ -1995,6 +1995,9 @@ secbool se_gen_session_seed(const char *passphrase, bool cardano) {
       }
       hal_delay(100);
     }
+    if (ui_callback) {
+      ui_callback(0, 100 * 10, NULL);
+    }
   } else {
     if (status & 0x80) {
       return sectrue;
@@ -2010,6 +2013,10 @@ secbool se_gen_session_seed(const char *passphrase, bool cardano) {
         return secfalse;
       }
       hal_delay(100);
+    }
+
+    if (ui_callback) {
+      ui_callback(0, 100 * 10, NULL);
     }
   }
 
