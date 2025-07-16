@@ -783,7 +783,7 @@ def is_initialized() -> bool:
     else:
         if _INITIALIZED_VALUE is None:
             _INITIALIZED_VALUE = config.is_initialized()
-        return _INITIALIZED_VALUE
+        return _INITIALIZED_VALUE or False
 
 
 def _new_device_id() -> str:
@@ -979,7 +979,7 @@ def needs_backup() -> bool:
     global _NEEDS_BACKUP_VALUE
     if _NEEDS_BACKUP_VALUE is None:
         _NEEDS_BACKUP_VALUE = config.get_needs_backup()
-    return _NEEDS_BACKUP_VALUE
+    return _NEEDS_BACKUP_VALUE or False
 
 
 def set_backed_up(stat: bool) -> None:
