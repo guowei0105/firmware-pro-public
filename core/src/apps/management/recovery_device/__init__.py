@@ -44,7 +44,7 @@ async def recovery_device(
 
         if msg.language is not None:
             i18n_refresh(msg.language)
-        await show_popup(gettext("Please wait"), None, timeout_ms=1000)
+        await show_popup(gettext(i18n_keys.TITLE__PLEASE_WAIT), None, timeout_ms=1000)
         # wipe storage to make sure the device is in a clear state
         storage.reset()
         if msg.language is not None:
@@ -62,7 +62,7 @@ async def recovery_device(
         if msg.dry_run:
             curpin, salt = await request_pin_and_sd_salt(
                 ctx,
-                gettext("Enter PIN"),
+                gettext(i18n_keys.TITLE__ENTER_PIN),
                 allow_fingerprint=False,
                 standy_wall_only=True,
             )

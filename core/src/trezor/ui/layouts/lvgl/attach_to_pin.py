@@ -9,6 +9,11 @@ from trezor.lvglui.scrs.components.listitem import ListItemWithLeadingCheckbox
 from apps.base import lock_device_if_unlocked
 from apps.common.pin_constants import AttachCommon, PinResult, PinType
 
+# UI Constants
+USER_CANCELLED = 0
+USER_CONFIRMED = 1
+MAX_PASSPHRASE_LENGTH = 50
+
 
 async def show_attach_to_pin_window(ctx):
     from trezor.lvglui.scrs.pinscreen import (
@@ -39,7 +44,7 @@ async def show_attach_to_pin_window(ctx):
             return await error_pin_invalid(ctx)
 
         passphrase_pin = await request_passphrase_pin_confirm(ctx)
-        if passphrase_pin == 0:
+        if passphrase_pin == USER_CANCELLED:
             return False
         if curpin == passphrase_pin:
             return await error_pin_used(ctx)
@@ -57,12 +62,12 @@ async def show_attach_to_pin_window(ctx):
                 current_space = se_thd89.get_pin_passphrase_space()
                 if current_space < 1:
                     result = await show_hit_the_limit_window(ctx)
-                    if result == 1:
+                    if result == USER_CONFIRMED:
                         while True:
                             passphrase_pin = await request_passphrase_pin(
                                 ctx, _(i18n_keys.TITLE__ENTER_HIDDEN_WALLET_PIN)
                             )
-                            if passphrase_pin == 0:
+                            if passphrase_pin == USER_CANCELLED:
                                 return
                             passphrase_pin_str = (
                                 str(passphrase_pin)
@@ -73,11 +78,14 @@ async def show_attach_to_pin_window(ctx):
                                 passphrase_pin_str, None, PinType.PASSPHRASE_PIN_CHECK
                             )
 
-                            if passphrase_pin_str != curpin and result == 3:
+                            if (
+                                passphrase_pin_str != curpin
+                                and result == PinResult.PASSPHRASE_PIN_ENTERED
+                            ):
                                 remove_status = await show_confirm_remove_pin_window(
                                     ctx
                                 )
-                                if remove_status == 1:
+                                if remove_status == USER_CONFIRMED:
                                     passphrase_pin_str = (
                                         str(passphrase_pin)
                                         if not isinstance(passphrase_pin, str)
@@ -97,30 +105,32 @@ async def show_attach_to_pin_window(ctx):
                                     else:
                                         return False
 
-                                elif remove_status == 0:
+                                elif remove_status == USER_CANCELLED:
                                     return
                             else:
                                 try_again = await error_passphrase_pin_invalid(ctx)
-                                if try_again == 1:
+                                if try_again == USER_CONFIRMED:
                                     continue
                                 else:
                                     return
                     else:
                         return
                 result = await show_not_attached_window(ctx)
-                if result == 0:
+                if result == USER_CANCELLED:
                     return False
                 while True:
                     result = await show_attach_one_passphrase(ctx)
-                    if result == 0:
+                    if result == USER_CANCELLED:
                         return False
 
                     from trezor.ui.layouts import request_passphrase_on_device
 
-                    passphrase = await request_passphrase_on_device(ctx, 50, min_len=1)
+                    passphrase = await request_passphrase_on_device(
+                        ctx, MAX_PASSPHRASE_LENGTH, min_len=1
+                    )
                     if passphrase is None:
                         continue
-                    if passphrase != 0:
+                    if passphrase != USER_CANCELLED:
                         await show_save_your_passphrase_window(ctx)
                         curpin_str = (
                             str(curpin) if not isinstance(curpin, str) else curpin
@@ -149,19 +159,19 @@ async def show_attach_to_pin_window(ctx):
                     await show_pin_already_used_window(ctx)
                 else:
                     next_status = await show_has_attached_window(ctx)
-                    if next_status == 1:
+                    if next_status == USER_CONFIRMED:
                         while True:
                             passphrase_result = await show_attach_one_passphrase(ctx)
-                            if passphrase_result == 0:
+                            if passphrase_result == USER_CANCELLED:
                                 return False
                             from trezor.ui.layouts import request_passphrase_on_device
 
                             passphrase = await request_passphrase_on_device(
-                                ctx, 50, min_len=1
+                                ctx, MAX_PASSPHRASE_LENGTH, min_len=1
                             )
                             if passphrase is None:
                                 continue
-                            if passphrase != 0:
+                            if passphrase != USER_CANCELLED:
                                 await show_save_your_passphrase_window(ctx)
                                 curpin_str = (
                                     str(curpin)
@@ -178,40 +188,43 @@ async def show_attach_to_pin_window(ctx):
                                     if not isinstance(passphrase, str)
                                     else passphrase
                                 )
-                                # (
-                                #     remove_result,
-                                #     is_current,
-                                # ) = se_thd89.delete_pin_passphrase(passphrase_pin_str)
                                 save_result, save_status = se_thd89.save_pin_passphrase(
                                     curpin_str,
                                     passphrase_pin_str,
                                     passphrase_content_str,
                                 )
-                                print("save_status", save_status)
-                                print("save_result", save_result)
-                                if save_result:
-                                    passphrase_pin_str = (
-                                        str(passphrase_pin)
-                                        if not isinstance(passphrase_pin, str)
-                                        else passphrase_pin
-                                    )
-                                    pinstatus, result = config.check_pin(
-                                        passphrase_pin_str, None, 2
-                                    )
-                                if save_result and save_status:
-                                    await show_passphrase_set_and_attached_to_pin_window(
-                                        ctx
-                                    )
-                                    return True
-                                if save_result and save_status:
-                                    await show_passphrase_set_and_attached_to_pin_window(
-                                        ctx
-                                    )
-                                    return lock_device_if_unlocked()
 
-                    elif next_status == 0:
+                                # Only proceed if save was successful
+                                if not save_result:
+                                    return False
+
+                                # Convert passphrase pin to string if needed
+                                passphrase_pin_str = (
+                                    str(passphrase_pin)
+                                    if not isinstance(passphrase_pin, str)
+                                    else passphrase_pin
+                                )
+
+                                # Verify the pin
+                                pinstatus, result = config.check_pin(
+                                    passphrase_pin_str,
+                                    None,
+                                    PinType.USER_AND_PASSPHRASE_PIN,
+                                )
+
+                                # Show success message
+                                await show_passphrase_set_and_attached_to_pin_window(
+                                    ctx
+                                )
+
+                                # Lock device if needed based on save status
+                                if save_status:
+                                    return lock_device_if_unlocked()
+                                return True
+
+                    elif next_status == USER_CANCELLED:
                         remove_status = await show_confirm_remove_pin_window(ctx)
-                        if remove_status == 1:
+                        if remove_status == USER_CONFIRMED:
                             passphrase_pin_str = (
                                 str(passphrase_pin)
                                 if not isinstance(passphrase_pin, str)
@@ -227,7 +240,7 @@ async def show_attach_to_pin_window(ctx):
                                 return True
                             else:
                                 return False
-                        elif remove_status == 0:
+                        elif remove_status == USER_CANCELLED:
                             print("User cancelled removal")
                     else:
                         return False
@@ -304,7 +317,7 @@ async def show_not_attached_window(ctx: wire.Context):
         if e.code == lv.EVENT.CLICKED and not processing:
             processing = True
             screen.show_dismiss_anim()
-            screen.channel.publish(0)
+            screen.channel.publish(USER_CANCELLED)
 
     close_btn.add_event_cb(on_close_clicked, lv.EVENT.CLICKED, None)
 
