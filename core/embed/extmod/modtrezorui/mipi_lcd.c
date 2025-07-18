@@ -7,9 +7,19 @@
 #include "mipi_lcd.h"
 #include "sdram.h"
 #include "jpeg_dma.h"
+#include "systick.h"
 
 // 第二层layer的内存基地址（使用LTDC buffer的最后四分之一，避免与正常显示缓冲区冲突）
 #define LAYER2_MEMORY_BASE (FMC_SDRAM_LTDC_BUFFER_ADDRESS + (FMC_SDRAM_LTDC_BUFFER_LEN * 3 / 4))
+
+// 透明状态栏配置 - Layer2顶部44px保持透明，露出Layer1状态栏
+#define TRANSPARENT_STATUSBAR_HEIGHT 44
+
+// 透明颜色键值 - 用于Color Keying实现透明效果
+#define TRANSPARENT_COLOR_KEY 0x0001  // 特殊颜色值，将被设置为透明
+
+// Layer1背景图片路径存储
+static char g_layer1_background_path[256] = "A:/res/2222.png";  // 默认背景
 
 // 全局变量跟踪第二层layer是否已初始化
 static bool g_layer2_initialized = false;
@@ -259,16 +269,43 @@ static HAL_StatusTypeDef ltdc_layer_config(LTDC_HandleTypeDef* hltdc,
     pLayerCfg.BlendingFactor2 = LTDC_BLENDING_FACTOR2_PAxCA;
     // printf("Configuring first layer - opaque mode\n");
   } else {
-    // 第二层：上层，支持Layer Alpha透明混合，确保在第一层之上显示
-    // Alpha值将在运行时动态设置
-    pLayerCfg.Alpha = 255;  // 默认值，稍后会被动态修改
+    // 第二层：上层，支持Color Keying透明混合，前44px透明显示Layer1状态栏
+    pLayerCfg.Alpha = 255;  // 完全不透明
     pLayerCfg.Alpha0 = 0;
     pLayerCfg.BlendingFactor1 = LTDC_BLENDING_FACTOR1_PAxCA;
     pLayerCfg.BlendingFactor2 = LTDC_BLENDING_FACTOR2_PAxCA;
-    // printf("Configuring second layer - Layer Alpha blending mode (RGB565)\n");
+    
+    printf("Configuring Layer2 with Color Keying support\n");
   }
   
-  return HAL_LTDC_ConfigLayer(hltdc, &pLayerCfg, layer_index);
+  HAL_StatusTypeDef result = HAL_LTDC_ConfigLayer(hltdc, &pLayerCfg, layer_index);
+  
+  // 为Layer2配置Color Keying - 让TRANSPARENT_COLOR_KEY颜色透明
+  if (layer_index == 1 && result == HAL_OK) {
+    // 将RGB565颜色键分解为RGB888分量
+    uint16_t color_key = TRANSPARENT_COLOR_KEY;
+    uint32_t red = ((color_key >> 11) & 0x1F) << 3;     // R5 -> R8
+    uint32_t green = ((color_key >> 5) & 0x3F) << 2;    // G6 -> G8
+    uint32_t blue = (color_key & 0x1F) << 3;            // B5 -> B8
+    
+    uint32_t rgb888_key = (red << 16) | (green << 8) | blue;
+    
+    printf("Enabling Color Keying for Layer2: 0x%04x -> 0x%06lx (R:%lu G:%lu B:%lu)\n", 
+           color_key, rgb888_key, red, green, blue);
+    
+    // 启用Color Keying
+    if (HAL_LTDC_ConfigColorKeying(hltdc, rgb888_key, layer_index) == HAL_OK) {
+      if (HAL_LTDC_EnableColorKeying(hltdc, layer_index) == HAL_OK) {
+        printf("Color Keying enabled successfully for Layer2\n");
+      } else {
+        printf("Failed to enable Color Keying for Layer2\n");
+      }
+    } else {
+      printf("Failed to configure Color Keying for Layer2\n");
+    }
+  }
+  
+  return result;
 }
 
 static HAL_StatusTypeDef dsi_host_init(DSI_HandleTypeDef* hdsi) {
@@ -837,6 +874,12 @@ void lcd_set_src_addr(uint32_t addr) {
   }
   
   g_current_display_addr = addr;
+  
+  // 当Layer2显示时，更新Layer1背景以匹配Layer2，确保状态栏区域背景一致
+  // 只有在非动画期间且Layer2可见时才更新，避免性能影响
+  if (!g_animation_in_progress && lcd_cover_background_is_visible() && animation_counter % 4 == 0) {
+    lcd_cover_background_update_layer1_from_layer2();
+  }
 }
 
 uint32_t lcd_get_src_addr(void) { return g_current_display_addr; }
@@ -849,12 +892,15 @@ void lcd_add_second_layer(void) {
   }
   
   // 配置第二层layer (layer 1) - 专门用于CoverBackground
+  // Layer2覆盖整个屏幕，但顶部44px保持透明，让Layer1状态栏透过
+  printf("Configuring Layer2 covering full screen with transparent statusbar (height=%d)\n", TRANSPARENT_STATUSBAR_HEIGHT);
   LTDC_LAYERCONFIG config;
   config.x0 = 0;
   config.x1 = lcd_params.hres;
-  config.y0 = 0;
+  config.y0 = 0;  // 从0开始显示，覆盖整个屏幕
   config.y1 = lcd_params.vres;
   config.pixel_format = lcd_params.pixel_format_ltdc;
+  // Layer2内存从第一行开始，前44行保持透明，壁纸内容从第一行开始与Layer1重合
   config.address = LAYER2_MEMORY_BASE;
   
   if (ltdc_layer_config(&hlcd_ltdc, 1, &config) != HAL_OK) {
@@ -874,14 +920,18 @@ void lcd_add_second_layer(void) {
   HAL_LTDC_SetAlpha(&hlcd_ltdc, 255, 1);  // Layer 1 完全不透明
   __HAL_LTDC_LAYER_ENABLE(&hlcd_ltdc, 1);
   
-  // 将layer初始化到屏幕上方位置
+  // 将layer初始化到屏幕上方位置（考虑透明状态栏）
+  // 标记为已初始化后再移动
+  g_layer2_initialized = true;
+  
+  // 初始化动画系统
+  lcd_animation_init();
+  
+  // 现在可以安全地移动layer
   lcd_cover_background_move_to_y(-800);
   
   // 使用VSync重载避免干扰正常显示
   __HAL_LTDC_RELOAD_CONFIG(&hlcd_ltdc);
-  
-  // Mark as initialized
-  g_layer2_initialized = true;
 }
 
 // Clear second layer memory
@@ -905,7 +955,7 @@ static struct {
   uint8_t opacity;     // 0-255
   int32_t y_offset;    // Y轴偏移，-60为隐藏位置，0为显示位置
   bool is_animating;
-} cover_bg_state = {false, 0, -800, false};  // 初始状态：隐藏，透明，位置在屏幕上方
+} cover_bg_state = {false, 0, -800, false};  // 初始状态：隐藏，透明，位置在屏幕上方（考虑透明状态栏）
 
 // 初始化 CoverBackground 内容
 void lcd_cover_background_init(void) {
@@ -922,18 +972,111 @@ void lcd_cover_background_init(void) {
     layer2_buffer[i] = 0x0000;  // 清除为黑色
   }
   
-  // 使用DMA2D安全地复制当前显示内容（如果存在）
-  if (g_current_display_addr != 0 && g_current_display_addr != FMC_SDRAM_LTDC_BUFFER_ADDRESS) {
-    printf("CoverBackground: Using DMA2D to copy display content safely\n");
+  // 复制Layer1当前显示内容到Layer2，确保背景一致
+  printf("CoverBackground: Copying Layer1 background to Layer2 for consistency\n");
+  
+  // 使用DMA2D安全地复制当前Layer1显示内容
+  if (g_current_display_addr != 0) {
+    printf("CoverBackground: Using DMA2D to copy Layer1 background (addr=0x%08lx)\n", g_current_display_addr);
     
-    // 使用DMA2D复制，确保内存访问安全
+    // 使用DMA2D复制整个Layer1内容到Layer2，确保背景一致
     dma2d_copy_buffer((uint32_t*)g_current_display_addr, 
                       (uint32_t*)LAYER2_MEMORY_BASE,
                       0, 0, lcd_params.hres, lcd_params.vres);
     
-    printf("CoverBackground: DMA2D copy completed\n");
+    printf("CoverBackground: Layer1 background copied to Layer2 successfully\n");
   } else {
-    printf("CoverBackground: Using default black background\n");
+    // 如果没有Layer1内容，使用默认Layer1帧缓冲区
+    printf("CoverBackground: Using default Layer1 framebuffer for background consistency\n");
+    dma2d_copy_buffer((uint32_t*)FMC_SDRAM_LTDC_BUFFER_ADDRESS, 
+                      (uint32_t*)LAYER2_MEMORY_BASE,
+                      0, 0, lcd_params.hres, lcd_params.vres);
+  }
+}
+
+// 设置Layer1背景图片路径
+void lcd_cover_background_set_layer1_path(const char* path) {
+  if (path && strlen(path) < sizeof(g_layer1_background_path)) {
+    strncpy(g_layer1_background_path, path, sizeof(g_layer1_background_path) - 1);
+    g_layer1_background_path[sizeof(g_layer1_background_path) - 1] = '\0';
+    printf("CoverBackground: Layer1 background path set to: %s\n", g_layer1_background_path);
+  }
+}
+
+// 更新Layer1背景以匹配Layer2 - 确保状态栏区域背景一致
+void lcd_cover_background_update_layer1_from_layer2(void) {
+  if (!g_layer2_initialized) {
+    return;
+  }
+  
+  printf("CoverBackground: Updating Layer1 background to match Layer2\n");
+  
+  // 使用当前Layer1显示地址
+  uint32_t layer1_addr = g_current_display_addr ? g_current_display_addr : FMC_SDRAM_LTDC_BUFFER_ADDRESS;
+  
+  // 方案1：直接复制Layer2的状态栏区域到Layer1
+  // 这样可以确保状态栏区域背景完全一致
+  dma2d_copy_buffer((uint32_t*)LAYER2_MEMORY_BASE, 
+                    (uint32_t*)layer1_addr,
+                    0, 0, lcd_params.hres, TRANSPARENT_STATUSBAR_HEIGHT);
+  
+  printf("CoverBackground: Layer1 statusbar background updated to match Layer2 (addr=0x%08lx)\n", layer1_addr);
+  
+  // 方案2：如果需要更完整的背景一致性，可以加载相同的背景图片到Layer1
+  // 这里可以调用JPEG解码器将g_layer1_background_path指定的图片加载到Layer1
+  // 但这会覆盖Layer1的UI元素，所以暂时只使用方案1
+}
+
+// 将相同的背景图片加载到Layer1 - 确保完整的背景一致性
+void lcd_cover_background_sync_layer1_background(void) {
+  if (!g_layer2_initialized) {
+    return;
+  }
+  
+  printf("CoverBackground: Synchronizing Layer1 background with Layer2\n");
+  
+  // 使用当前Layer1显示地址
+  uint32_t layer1_addr = g_current_display_addr ? g_current_display_addr : FMC_SDRAM_LTDC_BUFFER_ADDRESS;
+  
+  // 使用JPEG解码器加载相同的背景图片到Layer1
+  if (strlen(g_layer1_background_path) > 0) {
+    printf("CoverBackground: Loading background image to Layer1: %s\n", g_layer1_background_path);
+    
+    // 使用专用的JPEG输出缓冲区
+    uint32_t jpeg_output_address = FMC_SDRAM_JPEG_OUTPUT_DATA_BUFFER_ADDRESS;
+    
+    // 初始化JPEG解码器
+    jpeg_init();
+    
+    // 解码JPEG文件到临时缓冲区
+    int decode_result = jped_decode(g_layer1_background_path, jpeg_output_address);
+    
+    if (decode_result == 0) {
+      // 获取解码后的图片信息
+      uint32_t width, height, subsampling;
+      jpeg_decode_info(&width, &height, &subsampling);
+      
+      printf("CoverBackground: JPEG decoded for Layer1: %lux%lu, subsampling: %lu\n", width, height, subsampling);
+      
+      // 计算需要复制的像素数量
+      uint32_t copy_width = (width > lcd_params.hres) ? lcd_params.hres : width;
+      uint32_t copy_height = (height > lcd_params.vres) ? lcd_params.vres : height;
+      
+      // 使用DMA2D复制解码后的图片到Layer1
+      if (subsampling == JPEG_420_SUBSAMPLING || subsampling == JPEG_422_SUBSAMPLING || subsampling == JPEG_444_SUBSAMPLING) {
+        dma2d_copy_ycbcr_to_rgb((uint32_t*)jpeg_output_address, 
+                                (uint32_t*)layer1_addr,
+                                copy_width, copy_height, subsampling);
+      } else {
+        dma2d_copy_buffer((uint32_t*)jpeg_output_address, 
+                          (uint32_t*)layer1_addr,
+                          0, 0, copy_width, copy_height);
+      }
+      
+      printf("CoverBackground: Layer1 background synchronized successfully\n");
+    } else {
+      printf("CoverBackground: Failed to decode background image for Layer1: %s, error: %d\n", g_layer1_background_path, decode_result);
+    }
   }
 }
 
@@ -945,14 +1088,28 @@ void lcd_cover_background_show(void) {
   
   cover_bg_state.visible = true;
   cover_bg_state.opacity = 255;  // 完全不透明
-  cover_bg_state.y_offset = 0;
+  cover_bg_state.y_offset = 0;  // 显示时的正常位置
   
   // Layer1始终保持不透明
   hlcd_ltdc.Instance = LTDC;
   HAL_LTDC_SetAlpha(&hlcd_ltdc, 255, 1);  // 始终不透明
   
-  // 移动layer到正确位置
+  // 确保Layer2的Color Keying功能启用，实现前44px透明
+  printf("CoverBackground: Ensuring Color Keying is enabled for transparent statusbar\n");
+  uint16_t color_key = TRANSPARENT_COLOR_KEY;
+  uint32_t red = ((color_key >> 11) & 0x1F) << 3;     // R5 -> R8
+  uint32_t green = ((color_key >> 5) & 0x3F) << 2;    // G6 -> G8
+  uint32_t blue = (color_key & 0x1F) << 3;            // B5 -> B8
+  uint32_t rgb888_key = (red << 16) | (green << 8) | blue;
+  
+  HAL_LTDC_ConfigColorKeying(&hlcd_ltdc, rgb888_key, 1);
+  HAL_LTDC_EnableColorKeying(&hlcd_ltdc, 1);
+  
+  // 移动layer到正确位置（显示时的正常位置）
   lcd_cover_background_move_to_y(0);
+  
+  // 显示Layer2时，立即更新Layer1背景以匹配Layer2，确保状态栏区域背景一致
+  lcd_cover_background_update_layer1_from_layer2();
   
   __HAL_LTDC_RELOAD_IMMEDIATE_CONFIG(&hlcd_ltdc);
 }
@@ -970,6 +1127,10 @@ void lcd_cover_background_hide(void) {
   // Layer1保持不透明，只通过位置隐藏
   hlcd_ltdc.Instance = LTDC;
   HAL_LTDC_SetAlpha(&hlcd_ltdc, 255, 1);  // 保持不透明
+  
+  // 禁用Layer2的Color Keying功能
+  printf("CoverBackground: Disabling Color Keying for Layer2\n");
+  HAL_LTDC_DisableColorKeying(&hlcd_ltdc, 1);
   
   // 移动layer到隐藏位置
   lcd_cover_background_move_to_y(-800);
@@ -1065,8 +1226,8 @@ void lcd_cover_background_load_jpeg(const char* jpeg_path) {
     layer2_buffer[i] = 0x0000; // Clear to black
   }
   
-  // 使用DMA2D安全复制解码后的JPEG数据
-  printf("Using DMA2D to copy JPEG data: %lux%lu -> layer2 buffer...\n", copy_width, copy_height);
+  // 使用DMA2D复制解码后的JPEG数据到Layer2，从第1行开始与Layer1重合
+  printf("Using DMA2D to copy JPEG data: %lux%lu -> layer2 starting from Y=0 (to align with Layer1)...\n", copy_width, copy_height);
   
   // 检查解码后的数据格式，确保是RGB565
   if (subsampling == JPEG_420_SUBSAMPLING || subsampling == JPEG_422_SUBSAMPLING || subsampling == JPEG_444_SUBSAMPLING) {
@@ -1083,7 +1244,22 @@ void lcd_cover_background_load_jpeg(const char* jpeg_path) {
                       0, 0, copy_width, copy_height);
   }
   
+  // 设置前44行为透明颜色键，确保状态栏区域可以看到Layer1
+  printf("Setting transparent statusbar area (first %d lines) with color key 0x%04x...\n", 
+         TRANSPARENT_STATUSBAR_HEIGHT, TRANSPARENT_COLOR_KEY);
+  for (uint32_t y = 0; y < TRANSPARENT_STATUSBAR_HEIGHT; y++) {
+    for (uint32_t x = 0; x < lcd_params.hres; x++) {
+      layer2_buffer[y * lcd_params.hres + x] = TRANSPARENT_COLOR_KEY;  // 设置为透明颜色键
+    }
+  }
+  
   printf("DMA2D JPEG copy completed\n");
+  
+  // 加载JPEG后，如果Layer2可见，更新Layer1背景以匹配Layer2
+  if (lcd_cover_background_is_visible()) {
+    printf("CoverBackground: Updating Layer1 background after JPEG load\n");
+    lcd_cover_background_update_layer1_from_layer2();
+  }
   
   printf("JPEG wallpaper loaded to CoverBackground layer: %s (%lux%lu -> %lux%lu)\n", 
          jpeg_path, width, height, copy_width, copy_height);
@@ -1092,36 +1268,40 @@ void lcd_cover_background_load_jpeg(const char* jpeg_path) {
 // 硬件移动 CoverBackground - 直接控制LTDC层位置
 void lcd_cover_background_move_to_y(int16_t y_position) {
   if (!g_layer2_initialized) {
+    printf("ERROR: Layer2 not initialized for movement\n");
     return;
   }
   
   // 更新状态
   cover_bg_state.y_offset = y_position;
   
-  // 计算实际的窗口位置 - 确保Layer1不会完全遮挡Layer0
+  // 计算实际的窗口位置
+  // Layer2覆盖整个屏幕，前44px透明，移动时整体向上移动
   uint32_t window_x0 = 0;
-  uint32_t window_y0 = (y_position >= 0) ? y_position : 0;
+  uint32_t window_y0 = y_position;
   uint32_t window_x1 = lcd_params.hres;
-  uint32_t window_y1 = (y_position >= 0) ? (y_position + lcd_params.vres) : lcd_params.vres;
+  uint32_t window_y1 = lcd_params.vres + y_position;
   
-  // 如果向上移动超出屏幕，调整窗口大小或完全禁用
-  if (y_position < 0) {
-    window_y0 = 0;
-    window_y1 = lcd_params.vres + y_position;
-    if (window_y1 <= 0) {
-      // Layer1完全移出屏幕，禁用Layer1确保Layer0正常显示
-      __HAL_LTDC_LAYER_DISABLE(&hlcd_ltdc, 1);
-      // 立即重载确保Layer1快速消失，避免闪动
-      __HAL_LTDC_RELOAD_IMMEDIATE_CONFIG(&hlcd_ltdc);
-      return; // 禁用后直接返回，不需要重新配置窗口
-    } else if (window_y1 < 10) {
-      // 接近边界时增加缓冲，避免频繁启用/禁用导致的闪动
-      window_y1 = 10;
-    }
+  // 处理边界情况
+  if (window_y1 <= 0) {
+    // Layer2完全移出屏幕上方，禁用Layer2确保Layer1正常显示
+    printf("Layer2 moved out of screen, disable Layer2 (Y=%d)\n", y_position);
+    __HAL_LTDC_LAYER_DISABLE(&hlcd_ltdc, 1);
+    __HAL_LTDC_RELOAD_IMMEDIATE_CONFIG(&hlcd_ltdc);
+    return;
   }
   
-  // printf("Moving CoverBackground to Y=%d (window: %lu,%lu-%lu,%lu)\n", 
-  //        y_position, window_x0, window_y0, window_x1, window_y1);
+  // 确保窗口不超出屏幕范围
+  if ((int32_t)window_y0 < 0) window_y0 = 0;
+  if (window_y1 > lcd_params.vres) window_y1 = lcd_params.vres;
+  
+  // 每隔一定帧数输出调试信息，避免日志过多
+  static uint32_t move_counter = 0;
+  move_counter++;
+  if (move_counter % 50 == 0 || !g_animation_in_progress) {
+    printf("Move Layer2 to Y=%d (window: %lu,%lu-%lu,%lu)\n", 
+           y_position, window_x0, window_y0, window_x1, window_y1);
+  }
   
   // 确保Layer1启用（可能之前被禁用）
   __HAL_LTDC_LAYER_ENABLE(&hlcd_ltdc, 1);
@@ -1135,12 +1315,19 @@ void lcd_cover_background_move_to_y(int16_t y_position) {
   config.pixel_format = lcd_params.pixel_format_ltdc;
   config.address = LAYER2_MEMORY_BASE;
   
-  // 如果向上移动，需要调整内存地址偏移
-  if (y_position < 0) {
-    // 计算需要跳过的行数和字节偏移
+  // 计算内存地址偏移
+  uint32_t bytes_per_line = lcd_params.hres * lcd_params.bbp;
+  
+  if (y_position < 0 && window_y0 == 0) {
+    // 向上移动时，窗口从屏幕顶部开始，需要跳过被裁剪的行
     uint32_t skip_lines = -y_position;
-    uint32_t bytes_per_line = lcd_params.hres * lcd_params.bbp;
     config.address = LAYER2_MEMORY_BASE + (skip_lines * bytes_per_line);
+    if (move_counter % 50 == 0) {
+      printf("Move up, skip %lu lines, memory address offset=0x%08lx\n", skip_lines, config.address);
+    }
+  } else {
+    // 正常情况，Layer2从第一行开始，前44行保持透明
+    config.address = LAYER2_MEMORY_BASE;
   }
   
   if (ltdc_layer_config(&hlcd_ltdc, 1, &config) == HAL_OK) {
@@ -1150,8 +1337,14 @@ void lcd_cover_background_move_to_y(int16_t y_position) {
     } else {
       __HAL_LTDC_RELOAD_CONFIG(&hlcd_ltdc);
     }
-    // printf("Hardware layer movement completed successfully\n");
-  } 
+    
+    if (move_counter % 50 == 0 || !g_animation_in_progress) {
+      printf("Hardware layer movement configured, reload type=%s\n", 
+             g_animation_in_progress ? "immediate" : "vsync");
+    }
+  } else {
+    printf("ERROR: Layer2 configuration failed (Y=%d)\n", y_position);
+  }
 }
 
 // 检查动画是否正在进行
@@ -1159,47 +1352,211 @@ bool lcd_cover_background_is_animating(void) {
   return g_animation_in_progress;
 }
 
-// 平滑移动 CoverBackground - 创建动画效果
-void lcd_cover_background_animate_to_y(int16_t target_y, uint16_t duration_ms) {
+// 全局动画状态结构
+typedef struct {
+  bool active;
+  int16_t start_y;
+  int16_t target_y;
+  uint32_t start_time;
+  uint32_t duration_ms;
+  uint32_t last_update_time;
+  uint32_t frame_count;
+} animation_state_t;
+
+static animation_state_t g_animation_state = {0};
+
+// Systick回调函数 - 在系统滴答中更新动画
+static void animation_systick_callback(uint32_t tick) {
+  // 每毫秒调用一次，更新动画状态
+  // 添加基本的保护检查
+  if (g_layer2_initialized && g_animation_state.active) {
+    // 添加调试信息来确认回调被调用
+    static uint32_t callback_counter = 0;
+    callback_counter++;
+    
+    // 每100次调用输出一次调试信息
+    if (callback_counter % 100 == 0) {
+      printf("Animation systick callback: tick=%lu, counter=%lu, active=%d\n", 
+             tick, callback_counter, g_animation_state.active);
+    }
+    
+    lcd_cover_background_update_animation();
+  }
+}
+
+// 初始化动画系统
+void lcd_animation_init(void) {
+  // 注册systick回调用于动画更新
+  systick_enable_dispatch(SYSTICK_DISPATCH_ANIMATION_UPDATE, animation_systick_callback);
+  printf("Animation system initialized with systick callback\n");
+}
+
+// 启动动画
+void lcd_cover_background_start_animation(int16_t target_y, uint16_t duration_ms) {
   if (!g_layer2_initialized) {
+    printf("ERROR: Layer2 not initialized for animation\n");
     return;
   }
   
   int16_t start_y = cover_bg_state.y_offset;
-  int16_t distance = target_y - start_y;
   
-  if (distance == 0) {
-    return; // 已经在目标位置
+  if (start_y == target_y) {
+    printf("Animation skipped: already at target position Y=%d\n", target_y);
+    return;
   }
   
-  // 设置动画进行中标志
+  printf("Animation init: g_layer2_initialized=%d, start_y=%d, target_y=%d\n", 
+         g_layer2_initialized, start_y, target_y);
+  
+  // 初始化动画状态
+  g_animation_state.active = true;
+  g_animation_state.start_y = start_y;
+  g_animation_state.target_y = target_y;
+  g_animation_state.start_time = HAL_GetTick();
+  g_animation_state.duration_ms = duration_ms;
+  g_animation_state.last_update_time = g_animation_state.start_time;
+  g_animation_state.frame_count = 0;
+  
+  // 设置全局动画标志
   g_animation_in_progress = true;
   
   // 动画开始前预启用Layer1，确保动画流畅
   __HAL_LTDC_LAYER_ENABLE(&hlcd_ltdc, 1);
   
-  // 动画开始前确保Layer1状态正确，不修改Layer0
+  // 动画开始前确保Layer1状态正确
   hlcd_ltdc.Instance = LTDC;
-  
-  // 只确保Layer1完全不透明，不修改Layer0透明度
   HAL_LTDC_SetAlpha(&hlcd_ltdc, 255, 1);  // Layer1不透明
   cover_bg_state.opacity = 255;
   
-  // printf("开始动画：从Y=%d移动到Y=%d，距离=%d，持续时间=%dms\n", 
-  //        start_y, target_y, distance, duration_ms);
+  printf("Start non-blocking animation: from Y=%ld to Y=%d, duration=%dms, state.active=%d\n", 
+         (long)start_y, target_y, duration_ms, g_animation_state.active);
+}
+
+// 更新动画状态 - 需要定期调用
+bool lcd_cover_background_update_animation(void) {
+  if (!g_animation_state.active) {
+    return false;
+  }
+  
+  // 第一次调用时输出调试信息
+  if (g_animation_state.frame_count == 0) {
+    printf("Animation update: first call, start_time=%lu, current_time=%lu\n", 
+           g_animation_state.start_time, HAL_GetTick());
+  }
+  
+  uint32_t current_time = HAL_GetTick();
+  uint32_t elapsed_time = current_time - g_animation_state.start_time;
+  
+  // 检查动画是否完成
+  if (elapsed_time >= g_animation_state.duration_ms) {
+    // 动画完成，移动到精确位置
+    lcd_cover_background_move_to_y(g_animation_state.target_y);
+    
+    // 清除动画状态
+    g_animation_state.active = false;
+    g_animation_in_progress = false;
+    
+    uint32_t avg_fps = (g_animation_state.frame_count * 1000) / elapsed_time;
+    printf("Non-blocking animation completed: moved to Y=%d, total frames=%lu, actual time=%lums, avg FPS=%lu\n", 
+           g_animation_state.target_y, g_animation_state.frame_count, elapsed_time, avg_fps);
+    
+    return false;
+  }
+  
+  // 计算动画进度
+  float progress = (float)elapsed_time / g_animation_state.duration_ms;
+  
+  // 使用cubic ease-in-out缓动函数
+  float eased_progress;
+  if (progress < 0.5f) {
+    eased_progress = 4.0f * progress * progress * progress;
+  } else {
+    float temp = -2.0f * progress + 2.0f;
+    eased_progress = 1.0f - (temp * temp * temp) / 2.0f;
+  }
+  
+  // 计算当前位置
+  int16_t distance = g_animation_state.target_y - g_animation_state.start_y;
+  int16_t current_y = g_animation_state.start_y + (int16_t)(distance * eased_progress);
+  
+  // 更新位置
+  lcd_cover_background_move_to_y(current_y);
+  
+  // 更新帧计数和统计
+  g_animation_state.frame_count++;
+  
+  // 每隔20帧输出一次调试信息（减少日志输出量）
+  if (g_animation_state.frame_count % 20 == 0) {
+    uint32_t frame_time = current_time - g_animation_state.last_update_time;
+    uint32_t fps = frame_time > 0 ? 20000 / frame_time : 0;
+    printf("Animation frame %lu: Y=%d, progress=%.1f%%, 20frame_time=%lums, FPS=%lu\n", 
+           g_animation_state.frame_count, current_y, (double)(progress * 100.0f), frame_time, fps);
+    g_animation_state.last_update_time = current_time;
+  }
+  
+  return true;
+}
+
+// 检查是否有动画正在进行
+bool lcd_cover_background_has_active_animation(void) {
+  return g_animation_state.active;
+}
+
+// 停止当前动画
+void lcd_cover_background_stop_animation(void) {
+  if (g_animation_state.active) {
+    printf("Stop animation at Y=%ld position\n", (long)cover_bg_state.y_offset);
+    g_animation_state.active = false;
+    g_animation_in_progress = false;
+  }
+}
+
+// 直接的动画函数 - 简化版，不依赖systick
+void lcd_cover_background_animate_to_y(int16_t target_y, uint16_t duration_ms) {
+  if (!g_layer2_initialized) {
+    printf("ERROR: Layer2 not initialized for animation\n");
+    return;
+  }
+  
+  int16_t start_y = cover_bg_state.y_offset;
+  
+  if (start_y == target_y) {
+    printf("Animation skipped: already at target position Y=%d\n", target_y);
+    return;
+  }
+  
+  printf("Start direct animation: from Y=%d to Y=%d, duration=%dms\n", start_y, target_y, duration_ms);
+  
+  // 设置动画标志
+  g_animation_in_progress = true;
+  
+  // 确保Layer1正确配置
+  hlcd_ltdc.Instance = LTDC;
+  __HAL_LTDC_LAYER_ENABLE(&hlcd_ltdc, 1);
+  HAL_LTDC_SetAlpha(&hlcd_ltdc, 255, 1);
+  cover_bg_state.opacity = 255;
   
   uint32_t start_time = HAL_GetTick();
-  uint32_t end_time = start_time + duration_ms;
+  uint32_t frame_count = 0;
+  int16_t distance = target_y - start_y;
   
-  while (HAL_GetTick() < end_time) {
+  printf("Animation parameters: start_y=%d, target_y=%d, distance=%d\n", start_y, target_y, distance);
+  
+  while (true) {
     uint32_t current_time = HAL_GetTick();
-    float progress = (float)(current_time - start_time) / duration_ms;
+    uint32_t elapsed_time = current_time - start_time;
     
-    // 确保进度在有效范围内，避免异常值
-    if (progress > 1.0f) progress = 1.0f;
-    if (progress < 0.0f) progress = 0.0f;
+    // 检查动画是否完成
+    if (elapsed_time >= duration_ms) {
+      // 动画完成，移动到精确位置
+      lcd_cover_background_move_to_y(target_y);
+      break;
+    }
     
-    // 使用cubic ease-in-out缓动函数，提供更丝滑的动画体验
+    // 计算动画进度
+    float progress = (float)elapsed_time / duration_ms;
+    
+    // 使用cubic ease-in-out缓动函数
     float eased_progress;
     if (progress < 0.5f) {
       eased_progress = 4.0f * progress * progress * progress;
@@ -1208,19 +1565,31 @@ void lcd_cover_background_animate_to_y(int16_t target_y, uint16_t duration_ms) {
       eased_progress = 1.0f - (temp * temp * temp) / 2.0f;
     }
     
+    // 计算当前位置
     int16_t current_y = start_y + (int16_t)(distance * eased_progress);
+    
+    // 更新位置
     lcd_cover_background_move_to_y(current_y);
     
-    HAL_Delay(8); // 约120fps，提供更丝滑的动画体验
+    frame_count++;
+    
+    // 每20帧输出一次调试信息
+    if (frame_count % 20 == 0) {
+      printf("Animation frame %lu: Y=%d, progress=%.1f%%\n", 
+             frame_count, current_y, (double)(progress * 100.0f));
+    }
+    
+    // 16ms延时，约60fps
+    HAL_Delay(16);
   }
   
-  // 确保到达精确的目标位置
-  lcd_cover_background_move_to_y(target_y);
-  
-  // 清除动画进行中标志
+  // 清除动画标志
   g_animation_in_progress = false;
   
-  // printf("动画完成：layer已移动到Y=%d\n", target_y);
+  uint32_t total_time = HAL_GetTick() - start_time;
+  uint32_t avg_fps = (frame_count * 1000) / total_time;
+  printf("Direct animation completed: moved to Y=%d, frames=%lu, time=%lums, avg_fps=%lu\n", 
+         target_y, frame_count, total_time, avg_fps);
 }
 
 // 获取当前透明度

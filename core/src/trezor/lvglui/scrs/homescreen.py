@@ -362,7 +362,7 @@ class MainScreen(Screen):
             
             # # 使用11111.jpeg作为背景图片
             self.add_style(
-                StyleWrapper().bg_img_src("A:/res/2222.png").border_width(0),
+                StyleWrapper().bg_img_src("A:/res/wallpaper-1.jpg").border_width(0),
                 0,
             )
             
@@ -6379,3 +6379,6 @@ class HelpDetails(FullSizeWindow):
 
     # def destroy(self, _delay):
     #     return self.delete()
+
+
+
