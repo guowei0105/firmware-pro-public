@@ -719,6 +719,29 @@ STATIC mp_obj_t mod_trezorui_Display_cover_background_is_visible(mp_obj_t self) 
 STATIC MP_DEFINE_CONST_FUN_OBJ_1(mod_trezorui_Display_cover_background_is_visible_obj,
                                  mod_trezorui_Display_cover_background_is_visible);
 
+/// def cover_background_set_layer1_path(self, path: str) -> None:
+///     """
+///     Set Layer1 background image path for dual background system.
+///     """
+STATIC mp_obj_t mod_trezorui_Display_cover_background_set_layer1_path(mp_obj_t self, mp_obj_t path) {
+  const char *path_str = mp_obj_str_get_str(path);
+  lcd_cover_background_set_layer1_path(path_str);
+  return mp_const_none;
+}
+STATIC MP_DEFINE_CONST_FUN_OBJ_2(mod_trezorui_Display_cover_background_set_layer1_path_obj,
+                                 mod_trezorui_Display_cover_background_set_layer1_path);
+
+/// def cover_background_sync_layer1_background(self) -> None:
+///     """
+///     Load and sync Layer1 background image from current path.
+///     """
+STATIC mp_obj_t mod_trezorui_Display_cover_background_sync_layer1_background(mp_obj_t self) {
+  lcd_cover_background_sync_layer1_background();
+  return mp_const_none;
+}
+STATIC MP_DEFINE_CONST_FUN_OBJ_1(mod_trezorui_Display_cover_background_sync_layer1_background_obj,
+                                 mod_trezorui_Display_cover_background_sync_layer1_background);
+
 STATIC const mp_rom_map_elem_t mod_trezorui_Display_locals_dict_table[] = {
     {MP_ROM_QSTR(MP_QSTR_clear), MP_ROM_PTR(&mod_trezorui_Display_clear_obj)},
     {MP_ROM_QSTR(MP_QSTR_refresh),
@@ -769,6 +792,10 @@ STATIC const mp_rom_map_elem_t mod_trezorui_Display_locals_dict_table[] = {
      MP_ROM_PTR(&mod_trezorui_Display_cover_background_animate_to_y_obj)},
     {MP_ROM_QSTR(MP_QSTR_cover_background_is_visible),
      MP_ROM_PTR(&mod_trezorui_Display_cover_background_is_visible_obj)},
+    {MP_ROM_QSTR(MP_QSTR_cover_background_set_layer1_path),
+     MP_ROM_PTR(&mod_trezorui_Display_cover_background_set_layer1_path_obj)},
+    {MP_ROM_QSTR(MP_QSTR_cover_background_sync_layer1_background),
+     MP_ROM_PTR(&mod_trezorui_Display_cover_background_sync_layer1_background_obj)},
     {MP_ROM_QSTR(MP_QSTR_WIDTH), MP_ROM_INT(DISPLAY_RESX)},
     {MP_ROM_QSTR(MP_QSTR_HEIGHT), MP_ROM_INT(DISPLAY_RESY)},
     {MP_ROM_QSTR(MP_QSTR_FONT_NORMAL), MP_ROM_INT(FONT_NORMAL)},
