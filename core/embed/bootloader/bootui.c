@@ -876,7 +876,6 @@ void ui_bootloader_first(const image_header* const hdr) {
   }
 
   ui_statusbar_update();
-  // info icon - use high-quality antialiased 96x96->48x48 msg icon
   display_raw_rgb565(INFO_ICON_OFFSET_X, INFO_ICON_OFFSET_Y, 48, 48,
                      (const uint16_t*)toi_msg_smooth_circle);
 
