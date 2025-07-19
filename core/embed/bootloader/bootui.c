@@ -42,12 +42,7 @@
 #include "common.h"
 #include "flash.h"
 #include "fw_keys.h"
-#include "icon_msg.h"
-#include "icon_msg_dots.h"
-#include "icon_msg_highquality.h"
 #include "icon_onekey.h"
-#include "icon_optimized.h"
-#include "icon_sharp.h"
 #include "image.h"
 #include "mipi_lcd.h"
 #include "se_thd89.h"
@@ -1055,8 +1050,8 @@ void ui_bootloader_view_details(const image_header* const hdr) {
   display_text(offset_x, offset_y, "BuildID", -1, FONT_PJKS_BOLD_26,
                COLOR_BL_TAGVALUE, COLOR_BL_PANEL);
   offset_y += offset_line;
-  display_text(offset_x, offset_y, "8be3971", -1, FONT_NORMAL, COLOR_BL_FG,
-               COLOR_BL_PANEL);
+  display_text(offset_x, offset_y, BUILD_ID + strlen(BUILD_ID) - 7, -1,
+               FONT_NORMAL, COLOR_BL_FG, COLOR_BL_PANEL);
 
   display_bar_radius_ex(BUTTON_LEFT_OFFSET_X, BUTTON_OFFSET_Y,
                         BUTTON_FULL_WIDTH, BUTTON_HEIGHT, COLOR_BL_FG,
