@@ -1265,85 +1265,77 @@ void lcd_cover_background_load_jpeg(const char* jpeg_path) {
          jpeg_path, width, height, copy_width, copy_height);
 }
 
-// 硬件移动 CoverBackground - 直接控制LTDC层位置
+// 正确的硬件移动 CoverBackground - 动态窗口避免黑屏遮挡
 void lcd_cover_background_move_to_y(int16_t y_position) {
   if (!g_layer2_initialized) {
-    printf("ERROR: Layer2 not initialized for movement\n");
     return;
   }
   
   // 更新状态
   cover_bg_state.y_offset = y_position;
   
-  // 计算实际的窗口位置
-  // Layer2覆盖整个屏幕，前44px透明，移动时整体向上移动
-  uint32_t window_x0 = 0;
-  uint32_t window_y0 = y_position;
-  uint32_t window_x1 = lcd_params.hres;
-  uint32_t window_y1 = lcd_params.vres + y_position;
-  
-  // 处理边界情况
-  if (window_y1 <= 0) {
-    // Layer2完全移出屏幕上方，禁用Layer2确保Layer1正常显示
-    printf("Layer2 moved out of screen, disable Layer2 (Y=%d)\n", y_position);
+  // 处理边界情况 - Layer2完全移出屏幕上方时禁用
+  if (y_position <= -((int16_t)lcd_params.vres)) {
     __HAL_LTDC_LAYER_DISABLE(&hlcd_ltdc, 1);
-    __HAL_LTDC_RELOAD_IMMEDIATE_CONFIG(&hlcd_ltdc);
+    __HAL_LTDC_RELOAD_CONFIG(&hlcd_ltdc);
     return;
   }
   
-  // 确保窗口不超出屏幕范围
-  if ((int32_t)window_y0 < 0) window_y0 = 0;
-  if (window_y1 > lcd_params.vres) window_y1 = lcd_params.vres;
-  
-  // 每隔一定帧数输出调试信息，避免日志过多
-  static uint32_t move_counter = 0;
-  move_counter++;
-  if (move_counter % 50 == 0 || !g_animation_in_progress) {
-    printf("Move Layer2 to Y=%d (window: %lu,%lu-%lu,%lu)\n", 
-           y_position, window_x0, window_y0, window_x1, window_y1);
-  }
-  
-  // 确保Layer1启用（可能之前被禁用）
+  // 确保Layer1启用
   __HAL_LTDC_LAYER_ENABLE(&hlcd_ltdc, 1);
   
-  // 重新配置第二层layer的窗口位置
+  // 关键修复：使用动态窗口而不是动态地址
+  // 这样避免读取超出范围的内存导致黑屏
+  
+  uint32_t window_x0 = 0;
+  uint32_t window_y0, window_y1;
+  uint32_t window_x1 = lcd_params.hres;
+  uint32_t layer_address = LAYER2_MEMORY_BASE;
+  
+  if (y_position < 0) {
+    // 向上移动：窗口从屏幕顶部开始，高度减小
+    // 下面露出的部分显示Layer1
+    window_y0 = 0;
+    window_y1 = lcd_params.vres + y_position; // y_position是负数
+    
+    // 起始地址需要跳过被移出屏幕的行数
+    uint32_t bytes_per_line = lcd_params.hres * lcd_params.bbp;
+    uint32_t skip_lines = (uint32_t)(-y_position);
+    layer_address = LAYER2_MEMORY_BASE + (skip_lines * bytes_per_line);
+  } else {
+    // 向下移动：窗口向下偏移
+    window_y0 = y_position;
+    window_y1 = lcd_params.vres + y_position;
+    
+    // 地址保持不变
+    layer_address = LAYER2_MEMORY_BASE;
+  }
+  
+  // 确保窗口不超出屏幕范围
+  if (window_y1 > lcd_params.vres) {
+    window_y1 = lcd_params.vres;
+  }
+  
+  // 使用现有的ltdc_layer_config函数，但只在必要时重配置
+  // 关键优化：动态窗口避免黑屏，轻量级重载减少卡顿
+  
   LTDC_LAYERCONFIG config;
   config.x0 = window_x0;
   config.x1 = window_x1;
   config.y0 = window_y0;
   config.y1 = window_y1;
   config.pixel_format = lcd_params.pixel_format_ltdc;
-  config.address = LAYER2_MEMORY_BASE;
+  config.address = layer_address;
   
-  // 计算内存地址偏移
-  uint32_t bytes_per_line = lcd_params.hres * lcd_params.bbp;
+  // 重新配置Layer1（但不重新设置混合参数，只更新位置和地址）
+  ltdc_layer_config(&hlcd_ltdc, 1, &config);
   
-  if (y_position < 0 && window_y0 == 0) {
-    // 向上移动时，窗口从屏幕顶部开始，需要跳过被裁剪的行
-    uint32_t skip_lines = -y_position;
-    config.address = LAYER2_MEMORY_BASE + (skip_lines * bytes_per_line);
-    if (move_counter % 50 == 0) {
-      printf("Move up, skip %lu lines, memory address offset=0x%08lx\n", skip_lines, config.address);
-    }
-  } else {
-    // 正常情况，Layer2从第一行开始，前44行保持透明
-    config.address = LAYER2_MEMORY_BASE;
-  }
+  // 优化：减少VSync重载频率，动画期间每4帧重载一次
+  static uint32_t reload_counter = 0;
+  reload_counter++;
   
-  if (ltdc_layer_config(&hlcd_ltdc, 1, &config) == HAL_OK) {
-    // 动画期间使用立即重载提升响应性，非动画期间使用VSync重载保持稳定
-    if (g_animation_in_progress) {
-      __HAL_LTDC_RELOAD_IMMEDIATE_CONFIG(&hlcd_ltdc);
-    } else {
-      __HAL_LTDC_RELOAD_CONFIG(&hlcd_ltdc);
-    }
-    
-    if (move_counter % 50 == 0 || !g_animation_in_progress) {
-      printf("Hardware layer movement configured, reload type=%s\n", 
-             g_animation_in_progress ? "immediate" : "vsync");
-    }
-  } else {
-    printf("ERROR: Layer2 configuration failed (Y=%d)\n", y_position);
+  if (!g_animation_in_progress || reload_counter % 4 == 0) {
+    __HAL_LTDC_RELOAD_CONFIG(&hlcd_ltdc);
   }
 }
 
@@ -1367,20 +1359,16 @@ static animation_state_t g_animation_state = {0};
 
 // Systick回调函数 - 在系统滴答中更新动画
 static void animation_systick_callback(uint32_t tick) {
-  // 每毫秒调用一次，更新动画状态
+  // 限制动画更新频率匹配60fps (约16ms)
   // 添加基本的保护检查
   if (g_layer2_initialized && g_animation_state.active) {
-    // 添加调试信息来确认回调被调用
-    static uint32_t callback_counter = 0;
-    callback_counter++;
+    static uint32_t last_update_tick = 0;
     
-    // 每100次调用输出一次调试信息
-    if (callback_counter % 100 == 0) {
-      printf("Animation systick callback: tick=%lu, counter=%lu, active=%d\n", 
-             tick, callback_counter, g_animation_state.active);
+    // 每16ms更新一次，匹配60fps显示
+    if (tick - last_update_tick >= 16) {
+      lcd_cover_background_update_animation();
+      last_update_tick = tick;
     }
-    
-    lcd_cover_background_update_animation();
   }
 }
 
@@ -1394,19 +1382,18 @@ void lcd_animation_init(void) {
 // 启动动画
 void lcd_cover_background_start_animation(int16_t target_y, uint16_t duration_ms) {
   if (!g_layer2_initialized) {
-    printf("ERROR: Layer2 not initialized for animation\n");
+    // 静默返回，动画期间不输出错误日志
     return;
   }
   
   int16_t start_y = cover_bg_state.y_offset;
   
   if (start_y == target_y) {
-    printf("Animation skipped: already at target position Y=%d\n", target_y);
+    // 静默跳过，不输出日志
     return;
   }
   
-  printf("Animation init: g_layer2_initialized=%d, start_y=%d, target_y=%d\n", 
-         g_layer2_initialized, start_y, target_y);
+  // 完全禁用动画启动时的日志输出
   
   // 初始化动画状态
   g_animation_state.active = true;
@@ -1427,9 +1414,6 @@ void lcd_cover_background_start_animation(int16_t target_y, uint16_t duration_ms
   hlcd_ltdc.Instance = LTDC;
   HAL_LTDC_SetAlpha(&hlcd_ltdc, 255, 1);  // Layer1不透明
   cover_bg_state.opacity = 255;
-  
-  printf("Start non-blocking animation: from Y=%ld to Y=%d, duration=%dms, state.active=%d\n", 
-         (long)start_y, target_y, duration_ms, g_animation_state.active);
 }
 
 // 更新动画状态 - 需要定期调用
@@ -1438,11 +1422,7 @@ bool lcd_cover_background_update_animation(void) {
     return false;
   }
   
-  // 第一次调用时输出调试信息
-  if (g_animation_state.frame_count == 0) {
-    printf("Animation update: first call, start_time=%lu, current_time=%lu\n", 
-           g_animation_state.start_time, HAL_GetTick());
-  }
+  // 动画期间完全禁用调试日志输出
   
   uint32_t current_time = HAL_GetTick();
   uint32_t elapsed_time = current_time - g_animation_state.start_time;
@@ -1452,12 +1432,16 @@ bool lcd_cover_background_update_animation(void) {
     // 动画完成，移动到精确位置
     lcd_cover_background_move_to_y(g_animation_state.target_y);
     
+    // 动画完成后强制重载，确保最终位置准确显示
+    __HAL_LTDC_RELOAD_CONFIG(&hlcd_ltdc);
+    
     // 清除动画状态
     g_animation_state.active = false;
     g_animation_in_progress = false;
     
+    // 动画完成后才输出统计信息
     uint32_t avg_fps = (g_animation_state.frame_count * 1000) / elapsed_time;
-    printf("Non-blocking animation completed: moved to Y=%d, total frames=%lu, actual time=%lums, avg FPS=%lu\n", 
+    printf("Animation completed: Y=%d, frames=%lu, time=%lums, fps=%lu\n", 
            g_animation_state.target_y, g_animation_state.frame_count, elapsed_time, avg_fps);
     
     return false;
@@ -1485,14 +1469,7 @@ bool lcd_cover_background_update_animation(void) {
   // 更新帧计数和统计
   g_animation_state.frame_count++;
   
-  // 每隔20帧输出一次调试信息（减少日志输出量）
-  if (g_animation_state.frame_count % 20 == 0) {
-    uint32_t frame_time = current_time - g_animation_state.last_update_time;
-    uint32_t fps = frame_time > 0 ? 20000 / frame_time : 0;
-    printf("Animation frame %lu: Y=%d, progress=%.1f%%, 20frame_time=%lums, FPS=%lu\n", 
-           g_animation_state.frame_count, current_y, (double)(progress * 100.0f), frame_time, fps);
-    g_animation_state.last_update_time = current_time;
-  }
+  // 动画期间完全禁用帧统计日志输出
   
   return true;
 }
@@ -1505,7 +1482,7 @@ bool lcd_cover_background_has_active_animation(void) {
 // 停止当前动画
 void lcd_cover_background_stop_animation(void) {
   if (g_animation_state.active) {
-    printf("Stop animation at Y=%ld position\n", (long)cover_bg_state.y_offset);
+    // 动画期间不输出日志，静默停止
     g_animation_state.active = false;
     g_animation_in_progress = false;
   }
@@ -1514,18 +1491,18 @@ void lcd_cover_background_stop_animation(void) {
 // 直接的动画函数 - 简化版，不依赖systick
 void lcd_cover_background_animate_to_y(int16_t target_y, uint16_t duration_ms) {
   if (!g_layer2_initialized) {
-    printf("ERROR: Layer2 not initialized for animation\n");
+    // 静默返回，不输出错误日志
     return;
   }
   
   int16_t start_y = cover_bg_state.y_offset;
   
   if (start_y == target_y) {
-    printf("Animation skipped: already at target position Y=%d\n", target_y);
+    // 静默跳过，不输出日志
     return;
   }
   
-  printf("Start direct animation: from Y=%d to Y=%d, duration=%dms\n", start_y, target_y, duration_ms);
+  // 完全禁用动画开始时的日志输出
   
   // 设置动画标志
   g_animation_in_progress = true;
@@ -1540,7 +1517,7 @@ void lcd_cover_background_animate_to_y(int16_t target_y, uint16_t duration_ms) {
   uint32_t frame_count = 0;
   int16_t distance = target_y - start_y;
   
-  printf("Animation parameters: start_y=%d, target_y=%d, distance=%d\n", start_y, target_y, distance);
+  // 动画期间完全禁用参数日志输出
   
   while (true) {
     uint32_t current_time = HAL_GetTick();
@@ -1573,11 +1550,7 @@ void lcd_cover_background_animate_to_y(int16_t target_y, uint16_t duration_ms) {
     
     frame_count++;
     
-    // 每20帧输出一次调试信息
-    if (frame_count % 20 == 0) {
-      printf("Animation frame %lu: Y=%d, progress=%.1f%%\n", 
-             frame_count, current_y, (double)(progress * 100.0f));
-    }
+    // 动画期间完全禁用帧调试日志
     
     // 16ms延时，约60fps
     HAL_Delay(16);
@@ -1586,9 +1559,13 @@ void lcd_cover_background_animate_to_y(int16_t target_y, uint16_t duration_ms) {
   // 清除动画标志
   g_animation_in_progress = false;
   
+  // 动画完成后强制重载，确保最终位置准确显示
+  __HAL_LTDC_RELOAD_CONFIG(&hlcd_ltdc);
+  
+  // 动画完成后才输出统计信息
   uint32_t total_time = HAL_GetTick() - start_time;
   uint32_t avg_fps = (frame_count * 1000) / total_time;
-  printf("Direct animation completed: moved to Y=%d, frames=%lu, time=%lums, avg_fps=%lu\n", 
+  printf("Direct animation completed: Y=%d, frames=%lu, time=%lums, fps=%lu\n", 
          target_y, frame_count, total_time, avg_fps);
 }
 
