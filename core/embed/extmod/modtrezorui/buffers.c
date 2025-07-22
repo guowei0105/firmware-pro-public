@@ -51,13 +51,19 @@ line_buffer_16bpp_t* buffers_get_line_buffer_16bpp(uint16_t idx, bool clear) {
   return &line_buffers_16bpp[idx];
 }
 
+// 获取4bpp行缓冲区指针
+// idx: 缓冲区索引
+// clear: 是否清空缓冲区内容
 line_buffer_4bpp_t* buffers_get_line_buffer_4bpp(uint16_t idx, bool clear) {
+  // 如果索引超出范围，返回NULL
   if (idx >= BUFFERS_4BPP) {
     return NULL;
   }
+  // 如果需要清空缓冲区，则将其内容置零
   if (clear) {
     memzero(&line_buffers_4bpp[idx], sizeof(line_buffers_4bpp[idx]));
   }
+  // 返回对应的缓冲区指针
   return &line_buffers_4bpp[idx];
 }
 

@@ -111,6 +111,7 @@ void lcd_cover_background_set_visible(bool visible);
 void lcd_cover_background_set_image(const void* image_data, uint32_t image_size);
 void lcd_cover_background_load_jpeg(const char* jpeg_path);
 void lcd_cover_background_move_to_y(int16_t y_position);
+void lcd_cover_background_set_statusbar_opacity(bool transparent);
 void lcd_cover_background_animate_to_y(int16_t target_y, uint16_t duration_ms);
 void lcd_cover_background_start_animation(int16_t target_y, uint16_t duration_ms);
 bool lcd_cover_background_update_animation(void);

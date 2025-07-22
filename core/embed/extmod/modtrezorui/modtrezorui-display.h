@@ -692,6 +692,18 @@ STATIC mp_obj_t mod_trezorui_Display_cover_background_move_to_y(mp_obj_t self, m
 STATIC MP_DEFINE_CONST_FUN_OBJ_2(mod_trezorui_Display_cover_background_move_to_y_obj,
                                  mod_trezorui_Display_cover_background_move_to_y);
 
+/// def cover_background_set_statusbar_opacity(self, transparent: bool) -> None:
+///     """
+///     Set the opacity of the top 44px statusbar area in CoverBackground layer.
+///     """
+STATIC mp_obj_t mod_trezorui_Display_cover_background_set_statusbar_opacity(mp_obj_t self, mp_obj_t transparent) {
+  bool is_transparent = mp_obj_is_true(transparent);
+  lcd_cover_background_set_statusbar_opacity(is_transparent);
+  return mp_const_none;
+}
+STATIC MP_DEFINE_CONST_FUN_OBJ_2(mod_trezorui_Display_cover_background_set_statusbar_opacity_obj,
+                                 mod_trezorui_Display_cover_background_set_statusbar_opacity);
+
 /// def cover_background_animate_to_y(self, target_y: int, duration_ms: int) -> None:
 ///     """
 ///     Animate hardware CoverBackground layer to Y position.
@@ -788,6 +800,8 @@ STATIC const mp_rom_map_elem_t mod_trezorui_Display_locals_dict_table[] = {
      MP_ROM_PTR(&mod_trezorui_Display_cover_background_load_jpeg_obj)},
     {MP_ROM_QSTR(MP_QSTR_cover_background_move_to_y),
      MP_ROM_PTR(&mod_trezorui_Display_cover_background_move_to_y_obj)},
+    {MP_ROM_QSTR(MP_QSTR_cover_background_set_statusbar_opacity),
+     MP_ROM_PTR(&mod_trezorui_Display_cover_background_set_statusbar_opacity_obj)},
     {MP_ROM_QSTR(MP_QSTR_cover_background_animate_to_y),
      MP_ROM_PTR(&mod_trezorui_Display_cover_background_animate_to_y_obj)},
     {MP_ROM_QSTR(MP_QSTR_cover_background_is_visible),
