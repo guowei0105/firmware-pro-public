@@ -664,6 +664,7 @@ def get_pinlocked_handler(
 
     async def wrapper(ctx: wire.Context, msg: wire.Msg) -> protobuf.MessageType:
         await unlock_device(ctx)
+        storage.cache.start_session()
         return await orig_handler(ctx, msg)
 
     return wrapper
@@ -696,13 +697,8 @@ async def handle_GetPassphraseState(
     from trezor.messages import PassphraseState
     from apps.common import passphrase, paths
 
-    # Check if client supports attach pin
-    (
-        hasattr(msg, "allow_create_attach_pin")
-        and msg.allow_create_attach_pin is not None
-    )
     if not device_is_unlocked():
-        await unlock_device(ctx, pin_use_type=2)
+        await unlock_device(ctx, pin_use_type=PinType.USER_AND_PASSPHRASE_PIN)
         session_id = storage.cache.start_session()
 
     from trezor.lvglui.scrs import fingerprints
@@ -759,13 +755,15 @@ async def handle_UnLockDevice(
 ) -> UnLockDeviceResponse:
     """Handle UnLockDevice message to unlock the device if needed."""
     if not config.is_unlocked():
-        await unlock_device(ctx, pin_use_type=2)
+        await unlock_device(ctx, pin_use_type=PinType.USER_AND_PASSPHRASE_PIN)
+        storage.cache.start_session()
 
     # Get current device state after unlock attempt
     from apps.common import passphrase
 
     unlocked = config.is_unlocked()
     unlocked_attach_pin = passphrase.is_passphrase_pin_enabled() if unlocked else False
+
     passphrase_protection = (
         storage.device.is_passphrase_enabled() if unlocked else False
     )
