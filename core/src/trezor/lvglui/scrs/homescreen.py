@@ -606,32 +606,39 @@ class MainScreen(Screen):
                         # UP手势：向上滑出动画
                         if hasattr(display, 'cover_background_is_visible') and display.cover_background_is_visible():
                             if hasattr(display, 'cover_background_animate_to_y'):
-                                # 上滑时不修改statusbar透明度，保持Layer2的原始状态
-                                # 这样Layer2会显示完整的背景图片内容，包括顶部44px
+                                # 上滑前先重新加载JPEG状态栏区域，确保有正确的背景内容
+                                if hasattr(display, 'cover_background_reload_statusbar_from_jpeg'):
+                                    try:
+                                        from storage import device
+                                        homescreen_path = device.get_homescreen()
+                                        
+                                        if not homescreen_path:
+                                            homescreen_path = "/res/wallpaper-1.jpg"  # 使用正确的路径
+                                        
+                                        display.cover_background_reload_statusbar_from_jpeg(homescreen_path)
+                                    except Exception:
+                                        # 如果重新加载失败，使用默认路径
+                                        display.cover_background_reload_statusbar_from_jpeg("/res/wallpaper-1.jpg")
                                 
-                                # Layer1始终保持不透明，无需设置
-                                # 流畅的向上滑出动画
+                                # 然后恢复Layer2顶部44像素的不透明状态
+                                # False = 不透明，显示完整背景图片内容
+                                display.cover_background_set_statusbar_opacity(False)
+                                
+                                # 立即执行动画
+                                display.cover_background_animate_to_y(-800, 450)
+                                
+                                # 动画完成后再隐藏layer（450ms动画时间 + 50ms缓冲）
+                                hide_timer = lv.timer_create(
+                                    lambda t: display.cover_background_hide() if hasattr(display, 'cover_background_hide') else None,
+                                    500, None
+                                )
+                                hide_timer.set_repeat_count(1)
+                                
+                                # 设置Layer1背景图片
                                 self.add_style(
                                     StyleWrapper().bg_img_src("A:/res/2222.png").border_width(0),
                                     0,
                                 )
-                                
-                                # 延迟执行动画，确保背景图片先显示在layer1
-                                def delayed_animation():
-                                    # 上滑动画时不设置状态栏透明度，让Layer2正常显示包括顶部44px的背景图片
-                                    # 移除statusbar opacity设置，让背景图片顶部44px正常显示
-                                    
-                                    display.cover_background_animate_to_y(-800, 450)
-                                    # 动画完成后再隐藏layer（450ms动画时间 + 50ms缓冲）
-                                    hide_timer = lv.timer_create(
-                                        lambda t: display.cover_background_hide() if hasattr(display, 'cover_background_hide') else None,
-                                        500, None
-                                    )
-                                    hide_timer.set_repeat_count(1)
-                                
-                                # 使用timer延迟100毫秒执行动画
-                                timer = lv.timer_create(lambda t: delayed_animation(), 100, None)
-                                timer.set_repeat_count(1)  # 只执行一次
                             else:
                                 # 如果没有动画函数，直接隐藏
                                 if hasattr(display, 'cover_background_hide'):
@@ -658,7 +665,7 @@ class MainScreen(Screen):
                                     homescreen_path = device.get_homescreen()
                                     
                                     if not homescreen_path:
-                                        homescreen_path = "A:/res/wallpaper-1.jpg"
+                                        homescreen_path = "/res/wallpaper-1.jpg"  # 使用正确的路径
                                     
                                     display.cover_background_load_jpeg(homescreen_path)
 

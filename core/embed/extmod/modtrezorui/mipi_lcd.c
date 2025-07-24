@@ -30,6 +30,12 @@ static volatile bool g_animation_in_progress = false;
 // 全局状态栏透明度状态标志
 static bool g_statusbar_transparent = true;  // 默认透明状态
 
+// 静态缓冲区用于保存顶部44像素的原始数据
+// 屏幕宽度480，但我们需要减少内存使用，所以使用动态分配或更小的缓冲区
+// 改为使用指针，在需要时从SDRAM分配
+static uint16_t* g_statusbar_backup_buffer = NULL;
+static bool g_statusbar_backup_valid = false;  // 标记备份数据是否有效
+
 // 不使用大的备份数组，而是使用动态恢复方案
 
 static int dummy_dbg_printf(const char* fmt, ...) { return 0; }
@@ -1022,6 +1028,14 @@ void lcd_cover_background_init(void) { // 初始化CoverBackground内容
     return; // 直接返回
   }
   
+  // 在初始化时就分配备份缓冲区
+  if (g_statusbar_backup_buffer == NULL) {
+    uint32_t backup_size = lcd_params.hres * TRANSPARENT_STATUSBAR_HEIGHT * sizeof(uint16_t);
+    // 使用SDRAM中的一个安全位置（在Layer2内存后面）
+    g_statusbar_backup_buffer = (uint16_t*)(LAYER2_MEMORY_BASE + lcd_params.hres * lcd_params.vres * 2 + 0x1000);
+    printf("CoverBackground: Allocated backup buffer at 0x%p, size: %lu bytes\n", g_statusbar_backup_buffer, backup_size);
+  }
+  
   uint16_t *layer2_buffer = (uint16_t*)LAYER2_MEMORY_BASE; // 获取Layer2缓冲区指针
   uint32_t buffer_size = lcd_params.hres * lcd_params.vres; // 计算像素数量
   
@@ -1051,6 +1065,16 @@ void lcd_cover_background_init(void) { // 初始化CoverBackground内容
                       (uint32_t*)LAYER2_MEMORY_BASE,
                       0, 0, lcd_params.hres, lcd_params.vres); // DMA2D拷贝
   }
+  
+  // 验证初始化后状态栏区域的数据，不再添加测试图案
+  printf("CoverBackground: Verifying statusbar area after initialization\n");
+  uint32_t statusbar_non_black = 0;
+  for (uint32_t i = 0; i < lcd_params.hres * TRANSPARENT_STATUSBAR_HEIGHT; i++) {
+    if (layer2_buffer[i] != 0x0000) {
+      statusbar_non_black++;
+    }
+  }
+  printf("CoverBackground: Statusbar area has %lu non-black pixels after init\n", statusbar_non_black);
 }
 
 // 设置Layer1背景图片路径
@@ -1299,6 +1323,16 @@ void lcd_cover_background_load_jpeg(const char* jpeg_path) {
   // 透明状态栏将通过 lcd_cover_background_set_statusbar_opacity() 函数按需控制
   printf("JPEG background loaded completely, statusbar transparency will be controlled separately\n");
   
+  // 验证JPEG加载后状态栏区域的数据
+  printf("CoverBackground: Verifying statusbar area after JPEG load\n");
+  uint32_t statusbar_non_black = 0;
+  for (uint32_t i = 0; i < lcd_params.hres * TRANSPARENT_STATUSBAR_HEIGHT; i++) {
+    if (layer2_buffer[i] != 0x0000) {
+      statusbar_non_black++;
+    }
+  }
+  printf("CoverBackground: Statusbar area has %lu non-black pixels after JPEG load\n", statusbar_non_black);
+  
   printf("DMA2D JPEG copy completed\n");
   
   // 加载JPEG后，如果Layer2可见，更新Layer1背景以匹配Layer2
@@ -1320,11 +1354,17 @@ void lcd_cover_background_move_to_y(int16_t y_position) {
   // 更新状态
   cover_bg_state.y_offset = y_position;
   
-  // 处理边界情况 - Layer2完全移出屏幕上方时禁用
-  if (y_position <= -((int16_t)lcd_params.vres)) {
+  // 处理边界情况 - Layer2完全移出屏幕上方时
+  // 但是，如果状态栏应该显示不透明内容，保持Layer2部分可见
+  if (y_position <= -((int16_t)lcd_params.vres) && g_statusbar_transparent) {
+    // 只有在状态栏透明时才完全禁用Layer2
     __HAL_LTDC_LAYER_DISABLE(&hlcd_ltdc, 1);
     __HAL_LTDC_RELOAD_CONFIG(&hlcd_ltdc);
     return;
+  } else if (y_position <= -((int16_t)lcd_params.vres) && !g_statusbar_transparent) {
+    // 状态栏不透明时，即使Y=-800，也要保持顶部44像素可见
+    printf("CoverBackground: Keeping statusbar visible at Y=%d\n", y_position);
+    y_position = -(lcd_params.vres - TRANSPARENT_STATUSBAR_HEIGHT);
   }
   
   // 确保Layer1启用
@@ -1374,7 +1414,23 @@ void lcd_cover_background_move_to_y(int16_t y_position) {
   config.address = layer_address;
   
   // 重新配置Layer1（但不重新设置混合参数，只更新位置和地址）
+  // 动画期间避免重新配置Color Keying，保持状态栏数据
   ltdc_layer_config(&hlcd_ltdc, 1, &config);
+  
+  // 如果在动画期间且状态栏应该不透明，需要重新恢复状态栏数据
+  // 因为ltdc_layer_config可能重新配置了整个layer
+  if (g_animation_in_progress && !g_statusbar_transparent && g_statusbar_backup_valid && g_statusbar_backup_buffer != NULL) {
+    printf("CoverBackground: Restoring statusbar data after layer reconfiguration during animation\n");
+    uint16_t* layer2_buffer = (uint16_t*)LAYER2_MEMORY_BASE;
+    
+    // 重新恢复状态栏数据
+    for (uint32_t y = 0; y < TRANSPARENT_STATUSBAR_HEIGHT; y++) {
+      for (uint32_t x = 0; x < lcd_params.hres; x++) {
+        uint32_t pixel_idx = y * lcd_params.hres + x;
+        layer2_buffer[pixel_idx] = g_statusbar_backup_buffer[pixel_idx];
+      }
+    }
+  }
   
   // 优化：减少VSync重载频率，动画期间每4帧重载一次
   static uint32_t reload_counter = 0;
@@ -1662,6 +1718,54 @@ void lcd_cover_background_set_statusbar_opacity(bool transparent) {
   uint16_t* layer2_buffer = (uint16_t*)LAYER2_MEMORY_BASE;
   
   if (transparent) {
+    // 检查Layer2顶部44像素是否有非黑色内容
+    bool has_valid_content = false;
+    uint32_t non_black_pixels = 0;
+    
+    printf("CoverBackground: Checking Layer2 statusbar content before backup...\n");
+    for (uint32_t i = 0; i < lcd_params.hres * TRANSPARENT_STATUSBAR_HEIGHT; i++) {
+      if (layer2_buffer[i] != 0x0000) {
+        non_black_pixels++;
+        has_valid_content = true;
+      }
+    }
+    
+    printf("CoverBackground: Found %lu non-black pixels in statusbar area\n", non_black_pixels);
+    
+    // 只有在有有效内容时才备份
+    if (has_valid_content) {
+      // 在设置透明之前，先保存顶部44像素的原始数据
+      printf("CoverBackground: Saving statusbar area data before setting transparent\n");
+      
+      // 确保备份缓冲区已分配
+      if (g_statusbar_backup_buffer == NULL) {
+        uint32_t backup_size = lcd_params.hres * TRANSPARENT_STATUSBAR_HEIGHT * sizeof(uint16_t);
+        g_statusbar_backup_buffer = (uint16_t*)(LAYER2_MEMORY_BASE + lcd_params.hres * lcd_params.vres * 2 + 0x1000);
+        printf("CoverBackground: Allocated backup buffer at 0x%p, size: %lu bytes\n", g_statusbar_backup_buffer, backup_size);
+      }
+      
+      // 保存数据到备份缓冲区并验证
+      for (uint32_t y = 0; y < TRANSPARENT_STATUSBAR_HEIGHT; y++) {
+        for (uint32_t x = 0; x < lcd_params.hres; x++) {
+          uint32_t pixel_idx = y * lcd_params.hres + x;
+          g_statusbar_backup_buffer[pixel_idx] = layer2_buffer[pixel_idx];
+        }
+      }
+      g_statusbar_backup_valid = true;
+      
+      // 验证备份数据
+      uint32_t backup_non_black = 0;
+      for (uint32_t i = 0; i < lcd_params.hres * TRANSPARENT_STATUSBAR_HEIGHT; i++) {
+        if (g_statusbar_backup_buffer[i] != 0x0000) {
+          backup_non_black++;
+        }
+      }
+      printf("CoverBackground: Backup contains %lu non-black pixels\n", backup_non_black);
+    } else {
+      printf("CoverBackground: Layer2 statusbar area is all black, skipping backup\n");
+      g_statusbar_backup_valid = false;
+    }
+    
     // 将顶部44px设置为透明颜色键，显示Layer1状态栏
     printf("CoverBackground: Setting statusbar area to transparent (Color Keying)\n");
     for (uint32_t y = 0; y < TRANSPARENT_STATUSBAR_HEIGHT; y++) {
@@ -1680,23 +1784,196 @@ void lcd_cover_background_set_statusbar_opacity(bool transparent) {
     HAL_LTDC_ConfigColorKeying(&hlcd_ltdc, rgb888_key, 1);
     HAL_LTDC_EnableColorKeying(&hlcd_ltdc, 1);
   } else {
+    // 恢复不透明状态：禁用Color Keying并恢复原始数据
+    printf("CoverBackground: Restoring opaque statusbar\n");
+    
     // 禁用Color Keying功能，让Layer2完全不透明显示
     printf("CoverBackground: Disabling Color Keying for opaque statusbar\n");
     HAL_LTDC_DisableColorKeying(&hlcd_ltdc, 1);
     
-    // 简单方案：用深色填充statusbar区域，避免0x0001的显示问题
-    // 这样至少不会显示为奇怪的颜色，而是统一的深色
-    printf("CoverBackground: Filling statusbar area with dark color\n");
-    uint16_t fill_color = 0x0000;  // 黑色，或者可以用其他深色
-    for (uint32_t y = 0; y < TRANSPARENT_STATUSBAR_HEIGHT; y++) {
-      for (uint32_t x = 0; x < lcd_params.hres; x++) {
-        layer2_buffer[y * lcd_params.hres + x] = fill_color;
+    // 如果之前没有备份，或者备份的是黑色数据，尝试重新加载JPEG图片的状态栏部分
+    if (!g_statusbar_backup_valid || g_statusbar_backup_buffer == NULL) {
+      printf("CoverBackground: No valid backup, attempting to reload JPEG statusbar area\n");
+      
+      // 重新加载JPEG的顶部44像素
+      // 这里需要调用JPEG解码器，但只解码顶部44像素的部分
+      // 暂时使用默认的灰色作为临时方案
+      for (uint32_t y = 0; y < TRANSPARENT_STATUSBAR_HEIGHT; y++) {
+        for (uint32_t x = 0; x < lcd_params.hres; x++) {
+          uint32_t pixel_idx = y * lcd_params.hres + x;
+          // 使用中灰色代替黑色，作为临时方案
+          layer2_buffer[pixel_idx] = 0x7BEF;  // 中灰色 RGB565
+        }
       }
+      printf("CoverBackground: Set statusbar to gray as fallback\n");
+    } else {
+      // 恢复保存的原始数据
+      printf("CoverBackground: Restoring original statusbar area data from backup\n");
+      
+      // 验证备份数据再次
+      uint32_t backup_non_black = 0;
+      for (uint32_t i = 0; i < lcd_params.hres * TRANSPARENT_STATUSBAR_HEIGHT; i++) {
+        if (g_statusbar_backup_buffer[i] != 0x0000) {
+          backup_non_black++;
+        }
+      }
+      printf("CoverBackground: About to restore %lu non-black pixels from backup\n", backup_non_black);
+      
+      for (uint32_t y = 0; y < TRANSPARENT_STATUSBAR_HEIGHT; y++) {
+        for (uint32_t x = 0; x < lcd_params.hres; x++) {
+          uint32_t pixel_idx = y * lcd_params.hres + x;
+          layer2_buffer[pixel_idx] = g_statusbar_backup_buffer[pixel_idx];
+        }
+      }
+      
+      // 验证恢复后的数据
+      uint32_t restored_non_black = 0;
+      for (uint32_t i = 0; i < lcd_params.hres * TRANSPARENT_STATUSBAR_HEIGHT; i++) {
+        if (layer2_buffer[i] != 0x0000) {
+          restored_non_black++;
+        }
+      }
+      printf("CoverBackground: Restored data now has %lu non-black pixels\n", restored_non_black);
     }
   }
   
   // 立即重载LTDC配置以应用更改
   __HAL_LTDC_RELOAD_IMMEDIATE_CONFIG(&hlcd_ltdc);
+}
+
+// 强制重新加载JPEG图片的状态栏区域
+void lcd_cover_background_reload_statusbar_from_jpeg(const char* jpeg_path) {
+  if (!g_layer2_initialized || !jpeg_path) {
+    return;
+  }
+  
+  printf("CoverBackground: Force reloading statusbar area from JPEG: %s\n", jpeg_path);
+  
+  // 尝试多个可能的路径
+  const char* paths_to_try[] = {
+    jpeg_path,
+    "/res/wallpaper-1.jpg",
+    "A:/res/wallpaper-1.jpg",
+    "/wallpaper-1.jpg",
+    "wallpaper-1.jpg",
+    NULL
+  };
+  
+  uint32_t jpeg_output_address = FMC_SDRAM_JPEG_OUTPUT_DATA_BUFFER_ADDRESS;
+  int decode_result = -1;
+  const char* successful_path = NULL;
+  
+  // 尝试不同的路径
+  for (int i = 0; paths_to_try[i] != NULL; i++) {
+    printf("CoverBackground: Trying JPEG path: %s\n", paths_to_try[i]);
+    decode_result = jped_decode((char*)paths_to_try[i], jpeg_output_address);
+    if (decode_result == 0) {
+      successful_path = paths_to_try[i];
+      printf("CoverBackground: Successfully loaded JPEG from: %s\n", successful_path);
+      break;
+    } else {
+      printf("CoverBackground: Failed to load from %s, error: %d\n", paths_to_try[i], decode_result);
+    }
+  }
+  
+  if (decode_result != 0) {
+    printf("ERROR: All JPEG paths failed, using solid color fallback\n");
+    // 使用固定的壁纸颜色作为后备方案
+    uint16_t* layer2_buffer = (uint16_t*)LAYER2_MEMORY_BASE;
+    for (uint32_t y = 0; y < TRANSPARENT_STATUSBAR_HEIGHT; y++) {
+      for (uint32_t x = 0; x < lcd_params.hres; x++) {
+        uint32_t pixel_idx = y * lcd_params.hres + x;
+        // 使用深蓝色作为壁纸背景色
+        layer2_buffer[pixel_idx] = 0x1A3B;  // 深蓝色 RGB565
+      }
+    }
+    
+    // 更新备份缓冲区
+    if (g_statusbar_backup_buffer != NULL) {
+      printf("Updating backup buffer with fallback color\n");
+      for (uint32_t y = 0; y < TRANSPARENT_STATUSBAR_HEIGHT; y++) {
+        for (uint32_t x = 0; x < lcd_params.hres; x++) {
+          uint32_t pixel_idx = y * lcd_params.hres + x;
+          g_statusbar_backup_buffer[pixel_idx] = 0x1A3B;  // 深蓝色
+        }
+      }
+      g_statusbar_backup_valid = true;
+    }
+    
+    printf("CoverBackground: Applied fallback color to statusbar area\n");
+    return;
+  }
+  
+  // 获取解码后的图片信息
+  uint32_t width, height, subsampling;
+  jpeg_decode_info(&width, &height, &subsampling);
+  
+  printf("JPEG decoded for statusbar: %lux%lu, subsampling: %lu\n", width, height, subsampling);
+  
+  // 只复制状态栏区域的数据
+  uint32_t copy_width = (width > lcd_params.hres) ? lcd_params.hres : width;
+  uint32_t copy_height = (TRANSPARENT_STATUSBAR_HEIGHT > height) ? height : TRANSPARENT_STATUSBAR_HEIGHT;
+  
+  uint16_t* layer2_buffer = (uint16_t*)LAYER2_MEMORY_BASE;
+  
+  printf("Copying JPEG statusbar area: %lu x %lu pixels\n", copy_width, copy_height);
+  
+  // 检查解码后的数据格式，使用DMA2D进行正确的格式转换
+  if (subsampling == JPEG_420_SUBSAMPLING || subsampling == JPEG_422_SUBSAMPLING || subsampling == JPEG_444_SUBSAMPLING) {
+    // JPEG数据需要YCbCr到RGB转换，使用DMA2D
+    printf("Converting YCbCr to RGB565 for statusbar area using DMA2D...\n");
+    
+    // 为状态栏区域创建临时缓冲区
+    uint32_t temp_buffer_addr = jpeg_output_address + (width * height * 2);  // 在JPEG缓冲区后面
+    
+    // 使用DMA2D转换状态栏区域
+    dma2d_copy_ycbcr_to_rgb((uint32_t*)jpeg_output_address, 
+                            (uint32_t*)temp_buffer_addr,
+                            copy_width, copy_height, subsampling);
+    
+    // 复制转换后的数据到Layer2状态栏区域
+    uint16_t* temp_buffer = (uint16_t*)temp_buffer_addr;
+    for (uint32_t y = 0; y < copy_height; y++) {
+      for (uint32_t x = 0; x < copy_width; x++) {
+        uint32_t dst_idx = y * lcd_params.hres + x;
+        uint32_t src_idx = y * copy_width + x;
+        layer2_buffer[dst_idx] = temp_buffer[src_idx];
+      }
+    }
+  } else {
+    // 如果是RGB565格式，直接复制
+    printf("Direct RGB565 copy for statusbar area...\n");
+    uint16_t* jpeg_buffer = (uint16_t*)jpeg_output_address;
+    
+    for (uint32_t y = 0; y < copy_height; y++) {
+      for (uint32_t x = 0; x < copy_width; x++) {
+        uint32_t dst_idx = y * lcd_params.hres + x;
+        uint32_t src_idx = y * width + x;
+        layer2_buffer[dst_idx] = jpeg_buffer[src_idx];
+      }
+    }
+  }
+  
+  // 更新备份缓冲区
+  if (g_statusbar_backup_buffer != NULL) {
+    printf("Updating backup buffer with reloaded JPEG data\n");
+    for (uint32_t y = 0; y < TRANSPARENT_STATUSBAR_HEIGHT; y++) {
+      for (uint32_t x = 0; x < lcd_params.hres; x++) {
+        uint32_t pixel_idx = y * lcd_params.hres + x;
+        g_statusbar_backup_buffer[pixel_idx] = layer2_buffer[pixel_idx];
+      }
+    }
+    g_statusbar_backup_valid = true;
+  }
+  
+  // 验证加载的数据
+  uint32_t non_black_pixels = 0;
+  for (uint32_t i = 0; i < lcd_params.hres * TRANSPARENT_STATUSBAR_HEIGHT; i++) {
+    if (layer2_buffer[i] != 0x0000) {
+      non_black_pixels++;
+    }
+  }
+  printf("CoverBackground: Reloaded statusbar has %lu non-black pixels\n", non_black_pixels);
 }
 
 // Function to ensure second layer remains active
