@@ -247,33 +247,33 @@ def get_onekey_features() -> OnekeyFeatures:
 async def handle_Initialize(
     ctx: wire.Context | wire.QRContext, msg: Initialize
 ) -> Features:
-    if hasattr(msg, "is_contains_attach") and msg.is_contains_attach is not None:
+    has_attach = (
+        hasattr(msg, "is_contains_attach") and msg.is_contains_attach is not None
+    )
+    if has_attach:
         storage.cache.set(storage.cache.APP_COMMON_CLIENT_CONTAINS_ATTACH, b"\x01")
     else:
         storage.cache.delete(storage.cache.APP_COMMON_CLIENT_CONTAINS_ATTACH)
+    ps_raw = getattr(msg, "passphrase_state", None)
+    if isinstance(ps_raw, bytes):
+        passphrase_state = ps_raw.decode() if ps_raw else None
+    elif isinstance(ps_raw, str):
+        passphrase_state = ps_raw
+    else:
+        passphrase_state = None
 
-    prev_session_id = storage.cache.get_session_id()
-
-    from apps.common import passphrase
-
-    passphrase_pin_enabled = passphrase.is_passphrase_pin_enabled()
-    if (
-        device_is_unlocked()
-        and prev_session_id != msg.session_id
-        and hasattr(msg, "passphrase_state")
-        and msg.passphrase_state is not None
-        and passphrase_pin_enabled
-        and msg.passphrase_state != ""
-        and se_thd89.check_passphrase_btc_test_address(
-            msg.passphrase_state
-            if isinstance(msg.passphrase_state, str)
-            else msg.passphrase_state.decode()
-        )
+    session_id_in_msg = getattr(msg, "session_id", None)
+    if passphrase_state and se_thd89.check_passphrase_btc_test_address(
+        passphrase_state
     ):
         session_id = storage.cache.start_session()
+    elif has_attach and session_id_in_msg is not None and passphrase_state is None:
+        session_id = storage.cache.start_session()
     else:
-        session_id = storage.cache.start_session(msg.session_id)
+        session_id = storage.cache.start_session(session_id_in_msg)
+
     if not utils.BITCOIN_ONLY:
+
         if utils.USE_THD89:
             if msg.derive_cardano is not None and msg.derive_cardano:
                 state = se_thd89.get_session_state()
@@ -664,7 +664,6 @@ def get_pinlocked_handler(
 
     async def wrapper(ctx: wire.Context, msg: wire.Msg) -> protobuf.MessageType:
         await unlock_device(ctx)
-        storage.cache.start_session()
         return await orig_handler(ctx, msg)
 
     return wrapper
@@ -756,7 +755,6 @@ async def handle_UnLockDevice(
     """Handle UnLockDevice message to unlock the device if needed."""
     if not config.is_unlocked():
         await unlock_device(ctx, pin_use_type=PinType.USER_AND_PASSPHRASE_PIN)
-        storage.cache.start_session()
 
     # Get current device state after unlock attempt
     from apps.common import passphrase
