@@ -1354,17 +1354,13 @@ void lcd_cover_background_move_to_y(int16_t y_position) {
   // 更新状态
   cover_bg_state.y_offset = y_position;
   
-  // 处理边界情况 - Layer2完全移出屏幕上方时
-  // 但是，如果状态栏应该显示不透明内容，保持Layer2部分可见
-  if (y_position <= -((int16_t)lcd_params.vres) && g_statusbar_transparent) {
-    // 只有在状态栏透明时才完全禁用Layer2
+  // 处理边界情况 - Layer2完全移出屏幕上方时，直接禁用Layer2
+  if (y_position <= -((int16_t)lcd_params.vres)) {
+    // Layer2完全移出屏幕，禁用显示
+    printf("CoverBackground: Layer2 completely off-screen at Y=%d, disabling\n", y_position);
     __HAL_LTDC_LAYER_DISABLE(&hlcd_ltdc, 1);
     __HAL_LTDC_RELOAD_CONFIG(&hlcd_ltdc);
     return;
-  } else if (y_position <= -((int16_t)lcd_params.vres) && !g_statusbar_transparent) {
-    // 状态栏不透明时，即使Y=-800，也要保持顶部44像素可见
-    printf("CoverBackground: Keeping statusbar visible at Y=%d\n", y_position);
-    y_position = -(lcd_params.vres - TRANSPARENT_STATUSBAR_HEIGHT);
   }
   
   // 确保Layer1启用

@@ -623,22 +623,33 @@ class MainScreen(Screen):
                                 # 然后恢复Layer2顶部44像素的不透明状态
                                 # False = 不透明，显示完整背景图片内容
                                 display.cover_background_set_statusbar_opacity(False)
-                                
-                                # 立即执行动画
-                                display.cover_background_animate_to_y(-800, 450)
-                                
-                                # 动画完成后再隐藏layer（450ms动画时间 + 50ms缓冲）
-                                hide_timer = lv.timer_create(
-                                    lambda t: display.cover_background_hide() if hasattr(display, 'cover_background_hide') else None,
-                                    500, None
-                                )
-                                hide_timer.set_repeat_count(1)
-                                
-                                # 设置Layer1背景图片
+
+                                # 立即设置Layer1背景图片（在动画开始前）
+                                # 这样在Layer2滑动过程中就能看到正确的Layer1背景
                                 self.add_style(
                                     StyleWrapper().bg_img_src("A:/res/2222.png").border_width(0),
                                     0,
                                 )
+                                
+                                # 强制刷新UI，确保Layer1背景立即生效
+                                lv.refr_now(None)
+                                
+                                # 短暂延迟确保背景设置完成
+                                def start_animation():
+                                    display.cover_background_animate_to_y(-800, 450)
+                                    
+                                    # 动画完成后再隐藏layer（450ms动画时间 + 50ms缓冲）
+                                    hide_timer = lv.timer_create(
+                                        lambda t: display.cover_background_hide() if hasattr(display, 'cover_background_hide') else None,
+                                        500, None
+                                    )
+                                    hide_timer.set_repeat_count(1)
+                                
+                                # 延迟50毫秒开始动画，让Layer1背景先设置好
+                                animation_timer = lv.timer_create(lambda t: start_animation(), 50, None)
+                                animation_timer.set_repeat_count(1)
+                                
+  
                             else:
                                 # 如果没有动画函数，直接隐藏
                                 if hasattr(display, 'cover_background_hide'):
