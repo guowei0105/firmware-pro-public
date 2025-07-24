@@ -606,6 +606,17 @@ class MainScreen(Screen):
                         # UP手势：向上滑出动画
                         if hasattr(display, 'cover_background_is_visible') and display.cover_background_is_visible():
                             if hasattr(display, 'cover_background_animate_to_y'):
+                                print("UP gesture: Starting statusbar restore and animation")
+                                
+                                # 取消任何下滑动画的延迟定时器，防止竞争条件
+                                if hasattr(self, '_down_gesture_transparency_timer'):
+                                    print("UP gesture: Cancelling down gesture transparency timer")
+                                    try:
+                                        self._down_gesture_transparency_timer.delete()
+                                    except:
+                                        pass
+                                    delattr(self, '_down_gesture_transparency_timer')
+                                
                                 # 上滑前先重新加载JPEG状态栏区域，确保有正确的背景内容
                                 if hasattr(display, 'cover_background_reload_statusbar_from_jpeg'):
                                     try:
@@ -615,17 +626,21 @@ class MainScreen(Screen):
                                         if not homescreen_path:
                                             homescreen_path = "/res/wallpaper-1.jpg"  # 使用正确的路径
                                         
+                                        print(f"UP gesture: Reloading JPEG from {homescreen_path}")
                                         display.cover_background_reload_statusbar_from_jpeg(homescreen_path)
                                     except Exception:
                                         # 如果重新加载失败，使用默认路径
+                                        print("UP gesture: Reloading JPEG from fallback path")
                                         display.cover_background_reload_statusbar_from_jpeg("/res/wallpaper-1.jpg")
                                 
                                 # 然后恢复Layer2顶部44像素的不透明状态
                                 # False = 不透明，显示完整背景图片内容
+                                print("UP gesture: Setting statusbar to opaque")
                                 display.cover_background_set_statusbar_opacity(False)
 
                                 # 立即设置Layer1背景图片（在动画开始前）
                                 # 这样在Layer2滑动过程中就能看到正确的Layer1背景
+                                print("UP gesture: Setting Layer1 background to res/2222.png")
                                 self.add_style(
                                     StyleWrapper().bg_img_src("A:/res/2222.png").border_width(0),
                                     0,
@@ -636,6 +651,7 @@ class MainScreen(Screen):
                                 
                                 # 短暂延迟确保背景设置完成
                                 def start_animation():
+                                    print("UP gesture: Starting slide up animation")
                                     display.cover_background_animate_to_y(-800, 450)
                                     
                                     # 动画完成后再隐藏layer（450ms动画时间 + 50ms缓冲）
@@ -692,25 +708,62 @@ class MainScreen(Screen):
                             
                             # DOWN手势：从顶部滑入动画
                             if hasattr(display, 'cover_background_animate_to_y'):
+                                print("DOWN gesture: Starting slide down animation")
+                                
                                 # 先将layer移动到屏幕上方
                                 display.cover_background_move_to_y(-800)
                                 # Layer1始终保持不透明，无需设置
                                 if hasattr(display, 'cover_background_set_visible'):
                                     display.cover_background_set_visible(True)
                                 
-                                # 在动画开始时设置状态栏为透明，确保状态栏可见
+                                # 下滑开始时，确保Layer2状态栏为不透明（显示完整图案）
                                 if hasattr(display, 'cover_background_set_statusbar_opacity'):
-                                    display.cover_background_set_statusbar_opacity(True)  # True = 透明
+                                    print("DOWN gesture: Setting statusbar to opaque for complete image")
+                                    display.cover_background_set_statusbar_opacity(False)  # False = 不透明，显示完整图案
                                 
                                 # 流畅的从顶部滑入动画
                                 display.cover_background_animate_to_y(0, 350)
                                 
-                                # 动画结束时将状态栏设为完全透明（延迟350ms，动画完成时）
-                                opacity_timer = lv.timer_create(
-                                    lambda t: display.cover_background_set_statusbar_opacity(True) if hasattr(display, 'cover_background_set_statusbar_opacity') else None,
+                                # 动画结束后的处理步骤
+                                def on_animation_complete():
+                                    print("DOWN gesture: Animation complete, setting up Layer1 background")
+                                    
+                                    # 步骤1: 设置Layer1背景为和Layer2一样的背景图
+                                    try:
+                                        from storage import device
+                                        homescreen_path = device.get_homescreen()
+                                        
+                                        if not homescreen_path:
+                                            homescreen_path = "/res/wallpaper-1.jpg"
+                                        
+                                        print(f"DOWN gesture: Setting Layer1 background to {homescreen_path}")
+                                        # 设置Layer1背景图片为和Layer2相同的壁纸
+                                        self.add_style(
+                                            StyleWrapper().bg_img_src(homescreen_path).border_width(0),
+                                            0,
+                                        )
+                                        
+                                        # 强制刷新UI确保Layer1背景立即生效
+                                        lv.refr_now(None)
+                                        
+                                        # 立即设置Layer2状态栏为透明，不使用延迟定时器
+                                        # 这样可以避免与上滑手势的竞争条件
+                                        print("DOWN gesture: Setting statusbar transparent to show Layer1 UI")
+                                        if hasattr(display, 'cover_background_set_statusbar_opacity'):
+                                            display.cover_background_set_statusbar_opacity(True)  # True = 透明，显示Layer1状态栏
+                                        
+                                    except Exception:
+                                        print("DOWN gesture: Error setting Layer1 background, setting statusbar transparent")
+                                        # 如果出错，直接设置透明
+                                        if hasattr(display, 'cover_background_set_statusbar_opacity'):
+                                            display.cover_background_set_statusbar_opacity(True)
+                                
+                                # 动画完成时执行处理步骤（延迟350ms，动画完成时）
+                                completion_timer = lv.timer_create(
+                                    lambda t: on_animation_complete(),
                                     350, None
                                 )
-                                opacity_timer.set_repeat_count(1)
+                                completion_timer.set_repeat_count(1)
                             else:
                                 # 如果没有动画函数，直接显示
                                 if hasattr(display, 'cover_background_show'):
