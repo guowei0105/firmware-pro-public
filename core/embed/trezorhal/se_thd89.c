@@ -3,6 +3,7 @@
 
 #include "common.h"
 #include "flash.h"
+#include "irq.h"
 #include "memzero.h"
 #include "secbool.h"
 
@@ -263,15 +264,30 @@ static secbool se_transmit_mac_ex(uint8_t addr, uint8_t *session_key,
 
 secbool se_transmit_mac(uint8_t ins, uint8_t p1, uint8_t p2, uint8_t *data,
                         uint16_t data_len, uint8_t *recv, uint16_t *recv_len) {
-  return se_transmit_mac_ex(THD89_MASTER_ADDRESS, se_session_key, ins, p1, p2,
-                            data, data_len, recv, recv_len);
+  uint32_t irq = disable_irq();
+  thd89_irq_nest++;
+  secbool result = se_transmit_mac_ex(THD89_MASTER_ADDRESS, se_session_key, ins,
+                                      p1, p2, data, data_len, recv, recv_len);
+  thd89_irq_nest--;
+  if (thd89_irq_nest == 0) {
+    enable_irq(irq);
+  }
+  return result;
 }
 
 secbool se_fp_transmit_mac(uint8_t ins, uint8_t p1, uint8_t p2, uint8_t *data,
                            uint16_t data_len, uint8_t *recv,
                            uint16_t *recv_len) {
-  return se_transmit_mac_ex(THD89_FINGER_ADDRESS, se_fp_session_key, ins, p1,
-                            p2, data, data_len, recv, recv_len);
+  uint32_t irq = disable_irq();
+  thd89_irq_nest++;
+  secbool result =
+      se_transmit_mac_ex(THD89_FINGER_ADDRESS, se_fp_session_key, ins, p1, p2,
+                         data, data_len, recv, recv_len);
+  thd89_irq_nest--;
+  if (thd89_irq_nest == 0) {
+    enable_irq(irq);
+  }
+  return result;
 }
 
 secbool se_random_encrypted(uint8_t *rand, uint16_t len) {
@@ -1478,6 +1494,47 @@ secbool se_get_pin_passphrase_space(uint8_t *space) {
   return sectrue;
 }
 
+secbool se_change_pin_passphrase_ex(uint8_t addr, uint8_t *session_key,
+                                    const char *old_pin, const char *new_pin) {
+  uint8_t buf[128];
+  uint8_t resp[1];
+  uint16_t resp_len = 1;
+
+  if (strlen(old_pin) < 6 || strlen(old_pin) > PIN_MAX_LENGTH ||
+      strlen(new_pin) < 6 || strlen(new_pin) > PIN_MAX_LENGTH) {
+    return secfalse;
+  }
+
+  buf[0] = strlen(old_pin);
+  memcpy(buf + 1, (uint8_t *)old_pin, strlen(old_pin));
+  buf[1 + strlen(old_pin)] = strlen(new_pin);
+  memcpy(buf + 1 + strlen(old_pin) + 1, (uint8_t *)new_pin, strlen(new_pin));
+
+  if (!se_transmit_mac_ex(addr, session_key, SE_INS_PIN, 0x00, 0x0E, buf,
+                          1 + strlen(old_pin) + 1 + strlen(new_pin), resp,
+                          &resp_len)) {
+    return secfalse;
+  }
+  if (resp[0] == PIN_SUCCESS) {
+    return sectrue;
+  }
+  return secfalse;
+}
+
+secbool se_change_pin_passphrase(const char *old_pin, const char *new_pin) {
+  secbool result = se_change_pin_passphrase_ex(
+      THD89_MASTER_ADDRESS, se_session_key, old_pin, new_pin);
+  if (result == sectrue) {
+    secbool fp_result = se_change_pin_passphrase_ex(
+        THD89_FINGER_ADDRESS, se_fp_session_key, old_pin, new_pin);
+    if (fp_result == sectrue) {
+      return sectrue;
+    }
+    return secfalse;
+  }
+  return secfalse;
+}
+
 pin_result_t se_get_pin_result_type(void) { return pin_result_type; }
 pin_result_t se_get_pin_passphrase_ret(void) { return pin_passphrase_ret; }
 
@@ -1954,6 +2011,14 @@ uint8_t *se_session_startSession(const uint8_t *received_session_id) {
 secbool se_session_get_type(uint8_t *type) {
   uint16_t recv_len = 1;
   if (!se_transmit_mac(SE_INS_SESSION, 0x00, 0x09, NULL, 0, type, &recv_len)) {
+    return secfalse;
+  }
+  return sectrue;
+}
+
+secbool se_session_get_current_id(uint8_t id[32]) {
+  uint16_t recv_len = 32;
+  if (!se_transmit_mac(SE_INS_SESSION, 0x00, 0x0A, NULL, 0, id, &recv_len)) {
     return secfalse;
   }
   return sectrue;

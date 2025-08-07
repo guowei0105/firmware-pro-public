@@ -150,6 +150,21 @@ STATIC MP_DEFINE_CONST_FUN_OBJ_0(
     mod_trezorcrypto_se_thd89_get_session_state_obj,
     mod_trezorcrypto_se_thd89_get_session_state);
 
+/// def get_session_current_id() -> bytes:
+///     """
+///     get current session id.
+///     """
+STATIC mp_obj_t mod_trezorcrypto_se_thd89_get_session_current_id(void) {
+  uint8_t session_id[32] = {0};
+  if (!se_session_get_current_id(session_id)) {
+    return mp_const_none;
+  }
+  return mp_obj_new_bytes(session_id, 32);
+}
+STATIC MP_DEFINE_CONST_FUN_OBJ_0(
+    mod_trezorcrypto_se_thd89_get_session_current_id_obj,
+    mod_trezorcrypto_se_thd89_get_session_current_id);
+
 /// def session_is_open() -> bool:
 ///     """
 ///     get current session secret state.
@@ -1084,6 +1099,42 @@ STATIC MP_DEFINE_CONST_FUN_OBJ_1(
     mod_trezorcrypto_se_thd89_check_passphrase_btc_test_address_obj,
     mod_trezorcrypto_se_thd89_check_passphrase_btc_test_address);
 
+/// def change_pin_passphrase(old_pin: str, new_pin: str) -> bool:
+///     """
+///     Change the PIN of an existing passphrase entry.
+///     Returns True on success, False on failure.
+///     """
+STATIC mp_obj_t mod_trezorcrypto_se_thd89_change_pin_passphrase(
+    mp_obj_t old_pin, mp_obj_t new_pin) {
+  mp_buffer_info_t old_pin_buf = {0};
+  mp_get_buffer_raise(old_pin, &old_pin_buf, MP_BUFFER_READ);
+
+  mp_buffer_info_t new_pin_buf = {0};
+  mp_get_buffer_raise(new_pin, &new_pin_buf, MP_BUFFER_READ);
+
+  if (old_pin_buf.len < 6 || old_pin_buf.len > PIN_MAX_LENGTH) {
+    mp_raise_ValueError("Old PIN length must be between 6 and 50 characters");
+  }
+
+  if (new_pin_buf.len < 6 || new_pin_buf.len > PIN_MAX_LENGTH) {
+    mp_raise_ValueError("New PIN length must be between 6 and 50 characters");
+  }
+
+  if (old_pin_buf.len == new_pin_buf.len) {
+    if (memcmp(old_pin_buf.buf, new_pin_buf.buf, old_pin_buf.len) == 0) {
+      mp_raise_ValueError("New PIN cannot be the same as old PIN");
+    }
+  }
+
+  secbool ret = se_change_pin_passphrase((const char *)old_pin_buf.buf,
+                                         (const char *)new_pin_buf.buf);
+
+  return ret ? mp_const_true : mp_const_false;
+}
+STATIC MP_DEFINE_CONST_FUN_OBJ_2(
+    mod_trezorcrypto_se_thd89_change_pin_passphrase_obj,
+    mod_trezorcrypto_se_thd89_change_pin_passphrase);
+
 /// FIDO2_CRED_COUNT_MAX: int
 
 STATIC const mp_rom_map_elem_t mod_trezorcrypto_se_thd89_globals_table[] = {
@@ -1100,6 +1151,8 @@ STATIC const mp_rom_map_elem_t mod_trezorcrypto_se_thd89_globals_table[] = {
      MP_ROM_PTR(&mod_trezorcrypto_se_thd89_end_session_obj)},
     {MP_ROM_QSTR(MP_QSTR_get_session_state),
      MP_ROM_PTR(&mod_trezorcrypto_se_thd89_get_session_state_obj)},
+    {MP_ROM_QSTR(MP_QSTR_get_session_current_id),
+     MP_ROM_PTR(&mod_trezorcrypto_se_thd89_get_session_current_id_obj)},
     {MP_ROM_QSTR(MP_QSTR_session_is_open),
      MP_ROM_PTR(&mod_trezorcrypto_se_thd89_session_is_open_obj)},
     {MP_ROM_QSTR(MP_QSTR_get_session_type),
@@ -1169,6 +1222,8 @@ STATIC const mp_rom_map_elem_t mod_trezorcrypto_se_thd89_globals_table[] = {
     {MP_ROM_QSTR(MP_QSTR_check_passphrase_btc_test_address),
      MP_ROM_PTR(
          &mod_trezorcrypto_se_thd89_check_passphrase_btc_test_address_obj)},
+    {MP_ROM_QSTR(MP_QSTR_change_pin_passphrase),
+     MP_ROM_PTR(&mod_trezorcrypto_se_thd89_change_pin_passphrase_obj)},
     {MP_ROM_QSTR(MP_QSTR_USER_PIN_ENTERED), MP_ROM_INT(USER_PIN_ENTERED)},
     {MP_ROM_QSTR(MP_QSTR_PASSPHRASE_PIN_ENTERED),
      MP_ROM_INT(PASSPHRASE_PIN_ENTERED)},

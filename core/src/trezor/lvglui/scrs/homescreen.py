@@ -4315,8 +4315,7 @@ class PowerOff(FullSizeWindow):
                             allow_cancel=False,
                             callback=self.back,
                             allow_fingerprint=False,
-                            pin_use_type=1,
-                            standy_wall_only=True,
+                            pin_use_type=2,
                         )
                     )
                 else:
@@ -4556,8 +4555,6 @@ class SecurityScreen(AnimScreen):
             self._init = True
         else:
             utils.mark_collecting_fingerprint_done()
-            if not self.is_visible():
-                self.load_screen(self)
             return
         super().__init__(prev_scr, title=_(i18n_keys.TITLE__SECURITY), nav_back=True)
 
