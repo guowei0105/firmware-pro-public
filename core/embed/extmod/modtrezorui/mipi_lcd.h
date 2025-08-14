@@ -92,7 +92,35 @@ void dma2d_copy_ycbcr_to_rgb(uint32_t *pSrc, uint32_t *pDst, uint16_t xsize,
 
 void lcd_set_src_addr(uint32_t addr);
 uint32_t lcd_get_src_addr(void);
-void lcd_set_window(uint16_t x0, uint16_t y0, uint16_t w, uint16_t h);
+
+// 第二层layer相关函数
+void lcd_add_second_layer(void);
+// void lcd_clear_layer2_memory(void);
+void lcd_ensure_second_layer(void);
+void lcd_animation_init(void);
+
+// CoverBackground 硬件层函数
+void lcd_cover_background_init(void);
+void lcd_cover_background_set_layer1_path(const char* path);
+void lcd_cover_background_update_layer1_from_layer2(void);
+void lcd_cover_background_sync_layer1_background(void);
+void lcd_cover_background_show(void);
+void lcd_cover_background_hide(void);
+void lcd_cover_background_set_opacity(uint8_t opacity);
+void lcd_cover_background_set_visible(bool visible);
+void lcd_cover_background_set_image(const void* image_data, uint32_t image_size);
+void lcd_cover_background_load_jpeg(const char* jpeg_path);
+void lcd_cover_background_move_to_y(int16_t y_position);
+void lcd_cover_background_set_statusbar_opacity(bool transparent);
+void lcd_cover_background_reload_statusbar_from_jpeg(const char* jpeg_path);
+void lcd_cover_background_animate_to_y(int16_t target_y, uint16_t duration_ms);
+void lcd_cover_background_start_animation(int16_t target_y, uint16_t duration_ms);
+bool lcd_cover_background_update_animation(void);
+bool lcd_cover_background_has_active_animation(void);
+void lcd_cover_background_stop_animation(void);
+bool lcd_cover_background_is_animating(void);
+uint8_t lcd_cover_background_get_opacity(void);
+bool lcd_cover_background_is_visible(void);
 
 // #ifdef __cplusplus
 // }
