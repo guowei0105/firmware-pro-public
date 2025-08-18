@@ -458,9 +458,6 @@ def _wrap_with_version_check(handler):
     async def wrapper(ctx, msg):
         # Execute the original handler
         result = await handler(ctx, msg)
-        from apps.base import check_version_compatibility
-
-        check_version_compatibility()
         return result
 
     return wrapper

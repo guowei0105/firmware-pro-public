@@ -168,8 +168,12 @@ def get_features() -> Features:
         f.attach_to_pin_user = False
     # private fields:
     if config.is_unlocked():
+        from apps.common import passphrase
         # passphrase_protection is private, see #1807
-        f.passphrase_protection = storage.device.is_passphrase_enabled()
+        if not has_attach_to_pin_capability() and passphrase.is_passphrase_pin_enabled():
+            f.passphrase_protection = False
+        else:
+            f.passphrase_protection = storage.device.is_passphrase_enabled()
         f.needs_backup = storage.device.needs_backup()
         f.unfinished_backup = storage.device.unfinished_backup()
         f.no_backup = storage.device.no_backup()
@@ -183,7 +187,7 @@ def get_features() -> Features:
         f.auto_lock_delay_ms = storage.device.get_autolock_delay_ms()
         f.display_rotation = storage.device.get_rotation()
         f.experimental_features = storage.device.get_experimental_features()
-        from apps.common import passphrase
+        
 
         f.unlocked_attach_pin = passphrase.is_passphrase_pin_enabled()
 
@@ -273,8 +277,6 @@ async def handle_Initialize(
             session_id = storage.cache.start_session(session_id_in_msg)
         else:
             session_id = storage.cache.start_session()
-    elif has_attach and session_id_in_msg is not None and passphrase_state is None:
-        session_id = storage.cache.start_session()
     elif device_is_unlocked() and storage.device.is_passphrase_pin_enabled():
         session_id = storage.cache.start_session()
     else:
