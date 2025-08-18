@@ -295,45 +295,8 @@ static HAL_StatusTypeDef ltdc_layer_config(LTDC_HandleTypeDef* hltdc,
     pLayerCfg.BlendingFactor1 = LTDC_BLENDING_FACTOR1_PAxCA;
     pLayerCfg.BlendingFactor2 = LTDC_BLENDING_FACTOR2_PAxCA;
   }
-  
   // 配置图层
   HAL_StatusTypeDef result = HAL_LTDC_ConfigLayer(hltdc, &pLayerCfg, layer_index);
-  
-  // 为Layer2根据当前状态配置Color Keying
-  // 动画期间避免重新配置Color Keying，防止屏幕闪烁
-  if (layer_index == 1 && result == HAL_OK && !g_animation_in_progress) {
-    if (g_statusbar_transparent) {
-      // 状态栏透明：启用Color Keying
-      uint16_t color_key = TRANSPARENT_COLOR_KEY;
-      uint32_t red = ((color_key >> 11) & 0x1F) << 3;     // R5 -> R8
-      uint32_t green = ((color_key >> 5) & 0x3F) << 2;    // G6 -> G8
-      uint32_t blue = (color_key & 0x1F) << 3;            // B5 -> B8
-      
-      uint32_t rgb888_key = (red << 16) | (green << 8) | blue;
-      
-      printf("Configuring Layer2 with Color Keying support\n");
-      printf("Enabling Color Keying for Layer2: 0x%04x -> 0x%06lx (R:%lu G:%lu B:%lu)\n", 
-             color_key, rgb888_key, red, green, blue);
-      
-      // 启用Color Keying
-      if (HAL_LTDC_ConfigColorKeying(hltdc, rgb888_key, layer_index) == HAL_OK) {
-        if (HAL_LTDC_EnableColorKeying(hltdc, layer_index) == HAL_OK) {
-          printf("Color Keying enabled successfully for Layer2\n");
-        } else {
-          printf("Failed to enable Color Keying for Layer2\n");
-        }
-      } else {
-        printf("Failed to configure Color Keying for Layer2\n");
-      }
-    } else {
-      // 状态栏不透明：禁用Color Keying
-      printf("Configuring Layer2 without Color Keying (opaque statusbar)\n");
-      HAL_LTDC_DisableColorKeying(hltdc, layer_index);
-    }
-  } else if (layer_index == 1 && g_animation_in_progress) {
-    // 动画期间不重新配置Color Keying，避免闪烁
-    printf("Skipping Color Keying reconfiguration during animation to prevent flicker\n");
-  }
   return result;
 }
 
@@ -974,16 +937,21 @@ static struct {
 
 // 初始化 CoverBackground 内容
 void lcd_cover_background_init(void) { // 初始化CoverBackground内容
-  if (!g_layer2_initialized) { // 如果Layer2未初始化
-    return; // 直接返回
-  }
+  // 注意：这个函数现在在 g_layer2_initialized 设置之前调用
+  // 所以不需要检查 g_layer2_initialized，但需要确保备份缓冲区被正确初始化
   
   // 在初始化时就分配备份缓冲区
   if (g_statusbar_backup_buffer == NULL) {
-    uint32_t backup_size = lcd_params.hres * TRANSPARENT_STATUSBAR_HEIGHT * sizeof(uint16_t);
+    // uint32_t backup_size = lcd_params.hres * TRANSPARENT_STATUSBAR_HEIGHT * sizeof(uint16_t);
     // 使用SDRAM中的一个安全位置（在Layer2内存后面）
     g_statusbar_backup_buffer = (uint16_t*)(LAYER2_MEMORY_BASE + lcd_params.hres * lcd_params.vres * 2 + 0x1000);
-    printf("CoverBackground: Allocated backup buffer at 0x%p, size: %lu bytes\n", g_statusbar_backup_buffer, backup_size);
+    
+    // // 立即清空备份缓冲区，避免随机数据
+    // for (uint32_t i = 0; i < lcd_params.hres * TRANSPARENT_STATUSBAR_HEIGHT; i++) {
+    //   g_statusbar_backup_buffer[i] = 0x0000;
+    // }
+    
+    // printf("CoverBackground: Allocated and cleared backup buffer at 0x%p, size: %lu bytes\n", g_statusbar_backup_buffer, backup_size);
   }
   
   uint16_t *layer2_buffer = (uint16_t*)LAYER2_MEMORY_BASE; // 获取Layer2缓冲区指针
@@ -1693,7 +1661,13 @@ void lcd_cover_background_set_statusbar_opacity(bool transparent) {
       if (g_statusbar_backup_buffer == NULL) {
         uint32_t backup_size = lcd_params.hres * TRANSPARENT_STATUSBAR_HEIGHT * sizeof(uint16_t);
         g_statusbar_backup_buffer = (uint16_t*)(LAYER2_MEMORY_BASE + lcd_params.hres * lcd_params.vres * 2 + 0x1000);
-        printf("CoverBackground: Allocated backup buffer at 0x%p, size: %lu bytes\n", g_statusbar_backup_buffer, backup_size);
+        
+        // // 立即清空备份缓冲区，避免随机数据
+        // for (uint32_t i = 0; i < lcd_params.hres * TRANSPARENT_STATUSBAR_HEIGHT; i++) {
+        //   g_statusbar_backup_buffer[i] = 0x0000;
+        // }
+        
+        printf("CoverBackground: Allocated and cleared backup buffer at 0x%p, size: %lu bytes\n", g_statusbar_backup_buffer, backup_size);
       }
       
       // 保存数据到备份缓冲区并验证
@@ -1770,15 +1744,12 @@ void lcd_cover_background_set_statusbar_opacity(bool transparent) {
         }
       }
       printf("CoverBackground: About to restore %lu non-black pixels from backup\n", backup_non_black);
-      
       for (uint32_t y = 0; y < TRANSPARENT_STATUSBAR_HEIGHT; y++) {
         for (uint32_t x = 0; x < lcd_params.hres; x++) {
           uint32_t pixel_idx = y * lcd_params.hres + x;
           layer2_buffer[pixel_idx] = g_statusbar_backup_buffer[pixel_idx];
         }
-      }
-      
-      // 验证恢复后的数据
+      }      
       uint32_t restored_non_black = 0;
       for (uint32_t i = 0; i < lcd_params.hres * TRANSPARENT_STATUSBAR_HEIGHT; i++) {
         if (layer2_buffer[i] != 0x0000) {
@@ -1788,8 +1759,6 @@ void lcd_cover_background_set_statusbar_opacity(bool transparent) {
       printf("CoverBackground: Restored data now has %lu non-black pixels\n", restored_non_black);
     }
   }
-  
-  // 立即重载LTDC配置以应用更改
   __HAL_LTDC_RELOAD_IMMEDIATE_CONFIG(&hlcd_ltdc);
 }
 
@@ -1800,7 +1769,6 @@ void lcd_cover_background_reload_statusbar_from_jpeg(const char* jpeg_path) {
   }
   
   printf("CoverBackground: Force reloading statusbar area from JPEG: %s\n", jpeg_path);
-  
   // 尝试多个可能的路径
   const char* paths_to_try[] = {
     jpeg_path,
@@ -1814,8 +1782,6 @@ void lcd_cover_background_reload_statusbar_from_jpeg(const char* jpeg_path) {
   uint32_t jpeg_output_address = FMC_SDRAM_JPEG_OUTPUT_DATA_BUFFER_ADDRESS;
   int decode_result = -1;
   const char* successful_path = NULL;
-  
-  // 尝试不同的路径
   for (int i = 0; paths_to_try[i] != NULL; i++) {
     printf("CoverBackground: Trying JPEG path: %s\n", paths_to_try[i]);
     decode_result = jped_decode((char*)paths_to_try[i], jpeg_output_address);
@@ -1835,8 +1801,7 @@ void lcd_cover_background_reload_statusbar_from_jpeg(const char* jpeg_path) {
     for (uint32_t y = 0; y < TRANSPARENT_STATUSBAR_HEIGHT; y++) {
       for (uint32_t x = 0; x < lcd_params.hres; x++) {
         uint32_t pixel_idx = y * lcd_params.hres + x;
-        // 使用深蓝色作为壁纸背景色
-        layer2_buffer[pixel_idx] = 0x1A3B;  // 深蓝色 RGB565
+        layer2_buffer[pixel_idx] = 0x1A3B;
       }
     }
     

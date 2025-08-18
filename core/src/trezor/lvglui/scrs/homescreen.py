@@ -385,15 +385,12 @@ class MainScreen(Screen):
             self.remove_style_all()
             self.set_pos(0, 0)
             self.set_size(lv.pct(100), lv.pct(100))
-            # 先设置黑色背景作为基础
             self.add_style(
                 StyleWrapper().bg_opa(lv.OPA.COVER).bg_color(lv_colors.BLACK).border_width(0),
                 0,
             )
-            
-            # 使用2222.png作为背景图片
             self.add_style(
-                StyleWrapper().bg_img_src("A:/res/2222.png").border_width(0),
+                StyleWrapper().bg_img_src("A:/res/wallpaper-1.jpg").border_width(0),
                 0,
             )
 
@@ -574,7 +571,6 @@ class MainScreen(Screen):
                     try:
                         from trezorui import Display
                         display = Display()
-                        
                         # UP手势：向上滑出动画
                         if hasattr(display, 'cover_background_is_visible') and display.cover_background_is_visible():
                             if hasattr(display, 'cover_background_animate_to_y'):
@@ -599,17 +595,14 @@ class MainScreen(Screen):
                                             homescreen_path = "/res/wallpaper-1.jpg"  # 使用正确的路径
                                         
                                         print(f"UP gesture: Reloading JPEG from {homescreen_path}")
-                                        display.cover_background_reload_statusbar_from_jpeg(homescreen_path)
+                                        display.cover_background_reload_statusbar_from_jpeg(homescreen_path)  ###lalye1
                                     except Exception:
-                                        # 如果重新加载失败，使用默认路径
                                         print("UP gesture: Reloading JPEG from fallback path")
-                                        display.cover_background_reload_statusbar_from_jpeg("/res/wallpaper-1.jpg")
-                                
+                                        display.cover_background_reload_statusbar_from_jpeg("/res/wallpaper-1.jpg")                                
                                 # 然后恢复Layer2顶部44像素的不透明状态
                                 # False = 不透明，显示完整背景图片内容
                                 print("UP gesture: Setting statusbar to opaque")
                                 display.cover_background_set_statusbar_opacity(False)
-
                                 # 立即设置Layer1背景图片（在动画开始前）
                                 # 这样在Layer2滑动过程中就能看到正确的Layer1背景
                                 print("UP gesture: Setting Layer1 background to res/2222.png")
@@ -624,12 +617,12 @@ class MainScreen(Screen):
                                 # 短暂延迟确保背景设置完成
                                 def start_animation():
                                     print("UP gesture: Starting slide up animation")
-                                    display.cover_background_animate_to_y(-800, 450)
+                                    display.cover_background_animate_to_y(-800, 250)
                                     
                                     # 动画完成后再隐藏layer（450ms动画时间 + 50ms缓冲）
                                     hide_timer = lv.timer_create(
                                         lambda t: display.cover_background_hide() if hasattr(display, 'cover_background_hide') else None,
-                                        300, None
+                                        150, None
                                     )
                                     hide_timer.set_repeat_count(1)
                                 
@@ -694,7 +687,7 @@ class MainScreen(Screen):
                                     display.cover_background_set_statusbar_opacity(False)  # False = 不透明，显示完整图案
                                 
                                 # 流畅的从顶部滑入动画
-                                display.cover_background_animate_to_y(0, 350)
+                                display.cover_background_animate_to_y(0, 250)
                                 
                                 # 动画结束后的处理步骤
                                 def on_animation_complete():
@@ -733,7 +726,7 @@ class MainScreen(Screen):
                                 # 动画完成时执行处理步骤（延迟350ms，动画完成时）
                                 completion_timer = lv.timer_create(
                                     lambda t: on_animation_complete(),
-                                    350, None
+                                    150, None
                                 )
                                 completion_timer.set_repeat_count(1)
                             else:

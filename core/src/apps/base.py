@@ -513,6 +513,19 @@ def set_homescreen(show_app_guide: bool = False) -> None:
     if not screen.is_visible():
         lv.scr_load(screen)
     lv.refr_now(None)
+    
+    # Set Layer2 statusbar transparency after screen is loaded and refreshed
+    if storage.device.is_initialized() and device_is_unlocked():
+        try:
+            from trezorui import Display
+            display = Display()
+            if hasattr(display, 'cover_background_set_statusbar_opacity'):
+                print("set_homescreen: Setting Layer2 statusbar to transparent")
+                display.cover_background_set_statusbar_opacity(True)  # True = transparent
+            else:
+                print("set_homescreen: cover_background_set_statusbar_opacity method not found")
+        except Exception as e:
+            print(f"set_homescreen: Error setting statusbar transparency: {e}")
 
 
 def store_ble_name(ble_name):
