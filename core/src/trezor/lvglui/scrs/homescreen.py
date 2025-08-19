@@ -753,6 +753,22 @@ class MainScreen(Screen):
                 if hasattr(display, 'cover_background_animate_to_y'):
                     print("AppDrawer: Starting slide down animation")
                     
+                    # 立即隐藏AppDrawer，避免在layer2动画期间看到应用图标
+                    self.add_flag(lv.obj.FLAG.HIDDEN)
+                    self.visible = False
+                    self.add_flag(lv.obj.FLAG.GESTURE_BUBBLE)
+                    print("AppDrawer: AppDrawer hidden immediately before animation")
+                    
+                    # 显示MainScreen元素
+                    self.parent.hidden_others(False)
+                    if hasattr(self.parent, 'up_arrow'):
+                        self.parent.up_arrow.clear_flag(lv.obj.FLAG.HIDDEN)
+                    if hasattr(self.parent, 'bottom_tips'):
+                        self.parent.bottom_tips.clear_flag(lv.obj.FLAG.HIDDEN)
+                    if hasattr(self.parent, "dev_state"):
+                        self.parent.dev_state.show()
+                    print("AppDrawer: MainScreen elements shown")
+                    
                     # 先将layer移动到屏幕上方
                     display.cover_background_move_to_y(-800)
                     if hasattr(display, 'cover_background_set_visible'):
@@ -761,27 +777,11 @@ class MainScreen(Screen):
                     # 流畅的从顶部滑入动画
                     display.cover_background_animate_to_y(0, 250)
                     
-                    # 动画完成后的处理步骤
+                    # 动画完成后隐藏layer2
                     def on_animation_complete():
-                        print("AppDrawer: Animation complete, switching to MainScreen")
-                        
+                        print("AppDrawer: Animation complete, hiding layer2")
                         try:
-                            # 步骤3: 立即隐藏 AppDrawer，显示 MainScreen
-                            self.add_flag(lv.obj.FLAG.HIDDEN)
-                            self.visible = False
-                            self.add_flag(lv.obj.FLAG.GESTURE_BUBBLE)
-                            
-                            # 显示MainScreen元素
-                            self.parent.hidden_others(False)
-                            if hasattr(self.parent, 'up_arrow'):
-                                self.parent.up_arrow.clear_flag(lv.obj.FLAG.HIDDEN)
-                            if hasattr(self.parent, 'bottom_tips'):
-                                self.parent.bottom_tips.clear_flag(lv.obj.FLAG.HIDDEN)
-                            if hasattr(self.parent, "dev_state"):
-                                self.parent.dev_state.show()
-                            print("AppDrawer: AppDrawer hidden, MainScreen shown")
-                            
-                            # 步骤4: 延迟隐藏 layer2
+                            # 延迟隐藏 layer2
                             def hide_layer2():
                                 if hasattr(display, 'cover_background_hide'):
                                     display.cover_background_hide()
@@ -797,7 +797,7 @@ class MainScreen(Screen):
                         except Exception as e:
                             print(f"AppDrawer: Error in animation complete: {e}")
                     
-                    # 动画完成时执行处理步骤（250ms 动画时间）
+                    # 动画完成时隐藏layer2（250ms 动画时间）
                     completion_timer = lv.timer_create(
                         lambda t: on_animation_complete(),
                         250, None
