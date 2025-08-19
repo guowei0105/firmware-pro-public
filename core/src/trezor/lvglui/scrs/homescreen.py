@@ -137,7 +137,119 @@ class MainScreen(Screen):
         self.apps = self.AppDrawer(self)
         self.set_size(480, 800)
         self.apps.add_flag(lv.obj.FLAG.GESTURE_BUBBLE)
+        
+        # 为 MainScreen 添加手势处理
+        self.add_event_cb(self.on_main_gesture, lv.EVENT.GESTURE, None)
+        print("MainScreen: Added gesture event handler")
+        
         save_app_obj(self)
+
+    def on_main_gesture(self, event_obj):
+        """处理 MainScreen 的手势事件"""
+        code = event_obj.code
+        if code == lv.EVENT.GESTURE:
+            indev = lv.indev_get_act()
+            _dir = indev.get_gesture_dir()
+            print(f"MainScreen: Gesture detected, direction: {_dir}")
+            
+            # 检查是否是上滑手势
+            if _dir == lv.DIR.TOP:
+                print("MainScreen: UP gesture detected, showing layer2 and AppDrawer")
+                self.show_layer2_and_appdrawer()
+    
+    def show_layer2_and_appdrawer(self):
+        """显示 layer2 并恢复 AppDrawer，然后让 layer2 向上滑出"""
+        try:
+            from trezorui import Display
+            display = Display()
+            
+            # 步骤1: 加载并显示 layer2
+            if hasattr(display, 'cover_background_load_jpeg'):
+                try:
+                    from storage import device
+                    homescreen_path = device.get_homescreen()
+                    
+                    if not homescreen_path:
+                        homescreen_path = "res/wallpaper-1.jpg"
+                    else:
+                        if homescreen_path.startswith("A:/"):
+                            homescreen_path = homescreen_path[3:]
+                    
+                    display.cover_background_load_jpeg(homescreen_path)
+                    print("MainScreen: Layer2 background loaded")
+                    
+                except Exception:
+                    # 使用纯黑色背景作为备用
+                    if hasattr(display, 'cover_background_set_image'):
+                        width, height = 480, 800
+                        black_image = bytearray(width * height * 2)
+                        for i in range(len(black_image)):
+                            black_image[i] = 0x00
+                        display.cover_background_set_image(bytes(black_image))
+                    print("MainScreen: Layer2 fallback to black background")
+            
+            # 步骤2: 显示 layer2（初始位置在屏幕顶部，准备向下显示）
+            if hasattr(display, 'cover_background_animate_to_y'):
+                # 将 layer2 初始位置设置在屏幕顶部
+                display.cover_background_move_to_y(0)
+                if hasattr(display, 'cover_background_set_visible'):
+                    display.cover_background_set_visible(True)
+                if hasattr(display, 'cover_background_show'):
+                    display.cover_background_show()
+                print("MainScreen: Layer2 shown at screen top")
+                
+                # 步骤3: 立即显示 AppDrawer 并恢复其原始背景（此时被layer2覆盖）
+                def show_appdrawer_behind_layer2():
+                    if hasattr(self.apps, 'clear_flag'):
+                        self.apps.clear_flag(lv.obj.FLAG.HIDDEN)
+                        self.apps.visible = True
+                        self.apps.slide = False
+                        self.apps._processing_gesture = False
+                        # 恢复 AppDrawer 的原始背景 (2222.png)
+                        self.apps.add_style(
+                            StyleWrapper().bg_img_src("A:/res/2222.png").border_width(0),
+                            0,
+                        )
+                        print("MainScreen: AppDrawer shown behind layer2 with background restored")
+                        
+                        # 隐藏 MainScreen 的元素，确保被 AppDrawer 遮挡
+                        self.hidden_others(True)
+                        print("MainScreen: MainScreen elements hidden, now covered by AppDrawer")
+                
+                # 短暂延迟后显示 AppDrawer（让 layer2 先显示完毕）
+                show_timer = lv.timer_create(
+                    lambda t: show_appdrawer_behind_layer2(),
+                    50, None  # 50ms 延迟
+                )
+                show_timer.set_repeat_count(1)
+                
+                # 步骤4: 延迟后让 layer2 向上滑出到屏幕外
+                def start_layer2_animation():
+                    display.cover_background_animate_to_y(-800, 300)  # 300ms 动画
+                    print("MainScreen: Layer2 started sliding up animation")
+                    
+                    # 步骤5: 动画完成后隐藏 layer2
+                    def on_slide_complete():
+                        if hasattr(display, 'cover_background_hide'):
+                            display.cover_background_hide()
+                            print("MainScreen: Layer2 hidden after slide up animation")
+                    
+                    # 动画完成后隐藏 layer2
+                    completion_timer = lv.timer_create(
+                        lambda t: on_slide_complete(),
+                        350, None  # 300ms 动画 + 50ms 缓冲
+                    )
+                    completion_timer.set_repeat_count(1)
+                
+                # 150ms 延迟后开始 layer2 向上滑动动画
+                animation_timer = lv.timer_create(
+                    lambda t: start_layer2_animation(),
+                    150, None  # 150ms 延迟
+                )
+                animation_timer.set_repeat_count(1)
+                
+        except Exception as e:
+            print(f"MainScreen: Error in show_layer2_and_appdrawer: {e}")
 
     def hidden_others(self, hidden: bool = True):
         if hidden:
