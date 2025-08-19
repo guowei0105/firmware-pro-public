@@ -75,14 +75,62 @@ class MainScreen(Screen):
         if not hasattr(self, "_init"):
             self._init = True
             self._cached_homescreen = homescreen
-            super().__init__(
-                title=device_name, subtitle=ble_name or uart.get_ble_name()
-            )
-            self.title.add_style(StyleWrapper().text_align_center(), 0)
-            self.subtitle.add_style(
-                StyleWrapper().text_align_center().text_color(lv_colors.WHITE), 0
-            )
+            
+            # Check if device name display is enabled
+            show_device_names = storage_device.is_device_name_display_enabled()
+            
+            # Get real device names
+            real_device_name = storage_device.get_model()  # "OneKey Pro"
+            real_ble_name = storage_device.get_ble_name() or uart.get_ble_name()
+            
+            # Debug output
+            if __debug__:
+                print(f"[MAINSCREEN] Init - show_device_names: {show_device_names}, device: {real_device_name}, ble: {real_ble_name}")
+            
+            # Initialize Screen with proper kwargs
+            if show_device_names:
+                super().__init__(title=real_device_name, subtitle=real_ble_name)
+                self.title.add_style(StyleWrapper().text_align_center(), 0)
+                self.subtitle.add_style(
+                    StyleWrapper().text_align_center().text_color(lv_colors.WHITE), 0
+                )
+            else:
+                super().__init__()
+                if __debug__:
+                    print(f"[MAINSCREEN] Not showing device names, initialized without title/subtitle")
         else:
+            # Check if device name display setting has changed
+            show_device_names = storage_device.is_device_name_display_enabled()
+            
+            # Get real device names
+            real_device_name = storage_device.get_model()  # "OneKey Pro"
+            real_ble_name = storage_device.get_ble_name() or uart.get_ble_name()
+            
+            # Update title and subtitle based on current setting
+            if __debug__:
+                print(f"[MAINSCREEN] Else branch - show_device_names: {show_device_names}, device: {real_device_name}, ble: {real_ble_name}")
+            
+            if show_device_names:
+                # Check if title and subtitle exist before using them
+                if hasattr(self, 'title') and self.title:
+                    self.title.set_text(real_device_name)
+                    self.title.clear_flag(lv.obj.FLAG.HIDDEN)
+                if hasattr(self, 'subtitle') and self.subtitle:
+                    self.subtitle.set_text(real_ble_name)
+                    self.subtitle.clear_flag(lv.obj.FLAG.HIDDEN)
+                if __debug__:
+                    print(f"[MAINSCREEN] Else branch - titles set and shown")
+            else:
+                # Hide device names if they exist
+                if hasattr(self, 'title') and self.title:
+                    self.title.add_flag(lv.obj.FLAG.HIDDEN)
+                    self.title.set_text("")
+                if hasattr(self, 'subtitle') and self.subtitle:
+                    self.subtitle.add_flag(lv.obj.FLAG.HIDDEN)
+                    self.subtitle.set_text("")
+                if __debug__:
+                    print(f"[MAINSCREEN] Else branch - titles hidden and cleared")
+            
             if (
                 not hasattr(self, "_cached_homescreen")
                 or self._cached_homescreen != homescreen
@@ -107,11 +155,23 @@ class MainScreen(Screen):
             if self.apps:
                 self.apps.refresh_text()
             return
-        self.title.align_to(self.content_area, lv.ALIGN.TOP_MID, 0, 76)
-        self.subtitle.align_to(self.title, lv.ALIGN.OUT_BOTTOM_MID, 0, 16)
+        # Align title and subtitle if they exist
+        if hasattr(self, 'title') and self.title:
+            self.title.align_to(self.content_area, lv.ALIGN.TOP_MID, 0, 76)
+        if hasattr(self, 'subtitle') and self.subtitle:
+            if hasattr(self, 'title') and self.title:
+                self.subtitle.align_to(self.title, lv.ALIGN.OUT_BOTTOM_MID, 0, 16)
+            else:
+                self.subtitle.align_to(self.content_area, lv.ALIGN.TOP_MID, 0, 76)
         if dev_state:
             self.dev_state = MainScreen.DevStateTipsBar(self)
-            self.dev_state.align_to(self.subtitle, lv.ALIGN.OUT_BOTTOM_MID, 0, 48)
+            # Align to subtitle if it exists, otherwise to title, otherwise to content area
+            if hasattr(self, 'subtitle') and self.subtitle:
+                self.dev_state.align_to(self.subtitle, lv.ALIGN.OUT_BOTTOM_MID, 0, 48)
+            elif hasattr(self, 'title') and self.title:
+                self.dev_state.align_to(self.title, lv.ALIGN.OUT_BOTTOM_MID, 0, 48)
+            else:
+                self.dev_state.align_to(self.content_area, lv.ALIGN.TOP_MID, 0, 124)
             self.dev_state.show(dev_state)
         self.add_style(
             StyleWrapper().bg_img_src(homescreen),
@@ -3373,9 +3433,6 @@ class GeneralScreen(AnimScreen):
         else:
             if self.cur_language:
                 self.language.label_right.set_text(self.cur_language)
-            self.backlight.label_right.set_text(
-                brightness2_percent_str(storage_device.get_brightness())
-            )
             self.refresh_text()
             return
         super().__init__(
@@ -3392,18 +3449,10 @@ class GeneralScreen(AnimScreen):
         self.language = ListItemBtn(
             self.container, _(i18n_keys.ITEM__LANGUAGE), GeneralScreen.cur_language
         )
-        self.backlight = ListItemBtn(
-            self.container,
-            _(i18n_keys.ITEM__BRIGHTNESS),
-            brightness2_percent_str(storage_device.get_brightness()),
-        )
+        self.display = ListItemBtn(self.container, "显示")
         self.home_scr = ListItemBtn(self.container, _(i18n_keys.ITEM__HOMESCREEN))
         self.animation = ListItemBtn(self.container, _(i18n_keys.ITEM__ANIMATIONS))
         self.tap_awake = ListItemBtn(self.container, _(i18n_keys.ITEM__LOCK_SCREEN))
-        self.autolock_and_shutdown = ListItemBtn(
-            self.container,
-            _(i18n_keys.ITEM__AUTO_LOCK_AND_SHUTDOWN),
-        )
         # self.power = ListItemBtn(
         #     self.content_area,
         #     _(i18n_keys.ITEM__POWER_OFF),
@@ -3420,13 +3469,10 @@ class GeneralScreen(AnimScreen):
     def refresh_text(self):
         self.title.set_text(_(i18n_keys.TITLE__GENERAL))
         self.language.label_left.set_text(_(i18n_keys.ITEM__LANGUAGE))
-        self.backlight.label_left.set_text(_(i18n_keys.ITEM__BRIGHTNESS))
+        self.display.label_left.set_text("显示")
         self.home_scr.label_left.set_text(_(i18n_keys.ITEM__HOMESCREEN))
         self.animation.label_left.set_text(_(i18n_keys.ITEM__ANIMATIONS))
         self.tap_awake.label_left.set_text(_(i18n_keys.ITEM__LOCK_SCREEN))
-        self.autolock_and_shutdown.label_left.set_text(
-            _(i18n_keys.ITEM__AUTO_LOCK_AND_SHUTDOWN)
-        )
         # self.power.label_left.set_text(_(i18n_keys.ITEM__POWER_OFF))
         self.container.update_layout()
         # self.power.align_to(self.container, lv.ALIGN.OUT_BOTTOM_MID, 0, 12)
@@ -3435,22 +3481,432 @@ class GeneralScreen(AnimScreen):
         target = event_obj.get_target()
         if target == self.language:
             LanguageSetting(self)
-        elif target == self.backlight:
-            BacklightSetting(self)
+        elif target == self.display:
+            DisplayScreen(self)
         elif target == self.animation:
             Animations(self)
         elif target == self.tap_awake:
             TapAwakeSetting(self)
-        elif target == self.autolock_and_shutdown:
-            Autolock_and_ShutingDown(self)
-        # elif target == self.power:
-        #     PowerOff()
         elif target == self.home_scr:
             HomeScreenSetting(self)
         elif target == self.rti_btn:
             PowerOff()
         else:
             pass
+
+
+class DisplayScreen(AnimScreen):
+    def collect_animation_targets(self) -> list:
+        targets = []
+        if hasattr(self, "container") and self.container:
+            targets.append(self.container)
+        return targets
+
+    def __init__(self, prev_scr=None):
+        if not hasattr(self, "_init"):
+            self._init = True
+        else:
+            self.backlight.label_right.set_text(
+                brightness2_percent_str(storage_device.get_brightness())
+            )
+            self.autolock.label_right.set_text(get_autolock_delay_str())
+            self.shutdown.label_right.set_text(get_autoshutdown_delay_str())
+            # Update switch state based on current storage setting
+            current_setting = storage_device.is_device_name_display_enabled()
+            if current_setting:
+                self.model_name_bt_id.add_state()
+            else:
+                self.model_name_bt_id.clear_state()
+            self.refresh_text()
+            return
+
+        super().__init__(
+            prev_scr=prev_scr, title="显示", nav_back=True
+        )
+
+        # 主容器
+        self.container = ContainerFlexCol(
+            self.content_area, self.title, padding_row=2, pos=(0, 40)
+        )
+        
+        # 亮度控制
+        self.backlight = ListItemBtn(
+            self.container,
+            _(i18n_keys.ITEM__BRIGHTNESS),
+            brightness2_percent_str(storage_device.get_brightness()),
+        )
+        
+        # 自动锁定和关机容器
+        self.auto_container = ContainerFlexCol(
+            self.content_area, None, padding_row=2
+        )
+        self.auto_container.align_to(self.container, lv.ALIGN.OUT_BOTTOM_MID, 0, 8)
+        
+        self.autolock = ListItemBtn(
+            self.auto_container,
+            "自动锁定",
+            get_autolock_delay_str(),
+        )
+        self.shutdown = ListItemBtn(
+            self.auto_container,
+            "自动关机",
+            get_autoshutdown_delay_str(),
+        )
+        
+        # 设备名称与蓝牙ID容器
+        self.device_info_container = ContainerFlexCol(
+            self.content_area, None, padding_row=2
+        )
+        self.device_info_container.align_to(self.auto_container, lv.ALIGN.OUT_BOTTOM_MID, 0, 8)
+        
+        self.model_name_bt_id = ListItemBtnWithSwitch(
+            self.device_info_container,
+            "设备名称与蓝牙ID",
+        )
+        
+        # Set initial switch state based on storage setting
+        # ListItemBtnWithSwitch defaults to CHECKED, so we need to handle both cases
+        current_setting = storage_device.is_device_name_display_enabled()
+        if current_setting:
+            # Keep it checked (already default)
+            pass
+        else:
+            # Clear the default checked state
+            self.model_name_bt_id.clear_state()
+        
+        # Add description text for device name display
+        self.device_name_description = lv.label(self.content_area)
+        self.device_name_description.set_size(456, lv.SIZE.CONTENT)
+        self.device_name_description.add_style(
+            StyleWrapper()
+            .text_font(font_GeistRegular26)
+            .text_color(lv_colors.GRAY_2)
+            .pad_all(16),
+            0,
+        )
+        self.device_name_description.set_text("在主屏幕和锁屏界面显示设备型号和蓝牙ID。")
+        self.device_name_description.align_to(self.device_info_container, lv.ALIGN.OUT_BOTTOM_LEFT, 16, 8)
+        
+        # Disable elastic scrolling to match other pages
+        self.content_area.clear_flag(lv.obj.FLAG.SCROLL_ELASTIC)
+        
+        self.container.add_event_cb(self.on_click, lv.EVENT.CLICKED, None)
+        self.auto_container.add_event_cb(self.on_click, lv.EVENT.CLICKED, None)
+        self.device_info_container.add_event_cb(self.on_click, lv.EVENT.CLICKED, None)
+        # Also listen for switch value changes to handle direct switch clicks
+        self.model_name_bt_id.switch.add_event_cb(self.on_switch_change, lv.EVENT.VALUE_CHANGED, None)
+        self.load_screen(self)
+        gc.collect()
+
+    def refresh_text(self):
+        self.title.set_text("显示")
+        if hasattr(self, 'backlight'):
+            self.backlight.label_left.set_text(_(i18n_keys.ITEM__BRIGHTNESS))
+        if hasattr(self, 'autolock'):
+            self.autolock.label_left.set_text("自动锁定")
+        if hasattr(self, 'shutdown'):
+            self.shutdown.label_left.set_text("自动关机")
+        # Note: ListItemBtnWithSwitch doesn't expose label_left as an attribute
+        # The text is set during construction and cannot be changed after
+        if hasattr(self, 'device_name_description'):
+            self.device_name_description.set_text("在主屏幕和锁屏界面显示设备型号和蓝牙ID。")
+
+    def on_switch_change(self, event_obj):
+        """Handle switch value changes and persist the setting"""
+        code = event_obj.code
+        if code == lv.EVENT.VALUE_CHANGED:
+            # Get the new switch state
+            new_switch_checked = (self.model_name_bt_id.switch.get_state() & lv.STATE.CHECKED) != 0
+            
+            # Update storage to persist the setting
+            storage_device.set_device_name_display_enabled(new_switch_checked)
+            
+            # Debug output
+            if __debug__:
+                print(f"[DISPLAY] Switch changed to: {new_switch_checked}")
+                print(f"[DISPLAY] Storage setting is now: {storage_device.is_device_name_display_enabled()}")
+            
+            # Update MainScreen display if it exists
+            if hasattr(MainScreen, "_instance") and MainScreen._instance:
+                main_screen = MainScreen._instance
+                real_device_name = storage_device.get_model()
+                real_ble_name = storage_device.get_ble_name() or uart.get_ble_name()
+                
+                if __debug__:
+                    print(f"[DISPLAY] Updating MainScreen - show: {new_switch_checked}, device: {real_device_name}, ble: {real_ble_name}")
+                    print(f"[DISPLAY] MainScreen title exists: {hasattr(main_screen, 'title')}")
+                    print(f"[DISPLAY] MainScreen subtitle exists: {hasattr(main_screen, 'subtitle')}")
+                
+                if new_switch_checked:
+                    # Show device names - ensure title/subtitle exist first
+                    if hasattr(main_screen, 'title') and main_screen.title:
+                        main_screen.title.set_text(real_device_name)
+                        main_screen.title.clear_flag(lv.obj.FLAG.HIDDEN)
+                    if hasattr(main_screen, 'subtitle') and main_screen.subtitle:
+                        main_screen.subtitle.set_text(real_ble_name)
+                        main_screen.subtitle.clear_flag(lv.obj.FLAG.HIDDEN)
+                        # Ensure centered alignment
+                        main_screen.title.add_style(StyleWrapper().text_align_center(), 0)
+                        main_screen.subtitle.add_style(
+                            StyleWrapper().text_align_center().text_color(lv_colors.WHITE), 0
+                        )
+                    if __debug__:
+                        print(f"[DISPLAY] MainScreen titles shown (if they exist)")
+                else:
+                    if __debug__:
+                        print(f"[DISPLAY] Attempting to hide MainScreen titles")
+                        try:
+                            if hasattr(main_screen, 'title') and main_screen.title:
+                                current_title = main_screen.title.get_text() if hasattr(main_screen.title, 'get_text') else 'N/A'
+                                print(f"[DISPLAY] Title exists: '{current_title}'")
+                            else:
+                                print(f"[DISPLAY] Title does not exist")
+                            if hasattr(main_screen, 'subtitle') and main_screen.subtitle:
+                                current_subtitle = main_screen.subtitle.get_text() if hasattr(main_screen.subtitle, 'get_text') else 'N/A'
+                                print(f"[DISPLAY] Subtitle exists: '{current_subtitle}'")
+                            else:
+                                print(f"[DISPLAY] Subtitle does not exist")
+                        except:
+                            print(f"[DISPLAY] Could not get current text")
+                    
+                    # Hide device names - only if title/subtitle exist
+                    if hasattr(main_screen, 'title') and main_screen.title:
+                        main_screen.title.add_flag(lv.obj.FLAG.HIDDEN)
+                        main_screen.title.set_text("")
+                    if hasattr(main_screen, 'subtitle') and main_screen.subtitle:
+                        main_screen.subtitle.add_flag(lv.obj.FLAG.HIDDEN)
+                        main_screen.subtitle.set_text("")
+                    
+                    if __debug__:
+                        print(f"[DISPLAY] MainScreen titles hidden (if they existed)")
+            else:
+                if __debug__:
+                    print(f"[DISPLAY] MainScreen instance not found or not available")
+            
+            # Update LockScreen display if it exists
+            from .lockscreen import LockScreen
+            if hasattr(LockScreen, "_instance") and LockScreen._instance:
+                lock_screen = LockScreen._instance
+                real_device_name = storage_device.get_model()
+                real_ble_name = storage_device.get_ble_name() or uart.get_ble_name()
+                
+                if __debug__:
+                    print(f"[DISPLAY] Updating LockScreen - show: {new_switch_checked}, device: {real_device_name}, ble: {real_ble_name}")
+                    print(f"[DISPLAY] LockScreen title exists: {hasattr(lock_screen, 'title')}")
+                    print(f"[DISPLAY] LockScreen subtitle exists: {hasattr(lock_screen, 'subtitle')}")
+                
+                if new_switch_checked:
+                    # Show device names - ensure title/subtitle exist first
+                    if hasattr(lock_screen, 'title') and lock_screen.title:
+                        lock_screen.title.set_text(real_device_name)
+                        lock_screen.title.clear_flag(lv.obj.FLAG.HIDDEN)
+                    if hasattr(lock_screen, 'subtitle') and lock_screen.subtitle:
+                        lock_screen.subtitle.set_text(real_ble_name)
+                        lock_screen.subtitle.clear_flag(lv.obj.FLAG.HIDDEN)
+                        # Ensure centered alignment with opacity
+                        lock_screen.title.add_style(
+                            StyleWrapper().text_align_center().text_opa(int(lv.OPA.COVER * 0.85)), 0
+                        )
+                        lock_screen.subtitle.add_style(
+                            StyleWrapper()
+                            .text_align_center()
+                            .text_color(lv_colors.WHITE)
+                            .text_opa(int(lv.OPA.COVER * 0.85)),
+                            0,
+                        )
+                    if __debug__:
+                        print(f"[DISPLAY] LockScreen titles shown (if they exist)")
+                else:
+                    # Hide device names - only if title/subtitle exist
+                    if hasattr(lock_screen, 'title') and lock_screen.title:
+                        lock_screen.title.add_flag(lv.obj.FLAG.HIDDEN)
+                        lock_screen.title.set_text("")
+                    if hasattr(lock_screen, 'subtitle') and lock_screen.subtitle:
+                        lock_screen.subtitle.add_flag(lv.obj.FLAG.HIDDEN)
+                        lock_screen.subtitle.set_text("")
+                    if __debug__:
+                        print(f"[DISPLAY] LockScreen titles hidden (if they existed)")
+            else:
+                if __debug__:
+                    print(f"[DISPLAY] LockScreen instance not found or not available")
+
+    def on_click(self, event_obj):
+        code = event_obj.code
+        target = event_obj.get_target()
+        if code == lv.EVENT.CLICKED:
+            if utils.lcd_resume():
+                return
+            if target == self.backlight:
+                BacklightSetting(self)
+            elif target == self.autolock:
+                # Go directly to auto-lock specific settings
+                AutoLockSetting(self)
+            elif target == self.shutdown:
+                # Go directly to shutdown specific settings
+                ShutdownSetting(self)
+            # Note: model_name_bt_id switch changes are handled by on_switch_change method
+
+
+class AutolockSetting(AnimScreen):
+    cur_auto_lock = ""
+    cur_auto_lock_ms = 0
+
+    def collect_animation_targets(self) -> list:
+        targets = []
+        if hasattr(self, "container") and self.container:
+            targets.append(self.container)
+        return targets
+
+    def __init__(self, prev_scr=None):
+        AutolockSetting.cur_auto_lock_ms = storage_device.get_autolock_delay_ms()
+        AutolockSetting.cur_auto_lock = self.get_str_from_ms(
+            AutolockSetting.cur_auto_lock_ms
+        )
+        if not hasattr(self, "_init"):
+            self._init = True
+        else:
+            if self.cur_auto_lock:
+                self.auto_lock.label_right.set_text(AutolockSetting.cur_auto_lock)
+            self.refresh_text()
+            return
+
+        super().__init__(
+            prev_scr=prev_scr, 
+            title="自动锁定", 
+            nav_back=True
+        )
+
+        self.container = ContainerFlexCol(
+            self.content_area, self.title, padding_row=2, pos=(0, 40)
+        )
+        
+        self.auto_lock = ListItemBtn(
+            self.container,
+            "自动锁定",
+            AutolockSetting.cur_auto_lock,
+        )
+        
+        self.container.add_event_cb(self.on_click, lv.EVENT.CLICKED, None)
+        self.load_screen(self)
+        gc.collect()
+
+    def get_str_from_ms(self, delay_ms: int) -> str:
+        if delay_ms == 0:
+            return "从不"
+        elif delay_ms < 60000:
+            return f"{delay_ms // 1000}秒"
+        elif delay_ms < 3600000:
+            return f"{delay_ms // 60000}分钟"
+        else:
+            return f"{delay_ms // 3600000}小时"
+
+    def refresh_text(self):
+        self.title.set_text("自动锁定")
+        self.auto_lock.label_left.set_text("自动锁定")
+
+    def on_click(self, event_obj):
+        code = event_obj.code
+        target = event_obj.get_target()
+        if code == lv.EVENT.CLICKED:
+            if utils.lcd_resume():
+                return
+            if target == self.auto_lock:
+                # Use the existing AutoLockSetting class
+                AutoLockSetting(self)
+
+
+class ShutdownSetting(AnimScreen):
+    cur_auto_shutdown = ""
+    cur_auto_shutdown_ms = 0
+
+    def collect_animation_targets(self) -> list:
+        targets = []
+        if hasattr(self, "container") and self.container:
+            targets.append(self.container)
+        return targets
+
+    def __init__(self, prev_scr=None):
+        ShutdownSetting.cur_auto_shutdown_ms = storage_device.get_autoshutdown_delay_ms()
+        ShutdownSetting.cur_auto_shutdown = self.get_str_from_ms(
+            ShutdownSetting.cur_auto_shutdown_ms
+        )
+        if not hasattr(self, "_init"):
+            self._init = True
+        else:
+            if self.cur_auto_shutdown:
+                self.auto_shutdown.label_right.set_text(ShutdownSetting.cur_auto_shutdown)
+            self.refresh_text()
+            return
+
+        super().__init__(
+            prev_scr=prev_scr, 
+            title="自动关机", 
+            nav_back=True
+        )
+
+        self.container = ContainerFlexCol(
+            self.content_area, self.title, padding_row=2, pos=(0, 40)
+        )
+        
+        self.auto_shutdown = ListItemBtn(
+            self.container,
+            "自动关机",
+            ShutdownSetting.cur_auto_shutdown,
+        )
+        
+        self.container.add_event_cb(self.on_click, lv.EVENT.CLICKED, None)
+        self.load_screen(self)
+        gc.collect()
+
+    def get_str_from_ms(self, delay_ms: int) -> str:
+        if delay_ms == 0:
+            return "从不"
+        elif delay_ms < 60000:
+            return f"{delay_ms // 1000}秒"
+        elif delay_ms < 3600000:
+            return f"{delay_ms // 60000}分钟"
+        else:
+            return f"{delay_ms // 3600000}小时"
+
+    def refresh_text(self):
+        self.title.set_text("自动关机")
+        self.auto_shutdown.label_left.set_text("自动关机")
+
+    def on_click(self, event_obj):
+        code = event_obj.code
+        target = event_obj.get_target()
+        if code == lv.EVENT.CLICKED:
+            if utils.lcd_resume():
+                return
+            if target == self.auto_shutdown:
+                # Use the original auto-lock setting screen
+                Autolock_and_ShutingDown(self)
+
+
+def get_autolock_delay_str() -> str:
+    """Get auto-lock delay as formatted string"""
+    delay_ms = storage_device.get_autolock_delay_ms()
+    if delay_ms == 0:
+        return "从不"
+    elif delay_ms < 60000:
+        return f"{delay_ms // 1000}秒"
+    elif delay_ms < 3600000:
+        return f"{delay_ms // 60000}分钟"
+    else:
+        return f"{delay_ms // 3600000}小时"
+
+
+def get_autoshutdown_delay_str() -> str:
+    """Get auto-shutdown delay as formatted string"""
+    delay_ms = storage_device.get_autoshutdown_delay_ms()
+    if delay_ms == 0:
+        return "从不"
+    elif delay_ms < 60000:
+        return f"{delay_ms // 1000}秒"
+    elif delay_ms < 3600000:
+        return f"{delay_ms // 60000}分钟"
+    else:
+        return f"{delay_ms // 3600000}小时"
 
 
 class Animations(AnimScreen):

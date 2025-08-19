@@ -89,6 +89,7 @@ _FIDO_SEED_GEN = False
 _FIDO2_COUNTER_VALUE: int | None = None
 _FIDO_ENABLED_VALUE: bool | None = None
 _TURBOMODE_VALUE: bool | None = None
+_DEVICE_NAME_DISPLAY_ENABLED_VALUE: bool | None = None
 
 if utils.USE_THD89:
     import uctypes
@@ -246,6 +247,8 @@ if utils.USE_THD89:
     offset += uctypes.sizeof(struct_bool, uctypes.LITTLE_ENDIAN)
     struct_public["turbomode"] = (offset, struct_bool)
     offset += uctypes.sizeof(struct_bool, uctypes.LITTLE_ENDIAN)
+    struct_public["device_name_display_enabled"] = (offset, struct_bool)
+    offset += uctypes.sizeof(struct_bool, uctypes.LITTLE_ENDIAN)
     struct_public["use_passphrase_pin"] = (offset, struct_bool)
     offset += uctypes.sizeof(struct_bool, uctypes.LITTLE_ENDIAN)
     struct_public["auto_passphrase"] = (offset, struct_bool)
@@ -313,6 +316,7 @@ if utils.USE_THD89:
     _FIDO2_COUNTER = struct_public["fido2_counter"][0]
     _FIDO_ENABLED = struct_public["fido_enabled"][0]
     _TURBOMODE = struct_public["turbomode"][0]
+    _DEVICE_NAME_DISPLAY_ENABLED = struct_public["device_name_display_enabled"][0]
     U2F_COUNTER = 0x00  # u2f counter
 
     # recovery key
@@ -382,6 +386,7 @@ else:
     _FIDO2_COUNTER = (0x90)  # int
     _FIDO_ENABLED = (0x91)  # bool
     _TURBOMODE = (0x92)  # bool
+    _DEVICE_NAME_DISPLAY_ENABLED = (0x93)  # bool
     # fmt: on
 SAFETY_CHECK_LEVEL_STRICT: Literal[0] = const(0)
 SAFETY_CHECK_LEVEL_PROMPT: Literal[1] = const(1)
@@ -704,6 +709,34 @@ def set_turbomode_enable(enable: bool) -> None:
         public=True,
     )
     _TURBOMODE_VALUE = enable
+
+
+def is_device_name_display_enabled() -> bool:
+    global _DEVICE_NAME_DISPLAY_ENABLED_VALUE
+    if _DEVICE_NAME_DISPLAY_ENABLED_VALUE is None:
+        _DEVICE_NAME_DISPLAY_ENABLED_VALUE = common.get_bool(_NAMESPACE, _DEVICE_NAME_DISPLAY_ENABLED, public=True)
+        # Default to False if not set (don't show device names by default)
+        if _DEVICE_NAME_DISPLAY_ENABLED_VALUE is None:
+            _DEVICE_NAME_DISPLAY_ENABLED_VALUE = False
+            # Save the default value to storage directly
+            common.set_bool(
+                _NAMESPACE,
+                _DEVICE_NAME_DISPLAY_ENABLED,
+                False,
+                public=True,
+            )
+    return _DEVICE_NAME_DISPLAY_ENABLED_VALUE
+
+
+def set_device_name_display_enabled(enable: bool) -> None:
+    global _DEVICE_NAME_DISPLAY_ENABLED_VALUE
+    common.set_bool(
+        _NAMESPACE,
+        _DEVICE_NAME_DISPLAY_ENABLED,
+        enable,
+        public=True,
+    )
+    _DEVICE_NAME_DISPLAY_ENABLED_VALUE = enable
 
 
 def keyboard_haptic_enabled() -> bool:
@@ -1514,6 +1547,7 @@ def clear_global_cache() -> None:
     global _STORAGE_SIZE_VALUE
     global _SERIAL_NUMBER_VALUE
     global _TREZOR_COMPATIBLE_VALUE
+    global _DEVICE_NAME_DISPLAY_ENABLED_VALUE
 
     _LANGUAGE_VALUE = None
     _LABEL_VALUE = None
@@ -1553,3 +1587,4 @@ def clear_global_cache() -> None:
     _DEVICE_ID_VALUE = None
     _SERIAL_NUMBER_VALUE = None
     _TREZOR_COMPATIBLE_VALUE = None
+    _DEVICE_NAME_DISPLAY_ENABLED_VALUE = None
