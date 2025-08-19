@@ -319,3 +319,20 @@ int jped_decode(char *path, uint32_t address) {
   }
   return -1;
 }
+
+// 新增函数：JPEG解码并转换到指定目标地址
+int jped_decode_to_address(char *path, uint32_t src_address, uint32_t dst_address) {
+  jpeg_decode_init(src_address);
+  jpeg_decode_file_operation(JPEG_FILE_FATFS);
+
+  if (jpeg_decode_start(path) == 0) {
+    HAL_JPEG_GetInfo(&JPEG_Handle, &JPEG_Info);
+
+    printf("[JPEG Decode] Converting to specific address: 0x%08lX\n", dst_address);
+    dma2d_copy_ycbcr_to_rgb((uint32_t *)src_address, (uint32_t *)dst_address,
+                            JPEG_Info.ImageWidth, JPEG_Info.ImageHeight,
+                            JPEG_Info.ChromaSubsampling);
+    return 0;
+  }
+  return -1;
+}

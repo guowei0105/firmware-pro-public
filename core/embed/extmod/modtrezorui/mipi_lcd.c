@@ -9,8 +9,8 @@
 #include "jpeg_dma.h"
 #include "systick.h"
 
-// 第二层layer的内存基地址（使用LTDC buffer的最后四分之一，避免与正常显示缓冲区冲突）
-#define LAYER2_MEMORY_BASE (FMC_SDRAM_LTDC_BUFFER_ADDRESS + (FMC_SDRAM_LTDC_BUFFER_LEN * 3 / 4))
+// 第二层layer的内存基地址（Layer2起始于1.5MB处，为800x480屏幕提供足够空间）
+#define LAYER2_MEMORY_BASE (FMC_SDRAM_LTDC_BUFFER_ADDRESS + MB(1) + KB(512))  // 1.5MB offset
 
 // 透明状态栏配置 - Layer2顶部44px保持透明，露出Layer1状态栏
 #define TRANSPARENT_STATUSBAR_HEIGHT 44
@@ -287,13 +287,18 @@ static HAL_StatusTypeDef ltdc_layer_config(LTDC_HandleTypeDef* hltdc,
     pLayerCfg.Alpha0 = 0;  // 默认Alpha0
     pLayerCfg.BlendingFactor1 = LTDC_BLENDING_FACTOR1_PAxCA; // 混合因子1
     pLayerCfg.BlendingFactor2 = LTDC_BLENDING_FACTOR2_PAxCA; // 混合因子2
-    // printf("Configuring first layer - opaque mode\n");
+    printf("[Layer Config] Layer0: Alpha=255, BlendingFactor1=0x%02X, BlendingFactor2=0x%02X\n", 
+           LTDC_BLENDING_FACTOR1_PAxCA, LTDC_BLENDING_FACTOR2_PAxCA);
   } else {
     // 第二层：上层，根据状态栏透明度配置Color Keying混合
     pLayerCfg.Alpha = 255;  // 完全不透明
     pLayerCfg.Alpha0 = 0;
     pLayerCfg.BlendingFactor1 = LTDC_BLENDING_FACTOR1_PAxCA;
     pLayerCfg.BlendingFactor2 = LTDC_BLENDING_FACTOR2_PAxCA;
+    printf("[Layer Config] Layer1: Alpha=255, BlendingFactor1=0x%02X, BlendingFactor2=0x%02X\n", 
+           LTDC_BLENDING_FACTOR1_PAxCA, LTDC_BLENDING_FACTOR2_PAxCA);
+    printf("[Layer Config] Layer1 window: (%lu,%lu) to (%lu,%lu), addr=0x%08lX\n",
+           config->x0, config->y0, config->x1, config->y1, config->address);
   }
   // 配置图层
   HAL_StatusTypeDef result = HAL_LTDC_ConfigLayer(hltdc, &pLayerCfg, layer_index);
@@ -545,38 +550,39 @@ void dma2d_copy_ycbcr_to_rgb(uint32_t* pSrc, uint32_t* pDst, uint16_t xsize,
                              uint16_t ysize, uint32_t ChromaSampling) {
   uint32_t cssMode = DMA2D_CSS_420, inputLineOffset = 0;
 
+  printf("[DMA2D YCbCr] Source: 0x%08lX, Dest: 0x%08lX, Size: %dx%d, Sampling: %lu\n", 
+         (uint32_t)pSrc, (uint32_t)pDst, xsize, ysize, ChromaSampling);
+
   // 根据色度子采样类型设置DMA2D参数
   if (ChromaSampling == JPEG_420_SUBSAMPLING) {
     cssMode = DMA2D_CSS_420;
-
     inputLineOffset = xsize % 16;
     if (inputLineOffset != 0) {
       inputLineOffset = 16 - inputLineOffset;
     }
+    printf("[DMA2D YCbCr] Using 4:2:0 subsampling, inputLineOffset: %lu\n", inputLineOffset);
   } else if (ChromaSampling == JPEG_444_SUBSAMPLING) {
     cssMode = DMA2D_NO_CSS;
-
     inputLineOffset = xsize % 8;
     if (inputLineOffset != 0) {
       inputLineOffset = 8 - inputLineOffset;
     }
+    printf("[DMA2D YCbCr] Using 4:4:4 subsampling, inputLineOffset: %lu\n", inputLineOffset);
   } else if (ChromaSampling == JPEG_422_SUBSAMPLING) {
     cssMode = DMA2D_CSS_422;
-
     inputLineOffset = xsize % 16;
     if (inputLineOffset != 0) {
       inputLineOffset = 16 - inputLineOffset;
     }
+    printf("[DMA2D YCbCr] Using 4:2:2 subsampling, inputLineOffset: %lu\n", inputLineOffset);
   }
 
   /*##-1- 配置DMA2D模式、颜色模式和输出偏移量 #############*/
   hlcd_dma2d.Init.Mode = DMA2D_M2M_PFC;
   hlcd_dma2d.Init.ColorMode = DMA2D_OUTPUT_RGB565;
   hlcd_dma2d.Init.OutputOffset = 0;
-  hlcd_dma2d.Init.AlphaInverted =
-      DMA2D_REGULAR_ALPHA; /* 不反转输出Alpha */
-  hlcd_dma2d.Init.RedBlueSwap =
-      DMA2D_RB_REGULAR; /* 不交换输出红蓝 */
+  hlcd_dma2d.Init.AlphaInverted = DMA2D_REGULAR_ALPHA;
+  hlcd_dma2d.Init.RedBlueSwap = DMA2D_RB_REGULAR;
 
   /*##-2- DMA2D回调配置 ######################################*/
   hlcd_dma2d.XferCpltCallback = NULL;
@@ -587,20 +593,37 @@ void dma2d_copy_ycbcr_to_rgb(uint32_t* pSrc, uint32_t* pDst, uint16_t xsize,
   hlcd_dma2d.LayerCfg[1].InputColorMode = DMA2D_INPUT_YCBCR;
   hlcd_dma2d.LayerCfg[1].ChromaSubSampling = cssMode;
   hlcd_dma2d.LayerCfg[1].InputOffset = inputLineOffset;
-  hlcd_dma2d.LayerCfg[1].RedBlueSwap =
-      DMA2D_RB_REGULAR; /* 不交换前景红蓝 */
-  hlcd_dma2d.LayerCfg[1].AlphaInverted =
-      DMA2D_REGULAR_ALPHA; /* 不反转前景Alpha */
+  hlcd_dma2d.LayerCfg[1].RedBlueSwap = DMA2D_RB_REGULAR;
+  hlcd_dma2d.LayerCfg[1].AlphaInverted = DMA2D_REGULAR_ALPHA;
 
   hlcd_dma2d.Instance = DMA2D;
 
   /*##-4- DMA2D初始化     ###########################################*/
-  HAL_DMA2D_Init(&hlcd_dma2d);
-  HAL_DMA2D_ConfigLayer(&hlcd_dma2d, 1);
+  HAL_StatusTypeDef dma2d_result = HAL_DMA2D_Init(&hlcd_dma2d);
+  if (dma2d_result != HAL_OK) {
+    printf("[DMA2D YCbCr ERROR] HAL_DMA2D_Init failed: %d\n", dma2d_result);
+    return;
+  }
+  
+  dma2d_result = HAL_DMA2D_ConfigLayer(&hlcd_dma2d, 1);
+  if (dma2d_result != HAL_OK) {
+    printf("[DMA2D YCbCr ERROR] HAL_DMA2D_ConfigLayer failed: %d\n", dma2d_result);
+    return;
+  }
 
-  HAL_DMA2D_Start(&hlcd_dma2d, (uint32_t)pSrc, (uint32_t)pDst, xsize, ysize);
-  HAL_DMA2D_PollForTransfer(
-      &hlcd_dma2d, 25); /* 等待前一次DMA2D传输完成 */
+  dma2d_result = HAL_DMA2D_Start(&hlcd_dma2d, (uint32_t)pSrc, (uint32_t)pDst, xsize, ysize);
+  if (dma2d_result != HAL_OK) {
+    printf("[DMA2D YCbCr ERROR] HAL_DMA2D_Start failed: %d\n", dma2d_result);
+    return;
+  }
+  
+  dma2d_result = HAL_DMA2D_PollForTransfer(&hlcd_dma2d, 1000); // 增加超时时间
+  if (dma2d_result != HAL_OK) {
+    printf("[DMA2D YCbCr ERROR] HAL_DMA2D_PollForTransfer failed: %d\n", dma2d_result);
+    return;
+  }
+  
+  printf("[DMA2D YCbCr] Conversion completed successfully\n");
 }
 
 // 发送DSI DCS写命令
@@ -894,9 +917,15 @@ void lcd_add_second_layer(void) { // 添加第二层（CoverBackground）
   // Layer2内存从第一行开始，前44行保持透明，壁纸内容从第一行开始与Layer1重合
   config.address = LAYER2_MEMORY_BASE; // 设置Layer2帧缓冲区地址
   
+  printf("[Layer2 Config] Address: 0x%08lX, Size: %lu x %lu, Pixel Format: 0x%02lX\n", 
+         (uint32_t)LAYER2_MEMORY_BASE, lcd_params.hres, lcd_params.vres, config.pixel_format);
+  printf("[Layer2 Config] Window: (%lu,%lu) to (%lu,%lu)\n", config.x0, config.y0, config.x1, config.y1);
+  
   if (ltdc_layer_config(&hlcd_ltdc, 1, &config) != HAL_OK) { // 配置Layer1
+    printf("[ERROR] Failed to configure Layer2 (LTDC Layer1)\n");
     return; // 配置失败直接返回
   }
+  printf("[Layer2] Successfully configured Layer2\n");
   
   // 初始化CoverBackground内容
   lcd_cover_background_init(); // 初始化CoverBackground内容
@@ -910,6 +939,18 @@ void lcd_add_second_layer(void) { // 添加第二层（CoverBackground）
   // 只配置Layer1
   HAL_LTDC_SetAlpha(&hlcd_ltdc, 255, 1);  // Layer 1 完全不透明
   __HAL_LTDC_LAYER_ENABLE(&hlcd_ltdc, 1); // 启用Layer1
+  printf("[Layer2] Set Layer2 alpha to 255 (fully opaque), enabled Layer2\n");
+  
+  // 验证Layer2地址范围
+  uint32_t layer2_start = (uint32_t)LAYER2_MEMORY_BASE;
+  uint32_t layer2_end = layer2_start + (lcd_params.hres * lcd_params.vres * 2);
+  uint32_t ltdc_buffer_end = FMC_SDRAM_LTDC_BUFFER_ADDRESS + FMC_SDRAM_LTDC_BUFFER_LEN;
+  printf("[Layer2 Memory Check] Layer2: 0x%08lX - 0x%08lX, LTDC buffer ends at: 0x%08lX\n", 
+         layer2_start, layer2_end, ltdc_buffer_end);
+  if (layer2_end > ltdc_buffer_end) {
+    printf("[ERROR] Layer2 memory exceeds LTDC buffer! Overflow by %lu bytes\n", 
+           layer2_end - ltdc_buffer_end);
+  }
   
   // 将layer初始化到屏幕上方位置（考虑透明状态栏）
   // 标记为已初始化后再移动
@@ -943,8 +984,8 @@ void lcd_cover_background_init(void) { // 初始化CoverBackground内容
   // 在初始化时就分配备份缓冲区
   if (g_statusbar_backup_buffer == NULL) {
     // uint32_t backup_size = lcd_params.hres * TRANSPARENT_STATUSBAR_HEIGHT * sizeof(uint16_t);
-    // 使用SDRAM中的一个安全位置（在Layer2内存后面）
-    g_statusbar_backup_buffer = (uint16_t*)(LAYER2_MEMORY_BASE + lcd_params.hres * lcd_params.vres * 2 + 0x1000);
+    // 使用SDRAM中的一个安全位置（在LTDC 3MB缓冲区结束后）
+    g_statusbar_backup_buffer = (uint16_t*)(FMC_SDRAM_LTDC_BUFFER_ADDRESS + FMC_SDRAM_LTDC_BUFFER_LEN + 0x1000);
     
     // // 立即清空备份缓冲区，避免随机数据
     // for (uint32_t i = 0; i < lcd_params.hres * TRANSPARENT_STATUSBAR_HEIGHT; i++) {
@@ -957,11 +998,21 @@ void lcd_cover_background_init(void) { // 初始化CoverBackground内容
   uint16_t *layer2_buffer = (uint16_t*)LAYER2_MEMORY_BASE; // 获取Layer2缓冲区指针
   uint32_t buffer_size = lcd_params.hres * lcd_params.vres; // 计算像素数量
   
+  printf("[Layer2 Init] Initializing Layer2 buffer at 0x%08lX, size: %lu pixels\n", 
+         (uint32_t)layer2_buffer, buffer_size);
+  
   // 先清空整个layer2缓冲区，避免随机数据
   printf("CoverBackground: Clearing layer2 buffer...\n"); // 打印清空信息
+  printf("[Layer2 Clear] Clearing %lu pixels at address 0x%08lX\n", buffer_size, (uint32_t)layer2_buffer);
   for (uint32_t i = 0; i < buffer_size; i++) { // 遍历每个像素
     layer2_buffer[i] = 0x0000;  // 清除为黑色
   }
+  // 验证清空结果
+  uint32_t black_count = 0;
+  for (uint32_t i = 0; i < 100; i++) { // 检查前100个像素
+    if (layer2_buffer[i] == 0x0000) black_count++;
+  }
+  printf("[Layer2 Clear] Verified: first 100 pixels, %lu are black\n", black_count);
   
   // 复制Layer1当前显示内容到Layer2，确保背景一致
   printf("CoverBackground: Copying Layer1 background to Layer2 for consistency\n"); // 打印复制信息
@@ -971,6 +1022,9 @@ void lcd_cover_background_init(void) { // 初始化CoverBackground内容
     printf("CoverBackground: Using DMA2D to copy Layer1 background (addr=0x%08lx)\n", g_current_display_addr); // 打印地址信息
     
     // 使用DMA2D复制整个Layer1内容到Layer2，确保背景一致
+    printf("[Layer2 DMA2D] Copying from Layer1 (0x%08lX) to Layer2 (0x%08lX), size: %lu x %lu\n",
+           (uint32_t)g_current_display_addr, (uint32_t)LAYER2_MEMORY_BASE, 
+           lcd_params.hres, lcd_params.vres);
     dma2d_copy_buffer((uint32_t*)g_current_display_addr, 
                       (uint32_t*)LAYER2_MEMORY_BASE,
                       0, 0, lcd_params.hres, lcd_params.vres); // DMA2D拷贝
@@ -979,6 +1033,8 @@ void lcd_cover_background_init(void) { // 初始化CoverBackground内容
   } else {
     // 如果没有Layer1内容，使用默认Layer1帧缓冲区
     printf("CoverBackground: Using default Layer1 framebuffer for background consistency\n"); // 打印默认信息
+    printf("[Layer2 DMA2D] Copying default framebuffer from 0x%08lX to Layer2 (0x%08lX)\n",
+           (uint32_t)FMC_SDRAM_LTDC_BUFFER_ADDRESS, (uint32_t)LAYER2_MEMORY_BASE);
     dma2d_copy_buffer((uint32_t*)FMC_SDRAM_LTDC_BUFFER_ADDRESS, 
                       (uint32_t*)LAYER2_MEMORY_BASE,
                       0, 0, lcd_params.hres, lcd_params.vres); // DMA2D拷贝
@@ -987,12 +1043,20 @@ void lcd_cover_background_init(void) { // 初始化CoverBackground内容
   // 验证初始化后状态栏区域的数据，不再添加测试图案
   printf("CoverBackground: Verifying statusbar area after initialization\n");
   uint32_t statusbar_non_black = 0;
+  uint32_t total_non_black = 0;
   for (uint32_t i = 0; i < lcd_params.hres * TRANSPARENT_STATUSBAR_HEIGHT; i++) {
     if (layer2_buffer[i] != 0x0000) {
       statusbar_non_black++;
     }
   }
+  // 检查整个Layer2内容
+  for (uint32_t i = 0; i < buffer_size; i++) {
+    if (layer2_buffer[i] != 0x0000) {
+      total_non_black++;
+    }
+  }
   printf("CoverBackground: Statusbar area has %lu non-black pixels after init\n", statusbar_non_black);
+  printf("[Layer2 Verify] Total Layer2 has %lu/%lu non-black pixels\n", total_non_black, buffer_size);
 }
 
 
@@ -1132,8 +1196,9 @@ void lcd_cover_background_load_jpeg(const char* jpeg_path) {
   // 初始化JPEG解码器（如果需要）
   jpeg_init();
   
-  // 解码JPEG文件到临时缓冲区
-  int decode_result = jped_decode((char*)jpeg_path, jpeg_output_address);
+  // 直接解码JPEG文件并转换到Layer2地址
+  printf("[Layer2 JPEG] Decoding directly to Layer2 address: 0x%08lX\n", (uint32_t)LAYER2_MEMORY_BASE);
+  int decode_result = jped_decode_to_address((char*)jpeg_path, jpeg_output_address, (uint32_t)LAYER2_MEMORY_BASE);
   
   if (decode_result != 0) {
     printf("ERROR: Failed to decode JPEG file %s, error code: %d\n", jpeg_path, decode_result);
@@ -1146,36 +1211,17 @@ void lcd_cover_background_load_jpeg(const char* jpeg_path) {
   
   printf("JPEG decoded successfully: %lux%lu, subsampling: %lu\n", width, height, subsampling);
   
-  // 计算需要复制的像素数量（限制在显示分辨率内）
-  uint32_t copy_width = (width > lcd_params.hres) ? lcd_params.hres : width;
-  uint32_t copy_height = (height > lcd_params.vres) ? lcd_params.vres : height;
-  
-  // 首先清除layer2的所有内容为黑色，避免蓝色背景残留
+  // 验证Layer2中的数据
   uint16_t *layer2_buffer = (uint16_t*)LAYER2_MEMORY_BASE;
-  uint32_t total_pixels = lcd_params.hres * lcd_params.vres;
-  
-  printf("Clearing layer2 buffer (%lu pixels) before JPEG copy...\n", total_pixels);
-  for (uint32_t i = 0; i < total_pixels; i++) {
-    layer2_buffer[i] = 0x0000; // Clear to black
+  uint32_t non_black_in_layer2 = 0;
+  for (uint32_t i = 0; i < 1000; i++) { // 检查前1000个像素
+    if (layer2_buffer[i] != 0x0000) {
+      non_black_in_layer2++;
+    }
   }
+  printf("[Layer2 JPEG] After direct decode to Layer2: %lu/1000 non-black pixels\n", non_black_in_layer2);
   
-  // 使用DMA2D复制解码后的JPEG数据到Layer2，从第1行开始与Layer1重合
-  printf("Using DMA2D to copy JPEG data: %lux%lu -> layer2 starting from Y=0 (to align with Layer1)...\n", copy_width, copy_height);
-  
-  // 检查解码后的数据格式，确保是RGB565
-  if (subsampling == JPEG_420_SUBSAMPLING || subsampling == JPEG_422_SUBSAMPLING || subsampling == JPEG_444_SUBSAMPLING) {
-    // JPEG数据可能需要YCbCr到RGB转换
-    printf("Converting YCbCr to RGB565 using DMA2D...\n");
-    dma2d_copy_ycbcr_to_rgb((uint32_t*)jpeg_output_address, 
-                            (uint32_t*)LAYER2_MEMORY_BASE,
-                            copy_width, copy_height, subsampling);
-  } else {
-    // 如果是RGB565格式，直接复制
-    printf("Direct RGB565 copy using DMA2D...\n");
-    dma2d_copy_buffer((uint32_t*)jpeg_output_address, 
-                      (uint32_t*)LAYER2_MEMORY_BASE,
-                      0, 0, copy_width, copy_height);
-  }
+  // 数据已经直接解码到Layer2，无需再次DMA2D转换
   
   // 不再自动设置前44行为透明颜色键，保持背景图片的完整内容
   // 透明状态栏将通过 lcd_cover_background_set_statusbar_opacity() 函数按需控制
@@ -1199,8 +1245,8 @@ void lcd_cover_background_load_jpeg(const char* jpeg_path) {
     lcd_cover_background_update_layer1_from_layer2();
   }
   
-  printf("JPEG wallpaper loaded to CoverBackground layer: %s (%lux%lu -> %lux%lu)\n", 
-         jpeg_path, width, height, copy_width, copy_height);
+  printf("JPEG wallpaper loaded to CoverBackground layer: %s (%lux%lu)\n", 
+         jpeg_path, width, height);
 }
 
 // 正确的硬件移动 CoverBackground - 动态窗口避免黑屏遮挡
@@ -1223,6 +1269,9 @@ void lcd_cover_background_move_to_y(int16_t y_position) {
   
   // 确保Layer1启用
   __HAL_LTDC_LAYER_ENABLE(&hlcd_ltdc, 1);
+  
+  // 检查Layer2当前状态
+  printf("[Layer2 Move] Moving Layer2 to Y=%d\n", y_position);
   
   // 关键优化：动态窗口而不是动态地址
   // 这样避免读取超出范围的内存导致黑屏
@@ -1660,7 +1709,7 @@ void lcd_cover_background_set_statusbar_opacity(bool transparent) {
       // 确保备份缓冲区已分配
       if (g_statusbar_backup_buffer == NULL) {
         uint32_t backup_size = lcd_params.hres * TRANSPARENT_STATUSBAR_HEIGHT * sizeof(uint16_t);
-        g_statusbar_backup_buffer = (uint16_t*)(LAYER2_MEMORY_BASE + lcd_params.hres * lcd_params.vres * 2 + 0x1000);
+        g_statusbar_backup_buffer = (uint16_t*)(FMC_SDRAM_LTDC_BUFFER_ADDRESS + FMC_SDRAM_LTDC_BUFFER_LEN + 0x1000);
         
         // // 立即清空备份缓冲区，避免随机数据
         // for (uint32_t i = 0; i < lcd_params.hres * TRANSPARENT_STATUSBAR_HEIGHT; i++) {
