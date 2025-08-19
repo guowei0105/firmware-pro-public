@@ -52,7 +52,13 @@ def init_lvgl() -> None:
     indev_drv.read_cb = lcd.ts_read
     indev_drv.long_press_time = 500
     indev_drv.long_press_repeat_time = 200
-    indev_drv.register()
+    indev = indev_drv.register()
+    
+    # Configure gesture recognition parameters
+    if hasattr(indev, 'set_gesture_min_velocity'):
+        indev.set_gesture_min_velocity(30)  # Minimum velocity for gesture recognition
+    if hasattr(indev, 'set_gesture_sensitivity'):
+        indev.set_gesture_sensitivity(50)  # Gesture sensitivity threshold
 
 
 def init_theme() -> None:

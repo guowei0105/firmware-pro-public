@@ -65,21 +65,14 @@ if __debug__:
     APP_DRAWER_UP_PATH_CB = PATH_EASE_OUT
     APP_DRAWER_DOWN_PATH_CB = PATH_EASE_IN_OUT
 
-
 def change_state(is_busy: bool = False):
     if hasattr(MainScreen, "_instance"):
         if MainScreen._instance:
             MainScreen._instance.change_state(is_busy)
-
-
 class MainScreen(Screen):
     def __init__(self, device_name=None, ble_name=None, dev_state=None):
-        print("=== MainScreen.__init__ called ===")
-        print(f"MainScreen: device_name={device_name}, ble_name={ble_name}")
-        print("MainScreen: Starting initialization...")
         homescreen = storage_device.get_homescreen()
         if not hasattr(self, "_init"):
-            print("MainScreen: First time initialization")
             self._init = True
             self._cached_homescreen = homescreen
             super().__init__(
@@ -90,15 +83,15 @@ class MainScreen(Screen):
                 StyleWrapper().text_align_center().text_color(lv_colors.WHITE), 0
             )
         else:
-            # if (
-            #     not hasattr(self, "_cached_homescreen")
-            #     or self._cached_homescreen != homescreen
-            # ):
-            #     self._cached_homescreen = homescreen
-            #     self.add_style(
-            #         StyleWrapper().bg_img_src(homescreen),
-            #         0,
-            #     )
+            if (
+                not hasattr(self, "_cached_homescreen")
+                or self._cached_homescreen != homescreen
+            ):
+                self._cached_homescreen = homescreen
+                self.add_style(
+                    StyleWrapper().bg_img_src(homescreen),
+                    0,
+                )
             if hasattr(self, "dev_state"):
                 from apps.base import get_state
 
@@ -120,14 +113,11 @@ class MainScreen(Screen):
             self.dev_state = MainScreen.DevStateTipsBar(self)
             self.dev_state.align_to(self.subtitle, lv.ALIGN.OUT_BOTTOM_MID, 0, 48)
             self.dev_state.show(dev_state)
-
-        # self.add_style(
-        #     StyleWrapper().bg_img_src(homescreen),
-        #     0,
-        # )
-
+        self.add_style(
+            StyleWrapper().bg_img_src(homescreen),
+            0,
+        )
         self.clear_flag(lv.obj.FLAG.SCROLLABLE)
-
         self.bottom_tips = lv.label(self.content_area)
         self.bottom_tips.set_long_mode(lv.label.LONG.WRAP)
         self.bottom_tips.set_size(456, lv.SIZE.CONTENT)
@@ -143,138 +133,19 @@ class MainScreen(Screen):
         self.up_arrow = lv.img(self.content_area)
         self.up_arrow.set_src("A:/res/up-home.png")
         self.up_arrow.align_to(self.bottom_tips, lv.ALIGN.OUT_TOP_MID, 0, -8)
-
+        
         self.apps = self.AppDrawer(self)
         self.set_size(480, 800)
-        # self.apps.add_flag(lv.obj.FLAG.HIDDEN)
-        # self.add_event_cb(self.on_slide_up, lv.EVENT.GESTURE, None)
-        # save_app_obj(self)
-        
-        # Initialize hardware cover background
-        self.init_hardware_cover_background()
+        self.apps.add_flag(lv.obj.FLAG.GESTURE_BUBBLE)
         save_app_obj(self)
 
     def hidden_others(self, hidden: bool = True):
         if hidden:
-            self.set_style_bg_img_src(None, 0)
             if hasattr(self, "title"):
                 self.title.add_flag(lv.obj.FLAG.HIDDEN)
             if hasattr(self, "subtitle"):
                 self.subtitle.add_flag(lv.obj.FLAG.HIDDEN)
         else:
-            homescreen = storage_device.get_homescreen()
-            self.set_style_bg_img_src(homescreen, 0)
-            if hasattr(self, "title"):
-                self.title.clear_flag(lv.obj.FLAG.HIDDEN)
-            if hasattr(self, "subtitle"):
-                self.subtitle.clear_flag(lv.obj.FLAG.HIDDEN)
-    
-    def init_hardware_cover_background(self):
-        """Initialize hardware CoverBackground control and gesture handling"""
-        print("=== init_hardware_cover_background called ===")
-        
-        # Enable gesture recognition on this screen
-        self.add_flag(lv.obj.FLAG.GESTURE_BUBBLE)
-        self.clear_flag(lv.obj.FLAG.SCROLLABLE)  # Disable scrolling to allow gestures
-        
-        # Add gesture event handler
-        self.add_event_cb(self.on_gesture, lv.EVENT.GESTURE, None)
-        
-        # Import trezorui for hardware CoverBackground control
-        try:
-            from trezorui import Display
-            print("trezorui.Display imported successfully")
-            self.display = Display()
-            print(f"Display instance created: {self.display}")
-            
-            # Test if our new methods exist
-            if hasattr(self.display, 'cover_background_show'):
-                print("cover_background_show method found")
-                # First, try to initialize the cover background
-                if hasattr(self.display, 'cover_background_init'):
-                    print("Calling cover_background_init...")
-                    self.display.cover_background_init()
-                    # Hide layer2 after initialization
-                    print("Hiding cover_background after init...")
-                    self.display.cover_background_hide()
-                    
-                # Schedule delayed loading of homescreen to allow display to stabilize
-                print("Scheduling delayed background load...")
-                self.schedule_delayed_background_load()
-            else:
-                print("cover_background_show method NOT found")
-                self.display = None
-                
-        except (ImportError, Exception) as e:
-            print(f"Failed to import trezorui.Display: {e}")
-            self.display = None
-        
-        print(f"=== init_hardware_cover_background completed, self.display = {self.display} ===")
-
-    def schedule_delayed_background_load(self):
-        """Schedule delayed loading of background to ensure display system is ready"""
-        if not self.display:
-            return
-            
-        # Use a timer to delay the background loading by 100ms
-        try:
-            def delayed_load():
-                self.load_homescreen_to_hardware()
-                
-            # Schedule the load operation
-            import micropython
-            micropython.schedule(delayed_load, None)
-        except:
-            # Fallback: load immediately if scheduling fails
-            self.load_homescreen_to_hardware()
-
-    def load_homescreen_to_hardware(self):
-        """Load the current homescreen image to hardware CoverBackground layer"""
-        print("=== load_homescreen_to_hardware called ===")
-        
-        if not self.display or not hasattr(self.display, 'cover_background_set_image'):
-            print("ERROR: No display object")
-            return
-            
-            
-        try:
-            # Get current homescreen path
-            homescreen_path = storage_device.get_homescreen()
-            print(f"Current homescreen path: {homescreen_path}")
-            
-            if homescreen_path and homescreen_path.startswith("A:"):
-                # Convert LVGL path to actual file path
-                file_path = homescreen_path[2:]  # Remove "A:" prefix
-                print(f"Converting to file path: {file_path}")
-                
-                
-                # Try to load the JPEG file directly
-                if hasattr(self.display, 'cover_background_load_jpeg'):
-                    self.display.cover_background_load_jpeg(file_path)
-                    # Show layer2 after JPEG loading completes
-                    print("Showing cover_background after JPEG load...")
-                    self.display.cover_background_show()
-                else:
-                    # Alternative: try to read raw image data
-                    try:
-                        with open(file_path, 'rb') as f:
-                            image_data = f.read()
-                            self.display.cover_background_set_image(image_data)
-                    except Exception:
-                        pass  # Silent fallback
-                        
-        except Exception:
-            pass  # Silent fallback to default behavior 
-
-    def hidden_others(self, hidden: bool = True):
-        if hidden:
-            # 隐藏标题和副标题
-            if hasattr(self, "title"):
-                self.title.add_flag(lv.obj.FLAG.HIDDEN)
-            if hasattr(self, "subtitle"):
-                self.subtitle.add_flag(lv.obj.FLAG.HIDDEN)
-        else:
-            # 显示标题和副标题
             if hasattr(self, "title"):
                 self.title.clear_flag(lv.obj.FLAG.HIDDEN)
             if hasattr(self, "subtitle"):
@@ -290,45 +161,6 @@ class MainScreen(Screen):
             self.up_arrow.clear_flag(lv.obj.FLAG.HIDDEN)
             self.bottom_tips.set_text(_(i18n_keys.BUTTON__SWIPE_TO_SHOW_APPS))
 
-   
-
-    def on_gesture(self, event_obj):
-        """Handle gestures for hardware CoverBackground control"""
-        code = event_obj.code
-        print(f"MainScreen on_gesture called: code={code}, display={self.display}")
-        
-        if code == lv.EVENT.GESTURE and self.display:
-            try:
-                indev = lv.indev_get_act()
-                if indev:
-                    _dir = indev.get_gesture_dir()
-                    print(f"Gesture direction: {_dir}")
-                    
-                    if _dir == lv.DIR.TOP:
-                        # Gesture UP - Hide hardware CoverBackground
-                        print("UP gesture detected - hiding cover background")
-                        if hasattr(self.display, 'cover_background_hide'):
-                            self.display.cover_background_hide()
-                            print("cover_background_hide called")
-                        else:
-                            print("cover_background_hide method not found")
-                            
-                    elif _dir == lv.DIR.BOTTOM:
-                        # Gesture DOWN - Show hardware CoverBackground  
-                        print("DOWN gesture detected - showing cover background")
-                        if hasattr(self.display, 'cover_background_show'):
-                            self.display.cover_background_show()
-                            print("cover_background_show called")
-                        else:
-                            print("cover_background_show method not found")
-                    else:
-                        print(f"Other gesture direction: {_dir}")
-                            
-            except Exception as e:
-                pass
-    
-    
-            print(f"Cover gesture handling failed: {e}")
 
     def _load_scr(self, scr: "Screen", back: bool = False) -> None:
         lv.scr_load(scr)
@@ -366,6 +198,7 @@ class MainScreen(Screen):
         def hidden(self):
             self.add_flag(lv.obj.FLAG.HIDDEN)
 
+
     class AppDrawer(lv.obj):
         PAGE_SIZE = 2
 
@@ -390,13 +223,15 @@ class MainScreen(Screen):
                 0,
             )
             self.add_style(
-                StyleWrapper().bg_img_src("A:/res/wallpaper-1.jpg").border_width(0),
+                StyleWrapper().bg_img_src("A:/res/2222.png").border_width(0),
                 0,
             )
 
             self.add_event_cb(self.on_click, lv.EVENT.CLICKED, None)
 
-            self.clear_flag(lv.obj.FLAG.GESTURE_BUBBLE)
+            # Initially allow gesture bubbling when AppDrawer is hidden
+            # This will be managed by show/hide methods
+            self.add_flag(lv.obj.FLAG.GESTURE_BUBBLE)
             self.add_event_cb(self.on_gesture, lv.EVENT.GESTURE, None)
 
             self.main_cont = lv.obj(self)
@@ -406,7 +241,6 @@ class MainScreen(Screen):
             self.main_cont.set_style_pad_all(0, 0)
             self.main_cont.set_style_border_width(0, 0)
             self.main_cont.set_style_bg_opa(lv.OPA.TRANSP, 0)
-            self.clear_flag(lv.obj.FLAG.GESTURE_BUBBLE)
             self.clear_flag(lv.obj.FLAG.SCROLLABLE)
 
             self.current_page = 0
@@ -497,9 +331,6 @@ class MainScreen(Screen):
                 .text_align_center(),
                 0,
             )
-            # label.add_style(
-            #     StyleWrapper().text_opa(lv.OPA._70), lv.PART.MAIN | lv.STATE.PRESSED
-            # )
 
             label.align_to(btn, lv.ALIGN.OUT_BOTTOM_MID, 0, 8)
 
@@ -566,15 +397,17 @@ class MainScreen(Screen):
                 _dir = indev.get_gesture_dir()
                 print(f"AppDrawer: Gesture direction: {_dir}")
                 
-                # 向上滑动 - 隐藏layer（向上滑出屏幕）
+                # 向上滑动 - 显示或隐藏layer
                 if _dir == lv.DIR.TOP:
                     try:
                         from trezorui import Display
                         display = Display()
-                        # UP手势：向上滑出动画
+                        
+                        # 检查layer2是否已经可见
                         if hasattr(display, 'cover_background_is_visible') and display.cover_background_is_visible():
+                            # Layer2已经可见，执行向上滑出隐藏动画
                             if hasattr(display, 'cover_background_animate_to_y'):
-                                print("UP gesture: Starting statusbar restore and animation")
+                                print("UP gesture: Layer2 visible, starting slide up (hide) animation")
                                 
                                 # 取消任何下滑动画的延迟定时器，防止竞争条件
                                 if hasattr(self, '_down_gesture_transparency_timer'):
@@ -585,26 +418,7 @@ class MainScreen(Screen):
                                         pass
                                     delattr(self, '_down_gesture_transparency_timer')
                                 
-                                # 上滑前先重新加载JPEG状态栏区域，确保有正确的背景内容
-                                if hasattr(display, 'cover_background_reload_statusbar_from_jpeg'):
-                                    try:
-                                        from storage import device
-                                        homescreen_path = device.get_homescreen()
-                                        
-                                        if not homescreen_path:
-                                            homescreen_path = "/res/wallpaper-1.jpg"  # 使用正确的路径
-                                        
-                                        print(f"UP gesture: Reloading JPEG from {homescreen_path}")
-                                        display.cover_background_reload_statusbar_from_jpeg(homescreen_path)  ###lalye1
-                                    except Exception:
-                                        print("UP gesture: Reloading JPEG from fallback path")
-                                        display.cover_background_reload_statusbar_from_jpeg("/res/wallpaper-1.jpg")                                
-                                # 然后恢复Layer2顶部44像素的不透明状态
-                                # False = 不透明，显示完整背景图片内容
-                                print("UP gesture: Setting statusbar to opaque")
-                                display.cover_background_set_statusbar_opacity(False)
-                                # 立即设置Layer1背景图片（在动画开始前）
-                                # 这样在Layer2滑动过程中就能看到正确的Layer1背景
+                                # 设置Layer1背景图片（在动画开始前）
                                 print("UP gesture: Setting Layer1 background to res/2222.png")
                                 self.add_style(
                                     StyleWrapper().bg_img_src("A:/res/2222.png").border_width(0),
@@ -619,22 +433,59 @@ class MainScreen(Screen):
                                     print("UP gesture: Starting slide up animation")
                                     display.cover_background_animate_to_y(-800, 250)
                                     
-                                    # 动画完成后再隐藏layer（450ms动画时间 + 50ms缓冲）
+                                    # 动画完成后再隐藏layer（250ms动画时间 + 50ms缓冲）
                                     hide_timer = lv.timer_create(
                                         lambda t: display.cover_background_hide() if hasattr(display, 'cover_background_hide') else None,
-                                        150, None
+                                        300, None
                                     )
                                     hide_timer.set_repeat_count(1)
                                 
-                                # 延迟50毫秒开始动画，让Layer1背景先设置好
+                                # 延迟20毫秒开始动画，让Layer1背景先设置好
                                 animation_timer = lv.timer_create(lambda t: start_animation(), 20, None)
                                 animation_timer.set_repeat_count(1)
-                                
-  
                             else:
                                 # 如果没有动画函数，直接隐藏
                                 if hasattr(display, 'cover_background_hide'):
                                     display.cover_background_hide()
+                        else:
+                            # Layer2不可见，执行向上滑入显示动画
+                            print("UP gesture: Layer2 hidden, starting slide up (show) animation")                            
+                            # 先加载图片内容
+                            if hasattr(display, 'cover_background_load_jpeg'):
+                                try:
+                                    from storage import device
+                                    homescreen_path = device.get_homescreen()
+                                    
+                                    if not homescreen_path:
+                                        homescreen_path = "res/wallpaper-1.jpg"  # 使用正确的路径
+                                    else:
+                                        # 如果路径包含 A:/ 前缀，需要移除它用于硬件 JPEG 解码
+                                        if homescreen_path.startswith("A:/"):
+                                            homescreen_path = homescreen_path[3:]  # 移除 "A:/" 前缀
+                                    
+                                    display.cover_background_load_jpeg(homescreen_path)
+                                except Exception:
+                                    # 使用纯黑色背景作为备用
+                                    if hasattr(display, 'cover_background_set_image'):
+                                        width, height = 480, 800
+                                        black_image = bytearray(width * height * 2)
+                                        # 所有像素都设置为黑色 (0x0000)
+                                        for i in range(len(black_image)):
+                                            black_image[i] = 0
+                                        display.cover_background_set_image(bytes(black_image))
+                            
+                            # 从屏幕上方滑入动画
+                            if hasattr(display, 'cover_background_animate_to_y'):
+                                display.cover_background_move_to_y(-800)  # 初始位置在屏幕上方
+                                if hasattr(display, 'cover_background_set_visible'):
+                                    display.cover_background_set_visible(True)
+                                display.cover_background_animate_to_y(0, 250)  # 滑入屏幕
+                                if hasattr(display, 'cover_background_show'):
+                                    display.cover_background_show()
+                            else:
+                                # 如果没有动画函数，直接显示
+                                if hasattr(display, 'cover_background_show'):
+                                    display.cover_background_show()
                     except Exception as e:
                         pass  # 静默处理错误
                     return
@@ -644,9 +495,8 @@ class MainScreen(Screen):
                         from trezorui import Display
                         display = Display()
                         
-                        # 向下滑动时，总是执行显示动画（移除可见性检查）
+
                         if True:  # 总是执行动画
-                            # 先加载图片内容
                             self.add_style(
                                     StyleWrapper().bg_img_src("A:/res/wallpaper-1.jpg").border_width(0),
                                     0,
@@ -657,7 +507,11 @@ class MainScreen(Screen):
                                     homescreen_path = device.get_homescreen()
                                     
                                     if not homescreen_path:
-                                        homescreen_path = "/res/wallpaper-1.jpg"  # 使用正确的路径
+                                        homescreen_path = "res/wallpaper-1.jpg"  # 使用正确的路径
+                                    else:
+                                        # 如果路径包含 A:/ 前缀，需要移除它用于硬件 JPEG 解码
+                                        if homescreen_path.startswith("A:/"):
+                                            homescreen_path = homescreen_path[3:]  # 移除 "A:/" 前缀
                                     
                                     display.cover_background_load_jpeg(homescreen_path)
 
@@ -681,10 +535,8 @@ class MainScreen(Screen):
                                 if hasattr(display, 'cover_background_set_visible'):
                                     display.cover_background_set_visible(True)
                                 
-                                # 下滑开始时，确保Layer2状态栏为不透明（显示完整图案）
-                                if hasattr(display, 'cover_background_set_statusbar_opacity'):
-                                    print("DOWN gesture: Setting statusbar to opaque for complete image")
-                                    display.cover_background_set_statusbar_opacity(False)  # False = 不透明，显示完整图案
+                                # 下滑开始时的简化处理：不再需要设置状态栏透明度
+                                print("DOWN gesture: No statusbar opacity changes needed")
                                 
                                 # 流畅的从顶部滑入动画
                                 display.cover_background_animate_to_y(0, 250)
@@ -699,7 +551,7 @@ class MainScreen(Screen):
                                         homescreen_path = device.get_homescreen()
                                         
                                         if not homescreen_path:
-                                            homescreen_path = "/res/wallpaper-1.jpg"
+                                            homescreen_path = "A:/res/wallpaper-1.jpg"  # Layer1 需要 A:/ 前缀
                                         
                                         print(f"DOWN gesture: Setting Layer1 background to {homescreen_path}")
                                         # 设置Layer1背景图片为和Layer2相同的壁纸
@@ -711,17 +563,12 @@ class MainScreen(Screen):
                                         # 强制刷新UI确保Layer1背景立即生效
                                         lv.refr_now(None)
                                         
-                                        # 立即设置Layer2状态栏为透明，不使用延迟定时器
-                                        # 这样可以避免与上滑手势的竞争条件
-                                        print("DOWN gesture: Setting statusbar transparent to show Layer1 UI")
-                                        if hasattr(display, 'cover_background_set_statusbar_opacity'):
-                                            display.cover_background_set_statusbar_opacity(True)  # True = 透明，显示Layer1状态栏
+                                        # 简化处理：不再需要状态栏透明度设置
+                                        print("DOWN gesture: Layer1 background set, no statusbar changes needed")
                                         
                                     except Exception:
-                                        print("DOWN gesture: Error setting Layer1 background, setting statusbar transparent")
-                                        # 如果出错，直接设置透明
-                                        if hasattr(display, 'cover_background_set_statusbar_opacity'):
-                                            display.cover_background_set_statusbar_opacity(True)
+                                        print("DOWN gesture: Error setting Layer1 background")
+                                        # 简化错误处理：不再需要状态栏操作
                                 
                                 # 动画完成时执行处理步骤（延迟350ms，动画完成时）
                                 completion_timer = lv.timer_create(
@@ -790,11 +637,17 @@ class MainScreen(Screen):
         def dismiss_anim_del_cb(self, _anim):
             self.parent.hidden_others(False)
             self.add_flag(lv.obj.FLAG.HIDDEN)
+            # Ensure gesture bubbling is enabled when AppDrawer is fully hidden
+            self.add_flag(lv.obj.FLAG.GESTURE_BUBBLE)
+            print("AppDrawer: dismiss_anim_del_cb - ensured gesture bubbling enabled")
 
         def show(self):
             if self.visible:
                 return
             self.parent.add_state(lv.STATE.USER_1)
+            # Disable gesture bubbling when AppDrawer is shown to handle its own gestures
+            self.clear_flag(lv.obj.FLAG.GESTURE_BUBBLE)
+            print("AppDrawer: show() - disabled gesture bubbling")
             self.show_anim.start()
             # if self.header.has_flag(lv.obj.FLAG.HIDDEN):
             #     self.header.clear_flag(lv.obj.FLAG.HIDDEN)
@@ -804,6 +657,9 @@ class MainScreen(Screen):
         def dismiss(self):
             if not self.visible:
                 return
+            # Re-enable gesture bubbling when AppDrawer is dismissed to allow MainScreen to handle gestures
+            self.add_flag(lv.obj.FLAG.GESTURE_BUBBLE)
+            print("AppDrawer: dismiss() - enabled gesture bubbling")
             # self.parent.hidden_others(False)
             if hasattr(self.parent, "dev_state"):
                 self.parent.dev_state.show()
