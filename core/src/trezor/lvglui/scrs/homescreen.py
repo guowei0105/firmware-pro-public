@@ -208,6 +208,11 @@ class MainScreen(Screen):
         """处理 MainScreen 的手势事件"""
         code = event_obj.code
         if code == lv.EVENT.GESTURE:
+            # 如果 AppDrawer 可见，不处理手势，让 AppDrawer 处理
+            if hasattr(self, 'apps') and self.apps and self.apps.visible:
+                print("MainScreen: AppDrawer is visible, ignoring gesture")
+                return
+                
             indev = lv.indev_get_act()
             _dir = indev.get_gesture_dir()
             print(f"MainScreen: Gesture detected, direction: {_dir}")
@@ -260,21 +265,19 @@ class MainScreen(Screen):
                 
                 # 步骤3: 立即显示 AppDrawer 并恢复其原始背景（此时被layer2覆盖）
                 def show_appdrawer_behind_layer2():
-                    if hasattr(self.apps, 'clear_flag'):
-                        self.apps.clear_flag(lv.obj.FLAG.HIDDEN)
-                        self.apps.visible = True
-                        self.apps.slide = False
-                        self.apps._processing_gesture = False
+                    if hasattr(self.apps, 'show'):
+                        # 使用 show() 方法来正确显示 AppDrawer
+                        # show() 方法会：
+                        # 1. 清除 HIDDEN 标志
+                        # 2. 设置 visible = True
+                        # 3. 清除 FLAG.GESTURE_BUBBLE 标志，确保手势不会冒泡
+                        self.apps.show()
                         # 恢复 AppDrawer 的原始背景 (2222.png)
                         self.apps.add_style(
                             StyleWrapper().bg_img_src("A:/res/2222.png").border_width(0),
                             0,
                         )
-                        print("MainScreen: AppDrawer shown behind layer2 with background restored")
-                        
-                        # 隐藏 MainScreen 的元素，确保被 AppDrawer 遮挡
-                        self.hidden_others(True)
-                        print("MainScreen: MainScreen elements hidden, now covered by AppDrawer")
+                        print("MainScreen: AppDrawer shown behind layer2 with proper gesture handling")
                 
                 # 短暂延迟后显示 AppDrawer（让 layer2 先显示完毕）
                 show_timer = lv.timer_create(
@@ -573,6 +576,11 @@ class MainScreen(Screen):
                 # 检查是否已经在处理手势
                 if hasattr(self, '_processing_gesture') and self._processing_gesture:
                     print("AppDrawer: Already processing gesture, ignoring")
+                    return
+                
+                # 当AppDrawer可见时，忽略上滑手势
+                if _dir == lv.DIR.TOP and self.visible:
+                    print("AppDrawer: Ignoring UP gesture when AppDrawer is visible")
                     return
                 
                 # 向上滑动 - 显示或隐藏layer
