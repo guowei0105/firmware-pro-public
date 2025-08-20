@@ -65,10 +65,179 @@ if __debug__:
     APP_DRAWER_UP_PATH_CB = PATH_EASE_OUT
     APP_DRAWER_DOWN_PATH_CB = PATH_EASE_IN_OUT
 
+# Global variables for debouncing busy state
+_busy_state_counter = 0
+_last_busy_time = 0
+_busy_debounce_ms = 1000  # 1 second debounce time
+_cleanup_task = None
+
+def _get_persistent_busy_state():
+    """Get busy state from storage cache"""
+    try:
+        import storage.cache
+        return storage.cache.get_int(storage.cache.APP_COMMON_BUSY_STATE, 0)
+    except:
+        return 0
+
+def _get_persistent_busy_time():
+    """Get last busy time from storage cache"""
+    try:
+        import storage.cache
+        return storage.cache.get_int(storage.cache.APP_COMMON_BUSY_TIME, 0)
+    except:
+        return 0
+
+def _set_persistent_busy_state(counter):
+    """Set busy state to storage cache"""
+    try:
+        import storage.cache
+        import utime
+        
+        # Get current saved counter to see if this is the first time going busy
+        current_saved = storage.cache.get_int(storage.cache.APP_COMMON_BUSY_STATE, 0)
+        
+        storage.cache.set_int(storage.cache.APP_COMMON_BUSY_STATE, counter)
+        
+        # Only update timestamp when going from 0 to non-zero (first busy)
+        if current_saved == 0 and counter > 0:
+            storage.cache.set_int(storage.cache.APP_COMMON_BUSY_TIME, utime.ticks_ms())
+            if __debug__:
+                print(f"[PERSISTENT] Saved busy state: {counter} with NEW timestamp {utime.ticks_ms()}")
+        else:
+            if __debug__:
+                print(f"[PERSISTENT] Saved busy state: {counter} (timestamp unchanged)")
+    except:
+        pass
+
+async def _delayed_cleanup():
+    """Delayed cleanup task to restore non-busy state after debounce time"""
+    global _busy_state_counter, _cleanup_task
+    
+    import utime
+    from trezor import loop
+    
+    if __debug__:
+        print(f"[CLEANUP] Starting cleanup task, will wait {_busy_debounce_ms}ms")
+    
+    await loop.sleep(_busy_debounce_ms)
+    
+    if __debug__:
+        print(f"[CLEANUP] Cleanup task woke up, checking state...")
+    
+    # Check if we should restore non-busy state
+    current_time = utime.ticks_ms()
+    time_since_last_busy = utime.ticks_diff(current_time, _last_busy_time)
+    
+    if _busy_state_counter == 0 and time_since_last_busy >= _busy_debounce_ms:
+        if __debug__:
+            print(f"[CLEANUP] Restoring non-busy state after debounce")
+        
+        # Clear persistent state now that debounce is complete
+        _set_persistent_busy_state(0)
+        
+        if hasattr(MainScreen, "_instance") and MainScreen._instance:
+            # Ensure AppDrawer stays hidden
+            if hasattr(MainScreen._instance, 'apps') and MainScreen._instance.apps:
+                if not MainScreen._instance.apps.has_flag(lv.obj.FLAG.HIDDEN):
+                    MainScreen._instance.apps.hide_to_mainscreen_fallback()
+            
+            if __debug__:
+                print(f"[CLEANUP] Calling MainScreen.change_state(False) to restore normal state")
+            MainScreen._instance.change_state(False)
+            
+            if __debug__:
+                print(f"[CLEANUP] MainScreen state restored - should show up arrow and normal text")
+    
+    _cleanup_task = None
+
 def change_state(is_busy: bool = False):
-    if hasattr(MainScreen, "_instance"):
-        if MainScreen._instance:
-            MainScreen._instance.change_state(is_busy)
+    global _busy_state_counter, _last_busy_time, _cleanup_task
+    
+    if __debug__:
+        print(f"[CHANGE_STATE] Called with is_busy={is_busy}")
+    
+    import utime
+    from trezor import workflow
+    current_time = utime.ticks_ms()
+    
+    # Initialize from persistent state if needed
+    if _busy_state_counter == 0 and _last_busy_time == 0:
+        _busy_state_counter = _get_persistent_busy_state()
+        if __debug__:
+            print(f"[CHANGE_STATE] Loaded persistent counter: {_busy_state_counter}")
+    
+    if is_busy:
+        # Increment busy counter and update timestamp
+        _busy_state_counter += 1
+        _last_busy_time = current_time
+        _set_persistent_busy_state(_busy_state_counter)
+        if __debug__:
+            print(f"[CHANGE_STATE] Busy counter: {_busy_state_counter}")
+    else:
+        # Decrement busy counter
+        if _busy_state_counter > 0:
+            _busy_state_counter -= 1
+            # Don't save persistent state here - only save when counter > 0
+            if _busy_state_counter > 0:
+                _set_persistent_busy_state(_busy_state_counter)
+        
+        # Only restore to non-busy state if counter is 0 AND enough time has passed
+        time_since_last_busy = utime.ticks_diff(current_time, _last_busy_time)
+        if _busy_state_counter > 0 or time_since_last_busy < _busy_debounce_ms:
+            if __debug__:
+                print(f"[CHANGE_STATE] Staying busy - counter: {_busy_state_counter}, time_diff: {time_since_last_busy}ms")
+            
+            # Schedule cleanup task if not already scheduled and counter is 0
+            if _busy_state_counter == 0 and _cleanup_task is None:
+                if __debug__:
+                    print(f"[CHANGE_STATE] Scheduling cleanup task")
+                _cleanup_task = workflow.spawn(_delayed_cleanup())
+            
+            return  # Don't change to non-busy state yet
+        
+        if __debug__:
+            print(f"[CHANGE_STATE] Restoring non-busy state - counter: {_busy_state_counter}")
+        
+        # Cancel cleanup task if it exists
+        if _cleanup_task is not None:
+            _cleanup_task = None
+        
+        # Don't clear persistent state here - let cleanup task handle it
+    
+    if hasattr(MainScreen, "_instance") and MainScreen._instance:
+        # When setting busy state, ensure MainScreen is visible
+        if is_busy:
+            # Make sure MainScreen is the active screen
+            if not MainScreen._instance.is_visible():
+                if __debug__:
+                    print(f"[CHANGE_STATE] MainScreen not visible, switching to it")
+                lv.scr_load(MainScreen._instance)
+            else:
+                if __debug__:
+                    print(f"[CHANGE_STATE] MainScreen already visible")
+            
+            # Hide AppDrawer if it's visible
+            if hasattr(MainScreen._instance, 'apps') and MainScreen._instance.apps:
+                if not MainScreen._instance.apps.has_flag(lv.obj.FLAG.HIDDEN):
+                    if __debug__:
+                        print(f"[CHANGE_STATE] Hiding AppDrawer to show MainScreen")
+                    MainScreen._instance.apps.hide_to_mainscreen_fallback()
+        else:
+            # When restoring from busy state, ensure AppDrawer stays hidden
+            if hasattr(MainScreen._instance, 'apps') and MainScreen._instance.apps:
+                if not MainScreen._instance.apps.has_flag(lv.obj.FLAG.HIDDEN):
+                    if __debug__:
+                        print(f"[CHANGE_STATE] Ensuring AppDrawer stays hidden after communication")
+                    MainScreen._instance.apps.hide_to_mainscreen_fallback()
+        
+        MainScreen._instance.change_state(is_busy)
+    elif is_busy:
+        # If MainScreen instance doesn't exist, create and show it
+        if __debug__:
+            print(f"[CHANGE_STATE] MainScreen instance doesn't exist, creating it")
+        main_screen = MainScreen()
+        lv.scr_load(main_screen)
+        main_screen.change_state(is_busy)
 class MainScreen(Screen):
     def __init__(self, device_name=None, ble_name=None, dev_state=None):
         homescreen = storage_device.get_homescreen()
@@ -205,12 +374,61 @@ class MainScreen(Screen):
         if hasattr(self, 'bottom_tips'):
             self.bottom_tips.add_flag(lv.obj.FLAG.HIDDEN)
             
-        # 立即显示AppDrawer，无动画
-        self.apps.clear_flag(lv.obj.FLAG.HIDDEN)
-        self.apps.clear_flag(lv.obj.FLAG.GESTURE_BUBBLE)
-        self.apps.visible = True
-        self.apps._showing = False
-        print("MainScreen: Default to AppDrawer view")
+        # Check if we're in busy state - if so, don't show AppDrawer
+        global _busy_state_counter, _last_busy_time
+        
+        # Load persistent state if not already loaded
+        if _busy_state_counter == 0 and _last_busy_time == 0:
+            _busy_state_counter = _get_persistent_busy_state()
+            if __debug__:
+                print(f"MainScreen: Loaded persistent busy counter: {_busy_state_counter}")
+        
+        # Check if we should clear old busy state (no active communication for a while)
+        import utime
+        current_time = utime.ticks_ms()
+        
+        # If we have a saved busy state, check if it's too old
+        if _busy_state_counter > 0:
+            last_busy_time = _get_persistent_busy_time()
+            time_since_last_busy = utime.ticks_diff(current_time, last_busy_time)
+            
+            if __debug__:
+                print(f"MainScreen: Checking busy state age - current: {current_time}, last_busy: {last_busy_time}, diff: {time_since_last_busy}ms")
+            
+            # If more than 3 seconds have passed since last busy activity, clear it
+            if time_since_last_busy > 3000:  # 3 seconds
+                if __debug__:
+                    print(f"MainScreen: Clearing old busy state (last activity {time_since_last_busy}ms ago)")
+                _busy_state_counter = 0
+                _set_persistent_busy_state(0)
+            else:
+                if __debug__:
+                    print(f"MainScreen: Keeping busy state (activity only {time_since_last_busy}ms ago)")
+        
+        if _busy_state_counter > 0:
+            # Keep AppDrawer hidden during busy state
+            self.apps.add_flag(lv.obj.FLAG.HIDDEN)
+            self.apps.add_flag(lv.obj.FLAG.GESTURE_BUBBLE)
+            self.apps.visible = False
+            print("MainScreen: Staying in MainScreen view (busy state)")
+            
+            # Show MainScreen elements including title and subtitle
+            if hasattr(self, 'title') and self.title:
+                self.title.clear_flag(lv.obj.FLAG.HIDDEN)
+            if hasattr(self, 'subtitle') and self.subtitle:
+                self.subtitle.clear_flag(lv.obj.FLAG.HIDDEN)
+            if hasattr(self, 'up_arrow'):
+                self.up_arrow.add_flag(lv.obj.FLAG.HIDDEN)  # Hide during busy
+            if hasattr(self, 'bottom_tips'):
+                self.bottom_tips.clear_flag(lv.obj.FLAG.HIDDEN)
+                self.bottom_tips.set_text(_(i18n_keys.BUTTON__PROCESSING))
+        else:
+            # 立即显示AppDrawer，无动画
+            self.apps.clear_flag(lv.obj.FLAG.HIDDEN)
+            self.apps.clear_flag(lv.obj.FLAG.GESTURE_BUBBLE)
+            self.apps.visible = True
+            self.apps._showing = False
+            print("MainScreen: Default to AppDrawer view")
         
         # 为 MainScreen 添加手势处理
         self.add_event_cb(self.on_main_gesture, lv.EVENT.GESTURE, None)
@@ -458,10 +676,22 @@ class MainScreen(Screen):
             self.clear_flag(lv.obj.FLAG.CLICKABLE)
             self.up_arrow.add_flag(lv.obj.FLAG.HIDDEN)
             self.bottom_tips.set_text(_(i18n_keys.BUTTON__PROCESSING))
+            
+            # Ensure title and subtitle are visible during busy state
+            if hasattr(self, 'title') and self.title:
+                self.title.clear_flag(lv.obj.FLAG.HIDDEN)
+            if hasattr(self, 'subtitle') and self.subtitle:
+                self.subtitle.clear_flag(lv.obj.FLAG.HIDDEN)
         else:
             self.add_flag(lv.obj.FLAG.CLICKABLE)
             self.up_arrow.clear_flag(lv.obj.FLAG.HIDDEN)
             self.bottom_tips.set_text(_(i18n_keys.BUTTON__SWIPE_TO_SHOW_APPS))
+            
+            # Keep title and subtitle visible in non-busy state too
+            if hasattr(self, 'title') and self.title:
+                self.title.clear_flag(lv.obj.FLAG.HIDDEN)
+            if hasattr(self, 'subtitle') and self.subtitle:
+                self.subtitle.clear_flag(lv.obj.FLAG.HIDDEN)
 
 
     def _load_scr(self, scr: "Screen", back: bool = False) -> None:

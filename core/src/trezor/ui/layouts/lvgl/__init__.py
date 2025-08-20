@@ -1174,6 +1174,16 @@ async def show_popup(
     from trezor.lvglui.scrs.common import FullSizeWindow
     from trezor import loop
 
+    # If this is "One moment..." popup (in any language), use mainscreen busy state instead
+    if title == "One moment..." or title == "稍等..." or "moment" in title.lower() or "wait" in title.lower():
+        if __debug__:
+            print(f"[POPUP] Intercepted '{title}' popup, switching to MainScreen busy state")
+        from trezor.lvglui.scrs.homescreen import change_state
+        change_state(True)
+        await loop.sleep(timeout_ms)
+        change_state(False)
+        return
+
     if description and description_param:
         description = description.format(description_param)
     subtitle = f"{subtitle or ''} {description or ''}"
@@ -1190,6 +1200,14 @@ def draw_simple_text(
     auto_close_ms: int = 2000,
 ) -> None:
     from trezor.lvglui.scrs.common import FullSizeWindow
+
+    # If this is "One moment..." text (in any language), use mainscreen busy state instead
+    if title == "One moment..." or title == "稍等..." or "moment" in title.lower() or "wait" in title.lower():
+        if __debug__:
+            print(f"[DRAW_TEXT] Intercepted '{title}' text, switching to MainScreen busy state")
+        from trezor.lvglui.scrs.homescreen import change_state
+        change_state(True)
+        return
 
     FullSizeWindow(
         title, description, icon_path=icon_path, auto_close_ms=auto_close_ms, anim_dir=0
