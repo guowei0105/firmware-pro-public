@@ -495,9 +495,13 @@ class MainScreen(Screen):
                         else:
                             if lockscreen_path.startswith("A:/"):
                                 display_path = lockscreen_path[3:]  # 为display系统创建专门变量
+                            elif lockscreen_path.startswith("A:1:"):
+                                display_path = lockscreen_path[2:]  # A:1:/res/wallpapers/xxx -> 1:/res/wallpapers/xxx
                             else:
                                 display_path = lockscreen_path
                         
+                        if __debug__:
+                            print(f"MainScreen: Layer2 path conversion: {lockscreen_path} -> {display_path}")
                         display.cover_background_load_jpeg(display_path)
                         print("MainScreen: Layer2 background loaded")
                         
@@ -604,9 +608,13 @@ class MainScreen(Screen):
                     else:
                         if lockscreen_path.startswith("A:/"):
                             display_path = lockscreen_path[3:]  # 为display系统创建专门变量
+                        elif lockscreen_path.startswith("A:1:"):
+                            display_path = lockscreen_path[2:]  # A:1:/res/wallpapers/xxx -> 1:/res/wallpapers/xxx
                         else:
                             display_path = lockscreen_path
                     
+                    if __debug__:
+                        print(f"MainScreen: Layer2 path conversion (2): {lockscreen_path} -> {display_path}")
                     display.cover_background_load_jpeg(display_path)
                     print("MainScreen: Layer2 background loaded")
                     
@@ -998,9 +1006,13 @@ class MainScreen(Screen):
                         else:
                             if lockscreen_path.startswith("A:/"):
                                 display_path = lockscreen_path[3:]  # 为display系统创建专门变量
+                            elif lockscreen_path.startswith("A:1:"):
+                                display_path = lockscreen_path[2:]  # A:1:/res/wallpapers/xxx -> 1:/res/wallpapers/xxx
                             else:
                                 display_path = lockscreen_path
                         
+                        if __debug__:
+                            print(f"AppDrawer: Layer2 path conversion: {lockscreen_path} -> {display_path}")
                         display.cover_background_load_jpeg(display_path)
                         print("AppDrawer: Layer2 background loaded for DOWN gesture")
                         
@@ -4142,6 +4154,7 @@ class LockScreenSetting(AnimScreen):
                 self.selected_wallpaper = selected_wallpaper
                 self.current_wallpaper_path = selected_wallpaper
                 if hasattr(self, 'lockscreen_preview'):
+                    # Use the selected wallpaper path directly (already in correct format)
                     self.lockscreen_preview.set_src(selected_wallpaper)
                     if __debug__:
                         print(f"LockScreenSetting: Updated wallpaper to {selected_wallpaper}")
@@ -4198,6 +4211,7 @@ class LockScreenSetting(AnimScreen):
         # Use selected wallpaper if provided, otherwise use current lock screen
         if self.selected_wallpaper:
             self.current_wallpaper_path = self.selected_wallpaper
+            # Use the selected wallpaper path directly (already in correct format)
             self.lockscreen_preview.set_src(self.selected_wallpaper)
         else:
             # Get current lock screen image from storage
@@ -4378,12 +4392,21 @@ class LockScreenSetting(AnimScreen):
             # Use the stored wallpaper path instead of get_src()
             current_wallpaper = getattr(self, 'current_wallpaper_path', None)
             if __debug__:
-                print(f"Checkmark clicked! Current wallpaper: {current_wallpaper}")
+                print(f"LockScreenSetting: Checkmark clicked! Current wallpaper: {current_wallpaper}")
+                print(f"LockScreenSetting: selected_wallpaper: {getattr(self, 'selected_wallpaper', None)}")
+                print(f"LockScreenSetting: About to save lockscreen: {current_wallpaper}")
             if current_wallpaper:
                 # Save the wallpaper path
-                storage_device.set_lockscreen(current_wallpaper)
-                if __debug__:
-                    print("LockScreenSetting: Lockscreen wallpaper saved")
+                try:
+                    storage_device.set_lockscreen(current_wallpaper)
+                    if __debug__:
+                        print(f"LockScreenSetting: Lockscreen wallpaper saved successfully: {current_wallpaper}")
+                        # Verify it was saved correctly
+                        saved_path = storage_device.get_lockscreen()
+                        print(f"LockScreenSetting: Verified saved path: {saved_path}")
+                except Exception as e:
+                    if __debug__:
+                        print(f"LockScreenSetting: Error saving lockscreen: {e}")
             # Go back to previous screen
             if self.prev_scr is not None:
                 if __debug__:
@@ -4414,9 +4437,87 @@ class WallperChange(AnimScreen):
         # Get custom wallpapers
         file_name_list = []
         if not utils.EMULATOR:
-            for size, _attrs, name in io.fatfs.listdir("1:/res/wallpapers"):
-                if size > 0 and name[:4] == "zoom":
-                    file_name_list.append(name)
+            if __debug__:
+                print("WallpaperChange: Scanning for custom wallpapers in 1:/res/wallpapers")
+            try:
+                file_count = 0
+                zoom_count = 0
+                all_files = []
+                
+                for size, _attrs, name in io.fatfs.listdir("1:/res/wallpapers"):
+                    file_count += 1
+                    all_files.append(name + " (size:" + str(size) + ")")
+                    
+                    if __debug__:
+                        print("WallpaperChange: Found file:", name, "size:", size, "starts with zoom-:", name.startswith('zoom-'))
+                    
+                    if size > 0 and name.startswith("zoom-"):
+                        zoom_count += 1
+                        file_name_list.append(name)
+                        if __debug__:
+                            print("WallpaperChange: Added zoom file:", name)
+                
+                if __debug__:
+                    print("WallpaperChange: Directory scan results:")
+                    print("  - Total files found:", file_count)
+                    print("  - Zoom files added:", zoom_count)
+                    print("  - All files:", all_files)
+                    
+            except Exception as e:
+                if __debug__:
+                    print("WallpaperChange: Error accessing 1:/res/wallpapers:", e)
+                    print("WallpaperChange: Exception type:", type(e))
+            
+            # Also check alternative paths and file patterns
+            if __debug__ and len(file_name_list) == 0:
+                print("WallpaperChange: No zoom files found, checking alternative locations and patterns...")
+                
+                # Check other common paths
+                for alt_path in ["0:/res/wallpapers", "A:/res/wallpapers", "1:/res", "A:/res"]:
+                    try:
+                        alt_files = list(io.fatfs.listdir(alt_path))
+                        if len(alt_files) > 0:
+                            print("WallpaperChange: Found", len(alt_files), "files in", alt_path, ":", alt_files)
+                            # Check if any files match wallpaper patterns
+                            wallpaper_files = []
+                            for f in alt_files:
+                                if 'wallpaper' in f.lower() or 'zoom' in f.lower() or '.jpg' in f.lower() or '.png' in f.lower():
+                                    wallpaper_files.append(f)
+                            if wallpaper_files:
+                                print("WallpaperChange: Potential wallpaper files in", alt_path, ":", wallpaper_files)
+                    except:
+                        pass
+                
+                # Also try scanning 1:/res/wallpapers with different patterns
+                try:
+                    all_wallpaper_files = list(io.fatfs.listdir("1:/res/wallpapers"))
+                    print("WallpaperChange: All files in 1:/res/wallpapers:", all_wallpaper_files)
+                    if all_wallpaper_files:
+                        # Try different naming patterns
+                        zoom_patterns = ['zoom', 'wallpaper', '.jpg', '.png']
+                        for pattern in zoom_patterns:
+                            matching = []
+                            for f in all_wallpaper_files:
+                                if pattern in f.lower():
+                                    matching.append(f)
+                            if matching:
+                                print("WallpaperChange: Files matching", pattern, ":", matching)
+                except:
+                    pass
+        else:
+            if __debug__:
+                print("WallpaperChange: Emulator mode - skipping custom wallpaper scan")
+        
+        if __debug__:
+            print("WallpaperChange: Total custom wallpapers found:", len(file_name_list))
+            print("WallpaperChange: Custom wallpaper list:", file_name_list)
+            print("WallpaperChange: Current wp_cnts:", storage_device.get_wp_cnts())
+            
+            # If we found custom wallpapers but wp_cnts is 0, update the count to prevent deletion
+            if len(file_name_list) > 0 and storage_device.get_wp_cnts() == 0:
+                storage_device.increase_wp_cnts()
+                if __debug__:
+                    print("WallpaperChange: Updated wp_cnts to prevent file deletion:", storage_device.get_wp_cnts())
         
         if file_name_list:
             file_name_list.sort(
@@ -4485,7 +4586,7 @@ class WallperChange(AnimScreen):
                     current_row + (i // 3),
                     file_name,
                     path_dir,
-                    is_internal=False,
+                    is_internal=True,
                 )
                 self.wps.append(current_wp)
                 if __debug__:
@@ -4561,6 +4662,7 @@ class WallperChange(AnimScreen):
                         else:  # LockScreenSetting
                             if __debug__:
                                 print("WallperChange: Navigating to LockScreenSetting")
+                                print(f"WallperChange: Passing img_path to LockScreenSetting: {wp.img_path}")
                             new_screen = LockScreenSetting(self.prev_scr.prev_scr, selected_wallpaper=wp.img_path)
                             self.load_screen(new_screen, destroy_self=True)
 
@@ -6148,9 +6250,19 @@ class HomeScreenSetting(AnimScreen):
             if __debug__:
                 print(f"[HomeScreenSetting.__init__] Using selected_wallpaper: {self.selected_wallpaper}")
             self.original_wallpaper_path = self.selected_wallpaper
-            self.current_wallpaper_path = self.selected_wallpaper
+            
+            # 对于Custom wallpapers，需要转换路径用于显示
+            display_path = self.selected_wallpaper
+            if self.selected_wallpaper and "/res/wallpapers/" in self.selected_wallpaper:
+                # 使用A:1:前缀（之前可以工作）
+                if self.selected_wallpaper.startswith("A:/res/wallpapers/"):
+                    display_path = self.selected_wallpaper.replace("A:/res/wallpapers/", "A:1:/res/wallpapers/")
+                if __debug__:
+                    print(f"[HomeScreenSetting.__init__] Converted path for display: {display_path}")
+            
+            self.current_wallpaper_path = display_path
             self.is_blur_active = False
-            self.homescreen_preview.set_src(self.selected_wallpaper)
+            self.homescreen_preview.set_src(display_path)
             if __debug__:
                 print(f"[HomeScreenSetting.__init__] Set preview src to selected: {self.selected_wallpaper}")
                 print(f"[HomeScreenSetting.__init__] Preview object: {self.homescreen_preview}")
@@ -6212,44 +6324,44 @@ class HomeScreenSetting(AnimScreen):
         self.homescreen_preview.align(lv.ALIGN.CENTER, 0, 0)
 
        
-        # self.app_icons = []
-        # icon_size = 100
-        # icon_spacing_x = 41  # Horizontal spacing between icons
-        # icon_spacing_y = 40  # Vertical spacing between icons
-        # start_x = -((icon_size // 2) + (icon_spacing_x // 2))  # Centered: -70
-        # start_y = 64  # First row distance from top of preview_container
+        self.app_icons = []
+        icon_size = 100
+        icon_spacing_x = 48  # Horizontal spacing between icons
+        icon_spacing_y = 40  # Vertical spacing between icons
+        start_x = -((icon_size // 2) + (icon_spacing_x // 2))  # Centered: -70
+        start_y = 64  # First row distance from top of preview_container
 
-        # for i in range(6):
-        #     row = i // 2  # 0, 0, 1, 1, 2, 2
-        #     col = i % 2   # 0, 1, 0, 1, 0, 1
+        for i in range(6):
+            row = i // 2  # 0, 0, 1, 1, 2, 2
+            col = i % 2   # 0, 1, 0, 1, 0, 1
 
-        #     # Position the icon
-        #     x_pos = start_x + col * (icon_size + icon_spacing_x)
-        #     y_pos = start_y + row * (icon_size + icon_spacing_y)
+            # Position the icon
+            x_pos = start_x + col * (icon_size + icon_spacing_x)
+            y_pos = start_y + row * (icon_size + icon_spacing_y)
 
-        #     # Create holder with rounded corners and clip to ensure rounded corners without white layer
-        #     icon_holder = lv.obj(self.preview_container)
-        #     icon_holder.set_size(icon_size, icon_size)
-        #     icon_holder.add_style(
-        #         StyleWrapper()
-        #         .bg_opa(lv.OPA.TRANSP)
-        #         .border_width(0)
-        #         .radius(36)
-        #         .clip_corner(True), 0
-        #     )
-        #     # Remove any scrollbars/scrolling from the holder
-        #     icon_holder.set_scrollbar_mode(lv.SCROLLBAR_MODE.OFF)
-        #     icon_holder.clear_flag(lv.obj.FLAG.SCROLLABLE)
-        #     if hasattr(lv, 'DIR'):
-        #         icon_holder.set_scroll_dir(lv.DIR.NONE)
-        #     icon_holder.align_to(self.preview_container, lv.ALIGN.TOP_MID, x_pos, y_pos)
+            # Create holder with rounded corners and clip to ensure rounded corners without white layer
+            icon_holder = lv.obj(self.preview_container)
+            icon_holder.set_size(icon_size, icon_size)
+            icon_holder.add_style(
+                StyleWrapper()
+                .bg_opa(lv.OPA.TRANSP)
+                .border_width(0)
+                .radius(36)
+                .clip_corner(True), 0
+            )
+            # Remove any scrollbars/scrolling from the holder
+            icon_holder.set_scrollbar_mode(lv.SCROLLBAR_MODE.OFF)
+            icon_holder.clear_flag(lv.obj.FLAG.SCROLLABLE)
+            if hasattr(lv, 'DIR'):
+                icon_holder.set_scroll_dir(lv.DIR.NONE)
+            icon_holder.align_to(self.preview_container, lv.ALIGN.TOP_MID, x_pos, y_pos)
 
-        #     # Place the PNG inside; it will be clipped to rounded holder
-        #     icon_img = lv.img(icon_holder)
-        #     icon_img.set_src("A:/res/icon_example.png")
-        #     icon_img.align(lv.ALIGN.CENTER, 0, 0)
+            # Place the PNG inside; it will be clipped to rounded holder
+            icon_img = lv.img(icon_holder)
+            icon_img.set_src("A:/res/icon_example.png")
+            icon_img.align(lv.ALIGN.CENTER, 0, 0)
 
-        #     self.app_icons.append(icon_holder)
+            self.app_icons.append(icon_holder)
         # 创建按钮组
         if __debug__:
             print("[HomeScreenSetting.__init__] Creating buttons")
@@ -6347,13 +6459,23 @@ class HomeScreenSetting(AnimScreen):
             print(f"[HomeScreenSetting._update_wallpaper] Updating wallpaper to {wallpaper_path}")
         self.selected_wallpaper = wallpaper_path
         self.original_wallpaper_path = wallpaper_path
-        self.current_wallpaper_path = wallpaper_path
+        
+        # 对于Custom wallpapers，需要转换路径用于显示
+        display_path = wallpaper_path
+        if wallpaper_path and "/res/wallpapers/" in wallpaper_path:
+            # 使用A:1:前缀（之前可以工作）
+            if wallpaper_path.startswith("A:/res/wallpapers/"):
+                display_path = wallpaper_path.replace("A:/res/wallpapers/", "A:1:/res/wallpapers/")
+            if __debug__:
+                print(f"[HomeScreenSetting._update_wallpaper] Converted path for display: {display_path}")
+        
+        self.current_wallpaper_path = display_path
         self.is_blur_active = False
         if hasattr(self, 'homescreen_preview'):
             if __debug__:
                 print(f"[HomeScreenSetting._update_wallpaper] Before set_src - preview: {self.homescreen_preview}")
-                print(f"[HomeScreenSetting._update_wallpaper] Setting src to: {wallpaper_path}")
-            self.homescreen_preview.set_src(wallpaper_path)
+                print(f"[HomeScreenSetting._update_wallpaper] Setting src to: {display_path}")
+            self.homescreen_preview.set_src(display_path)
             if __debug__:
                 print(f"[HomeScreenSetting._update_wallpaper] After set_src - done")
         if hasattr(self, '_update_blur_button_state'):
@@ -6541,11 +6663,16 @@ class HomeScreenSetting(AnimScreen):
             return False
 
         try:
-            # 统一处理路径格式，去掉前缀
-            if blur_path.startswith("A:/"):
+            # 统一处理路径格式
+            if blur_path.startswith("A:/res/wallpapers/"):
+                # Custom wallpapers: A:/res/wallpapers/ -> 1:/res/wallpapers/ (文件系统访问)
+                file_path = blur_path.replace("A:/res/wallpapers/", "1:/res/wallpapers/")
+            elif blur_path.startswith("A:/res/"):
+                # Built-in Pro wallpapers: A:/res/ -> /res/ (直接访问)
                 file_path = blur_path[2:]  # 去掉 "A:/" 前缀
             elif blur_path.startswith("A:1:/"):
-                file_path = blur_path[4:]  # 去掉 "A:1:/" 前缀
+                # Legacy format: A:1:/res/ -> 1:/res/ (文件系统访问)
+                file_path = blur_path[2:]  # 去掉 "A:" 前缀，保留 "1:/"
             else:
                 file_path = blur_path
 
@@ -6573,13 +6700,31 @@ class HomeScreenSetting(AnimScreen):
         blur_path = self._get_blur_wallpaper_path(self.original_wallpaper_path)
         blur_exists = self._blur_wallpaper_exists(blur_path) if blur_path else False
 
-        # 根据状态设置图标
+        # 根据状态设置图标和可点击状态
         if not blur_exists:
+            # 没有blur版本：不可点击，无样式
             icon_path = "A:/res/blur_not_available.png"
-        elif getattr(self, 'is_blur_active', False):
-            icon_path = "A:/res/blur_selected.png"
+            self.blur_button.clear_flag(lv.obj.FLAG.CLICKABLE)
+            # 移除可能的样式，使其看起来平淡
+            self.blur_button.set_style_bg_opa(lv.OPA.TRANSP, 0)
+            self.blur_button.set_style_border_width(0, 0)
+            if __debug__:
+                print("[HomeScreenSetting._update_blur_button_state] Blur not available - disabled button")
         else:
-            icon_path = "A:/res/blur_no_selected.png"
+            # 有blur版本：可点击，恢复样式
+            self.blur_button.add_flag(lv.obj.FLAG.CLICKABLE)
+            # 恢复按钮样式
+            self.blur_button.set_style_bg_opa(lv.OPA.COVER, 0)
+            self.blur_button.set_style_border_width(1, 0)
+            
+            if getattr(self, 'is_blur_active', False):
+                icon_path = "A:/res/blur_selected.png"
+                if __debug__:
+                    print("[HomeScreenSetting._update_blur_button_state] Blur active - selected state")
+            else:
+                icon_path = "A:/res/blur_no_selected.png"
+                if __debug__:
+                    print("[HomeScreenSetting._update_blur_button_state] Blur available - unselected state")
 
         if __debug__:
             print(f"[HomeScreenSetting._update_blur_button_state] Setting blur_button_icon to {icon_path}")
@@ -6602,6 +6747,27 @@ class HomeScreenSetting(AnimScreen):
         
         # 根据blur状态选择正确的图片路径
         test_path = blur_path if self.is_blur_active else self.original_wallpaper_path
+        
+        # 对于Custom wallpapers，需要特殊处理路径
+        if test_path and "/res/wallpapers/" in test_path:
+            # 非blur文件保持A:1:前缀（之前可以工作）
+            if not "-blur." in test_path:
+                # 确保使用A:1:前缀
+                if test_path.startswith("A:/res/wallpapers/"):
+                    test_path = test_path.replace("A:/res/wallpapers/", "A:1:/res/wallpapers/")
+                elif test_path.startswith("1:/res/wallpapers/"):
+                    test_path = test_path.replace("1:/res/wallpapers/", "A:1:/res/wallpapers/")
+                if __debug__:
+                    print(f"[HomeScreenSetting.on_blur_clicked] Using A:1: prefix for ORIGINAL (non-blur): {test_path}")
+            else:
+                # blur文件使用A:1:前缀（与原图一致）
+                if test_path.startswith("A:/res/wallpapers/"):
+                    test_path = test_path.replace("A:/res/wallpapers/", "A:1:/res/wallpapers/")
+                elif test_path.startswith("1:/res/wallpapers/"):
+                    test_path = test_path.replace("1:/res/wallpapers/", "A:1:/res/wallpapers/")
+                if __debug__:
+                    print(f"[HomeScreenSetting.on_blur_clicked] Using A:1: prefix for blur (same as original): {test_path}")
+        
         if __debug__:
             blur_status = "blur" if self.is_blur_active else "original"
             print(f"[HomeScreenSetting.on_blur_clicked] Switching to {blur_status} image: {test_path}")
@@ -6615,19 +6781,33 @@ class HomeScreenSetting(AnimScreen):
             print(f"[HomeScreenSetting.on_blur_clicked] Before set_src - preview parent: {self.homescreen_preview.get_parent()}")
             print(f"[HomeScreenSetting.on_blur_clicked] Before set_src - preview size: {self.homescreen_preview.get_width()}x{self.homescreen_preview.get_height()}")
             
-            # 检查文件是否存在
+            # 检查文件是否存在并获取详细信息
             try:
-                if self.current_wallpaper_path.startswith("A:/"):
-                    file_path = self.current_wallpaper_path[2:]
+                if self.current_wallpaper_path.startswith("A:/res/wallpapers/"):
+                    # A:/res/wallpapers/xxx -> 1:/res/wallpapers/xxx
+                    file_path = self.current_wallpaper_path.replace("A:/res/wallpapers/", "1:/res/wallpapers/")
+                elif self.current_wallpaper_path.startswith("A:1:/res/wallpapers/"):
+                    # A:1:/res/wallpapers/xxx -> 1:/res/wallpapers/xxx  
+                    file_path = self.current_wallpaper_path.replace("A:1:/res/wallpapers/", "1:/res/wallpapers/")
                 else:
                     file_path = self.current_wallpaper_path
-                io.fatfs.stat(file_path)
-                print(f"[HomeScreenSetting.on_blur_clicked] File exists check passed for: {file_path}")
+                
+                stat_info = io.fatfs.stat(file_path)
+                file_size = stat_info[0]  # 第一个元素是文件大小
+                print(f"[HomeScreenSetting.on_blur_clicked] File check passed - path: {file_path}, size: {file_size}")
+                
+                # 对于blur文件，跳过文件头检查（文件已确认存在）
+                if "-blur." in file_path:
+                    print(f"[HomeScreenSetting.on_blur_clicked] Blur file found and accessible")
+                        
             except Exception as e:
                 print(f"[HomeScreenSetting.on_blur_clicked] File exists check FAILED for: {file_path}, error: {e}")
             
         # 由于可能已经变成label，需要检查类型
         if hasattr(self.homescreen_preview, 'set_src'):
+            # 直接使用set_src，不需要重新创建对象
+            if __debug__:
+                print(f"[HomeScreenSetting.on_blur_clicked] Setting image src to: {self.current_wallpaper_path}")
             self.homescreen_preview.set_src(self.current_wallpaper_path)
             
             # 添加显示层面的调试信息

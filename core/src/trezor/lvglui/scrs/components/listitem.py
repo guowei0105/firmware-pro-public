@@ -292,8 +292,11 @@ class ImgGridItem(lv.img):
         self.zoom_path = path_dir + file_name
         self.set_src(self.zoom_path)
         self.set_style_radius(40, 0)
-        # self.set_style_clip_corner(True, 0)
+        self.set_style_clip_corner(True, 0)
         self.img_path = self.zoom_path.replace("zoom-", "")
+        # Keep A:1:/res/wallpapers/ path for custom wallpapers (don't convert it)
+        if __debug__ and "A:1:/res/wallpapers/" in self.img_path:
+            print(f"ImgGridItem: Custom wallpaper path (keeping A:1: prefix): {self.img_path}")
         self.check = lv.img(self)
         self.check.set_src(img_path_other)
         self.check.center()

@@ -13,9 +13,11 @@ def clear() -> None:
     if config.has_pin() and config.get_pin_rem() == 0:
         storage.wipe()
     if not utils.EMULATOR:
-        if storage.device.get_wp_cnts() == 0:
-            for _size, _attrs, name in io.fatfs.listdir("1:/res/wallpapers"):
-                io.fatfs.unlink(f"1:/res/wallpapers/{name}")
+        pass
+        # Temporarily commented out to allow custom wallpapers
+        # if storage.device.get_wp_cnts() == 0:
+        #     for _size, _attrs, name in io.fatfs.listdir("1:/res/wallpapers"):
+        #         io.fatfs.unlink("1:/res/wallpapers/" + name)
 
 
 async def bootscreen() -> None:
