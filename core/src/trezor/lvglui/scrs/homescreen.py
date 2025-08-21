@@ -494,7 +494,11 @@ class MainScreen(Screen):
                             display_path = "res/wallpaper-1.jpg"
                         else:
                             if lockscreen_path.startswith("A:/"):
-                                display_path = lockscreen_path[3:]  # 为display系统创建专门变量
+                                # Special handling for NFT files
+                                if "/res/nfts/" in lockscreen_path:
+                                    display_path = "1:" + lockscreen_path[2:]  # A:/res/nfts/... -> 1:/res/nfts/...
+                                else:
+                                    display_path = lockscreen_path[3:]  # A:/res/wallpapers/... -> res/wallpapers/...
                             elif lockscreen_path.startswith("A:1:"):
                                 display_path = lockscreen_path[2:]  # A:1:/res/wallpapers/xxx -> 1:/res/wallpapers/xxx
                             else:
@@ -1005,7 +1009,11 @@ class MainScreen(Screen):
                             display_path = "res/wallpaper-1.jpg"
                         else:
                             if lockscreen_path.startswith("A:/"):
-                                display_path = lockscreen_path[3:]  # 为display系统创建专门变量
+                                # Special handling for NFT files
+                                if "/res/nfts/" in lockscreen_path:
+                                    display_path = "1:" + lockscreen_path[2:]  # A:/res/nfts/... -> 1:/res/nfts/...
+                                else:
+                                    display_path = lockscreen_path[3:]  # A:/res/wallpapers/... -> res/wallpapers/...
                             elif lockscreen_path.startswith("A:1:"):
                                 display_path = lockscreen_path[2:]  # A:1:/res/wallpapers/xxx -> 1:/res/wallpapers/xxx
                             else:
