@@ -4433,6 +4433,10 @@ class WallperChange(AnimScreen):
             )
         else:
             self.container.delete()
+        
+        # Initialize edit mode state
+        self.edit_mode = False
+        self.marked_for_deletion = set()  # Track which files are marked for deletion
 
         # Get custom wallpapers
         file_name_list = []
@@ -4563,8 +4567,17 @@ class WallperChange(AnimScreen):
         
         current_row = 0
         
-        # Custom section header
-        self.custom_header = lv.label(self.container)
+        # Custom section header container
+        self.custom_header_container = lv.obj(self.container)
+        self.custom_header_container.set_size(lv.pct(100), 60)
+        self.custom_header_container.clear_flag(lv.obj.FLAG.SCROLLABLE)
+        self.custom_header_container.set_style_bg_opa(lv.OPA.TRANSP, 0)
+        self.custom_header_container.set_style_border_opa(lv.OPA.TRANSP, 0)
+        self.custom_header_container.set_style_pad_all(0, 0)
+        self.custom_header_container.set_grid_cell(lv.GRID_ALIGN.STRETCH, 0, 3, lv.GRID_ALIGN.START, current_row, 1)
+        
+        # Custom text on the left
+        self.custom_header = lv.label(self.custom_header_container)
         self.custom_header.set_text("Custom")
         self.custom_header.add_style(
             StyleWrapper()
@@ -4572,11 +4585,32 @@ class WallperChange(AnimScreen):
             .text_color(lv_colors.WHITE)
             .text_align(lv.TEXT_ALIGN.LEFT), 0
         )
-        self.custom_header.set_grid_cell(lv.GRID_ALIGN.START, 0, 3, lv.GRID_ALIGN.START, current_row, 1)
+        self.custom_header.align(lv.ALIGN.LEFT_MID, 0, 0)
+        
+        # Edit/Done button on the right (only show if there are custom wallpapers)
+        if file_name_list:
+            self.edit_button = lv.btn(self.custom_header_container)
+            self.edit_button.set_size(60, 30)
+            self.edit_button.add_style(StyleWrapper().bg_color(lv_colors.ONEKEY_GRAY_3).border_opa(lv.OPA.TRANSP), 0)
+            self.edit_button.align(lv.ALIGN.RIGHT_MID, 0, 0)
+            
+            self.edit_button_label = lv.label(self.edit_button)
+            self.edit_button_label.set_text("Edit")
+            self.edit_button_label.add_style(
+                StyleWrapper()
+                .text_font(font_GeistSemiBold26)
+                .text_color(lv_colors.WHITE), 0
+            )
+            self.edit_button_label.center()
+            
+            # Add click handler for edit button
+            self.edit_button.add_event_cb(self.on_edit_button_clicked, lv.EVENT.CLICKED, None)
+        
         current_row += 1
         
         # Custom wallpapers
         self.wps = []
+        self.custom_wps = []  # Track custom wallpapers separately
         if file_name_list:
             for i, file_name in enumerate(file_name_list):
                 path_dir = "A:1:/res/wallpapers/"
@@ -4589,8 +4623,43 @@ class WallperChange(AnimScreen):
                     is_internal=True,
                 )
                 self.wps.append(current_wp)
+                self.custom_wps.append(current_wp)
+                
+                # Create remove icon for each custom wallpaper (initially hidden)
+                # Create a simple button instead of image for better event handling
+                remove_icon = lv.btn(self.container)
+                remove_icon.set_size(24, 24)
+                remove_icon.clear_flag(lv.obj.FLAG.SCROLLABLE)
+                remove_icon.add_flag(lv.obj.FLAG.HIDDEN)  # Initially hidden
+                remove_icon.add_flag(lv.obj.FLAG.CLICKABLE)
+                
+                # Style the button
+                remove_icon.set_style_bg_color(lv.color_hex(0xFF0000), 0)  # Red background
+                remove_icon.set_style_bg_opa(200, 0)
+                remove_icon.set_style_radius(12, 0)  # Round button
+                remove_icon.set_style_border_opa(lv.OPA.TRANSP, 0)
+                remove_icon.set_style_shadow_opa(lv.OPA.TRANSP, 0)
+                
+                # Add X text
+                label = lv.label(remove_icon)
+                label.set_text("×")
+                label.set_style_text_color(lv.color_hex(0xFFFFFF), 0)
+                label.set_style_text_font(font_GeistSemiBold26, 0)
+                label.center()
+                
+                # Position relative to wallpaper - right top corner with slight overlap
+                remove_icon.align_to(current_wp, lv.ALIGN.TOP_RIGHT, -8, 8)
+                remove_icon.move_foreground()
+                
+                # Add independent event handler for the button
+                remove_icon.add_event_cb(lambda e, wp=current_wp: self.on_remove_icon_clicked(e, wp), lv.EVENT.CLICKED, None)
+                
+                # Store remove icon reference in the wallpaper object
+                current_wp.remove_icon = remove_icon
+                
                 if __debug__:
                     print(f"WallperChange: Added custom wp {i}: {current_wp}, img_path: {current_wp.img_path}")
+                    print(f"WallperChange: Created remove_icon {remove_icon} for wp {i}")
             current_row += custom_rows
 
         # Pro section header
@@ -4637,12 +4706,35 @@ class WallperChange(AnimScreen):
         if code == lv.EVENT.CLICKED:
             if utils.lcd_resume():
                 return
+                
+            # Check if clicked target is a remove icon
+            if self.edit_mode and hasattr(self, 'custom_wps'):
+                if __debug__:
+                    print(f"WallperChange: Edit mode active, checking remove icons. Target: {target}")
+                for i, wp in enumerate(self.custom_wps):
+                    if hasattr(wp, 'remove_icon'):
+                        if __debug__:
+                            print(f"WallperChange: Checking wp[{i}] remove_icon: {wp.remove_icon}, target: {target}, match: {target == wp.remove_icon}")
+                        # Check if target is the button or its child label
+                        if target == wp.remove_icon or (hasattr(wp.remove_icon, 'get_child') and target == wp.remove_icon.get_child(0)):
+                            if __debug__:
+                                print(f"WallperChange: Remove icon clicked for {wp.img_path}")
+                            self.on_remove_icon_clicked(event_obj, wp)
+                            return
+                    else:
+                        if __debug__:
+                            print(f"WallperChange: wp[{i}] has no remove_icon attribute")
+            
             if __debug__:
                 print(f"WallperChange: Checking if target in wps, target: {target}")
                 print(f"WallperChange: wps length: {len(self.wps) if hasattr(self, 'wps') else 'No wps'}")
                 if hasattr(self, 'wps'):
                     for i, wp in enumerate(self.wps):
                         print(f"WallperChange: wps[{i}]: {wp}")
+            # Skip wallpaper selection if in edit mode
+            if self.edit_mode:
+                return
+                
             if target not in self.wps:
                 if __debug__:
                     print("WallperChange: target not in wps, returning")
@@ -4782,7 +4874,163 @@ class WallperChange(AnimScreen):
                     print("Going back to previous screen")
                 self.load_screen(self.prev_scr, destroy_self=True)
 
-
+    def on_edit_button_clicked(self, event_obj):
+        """Handle Edit/Done button click"""
+        if __debug__:
+            print(f"WallpaperChange: Edit button clicked, current edit_mode: {self.edit_mode}")
+            
+        self.edit_mode = not self.edit_mode
+        
+        if self.edit_mode:
+            # Switch to edit mode
+            self.edit_button_label.set_text("Done")
+            # Show remove icons for all custom wallpapers
+            for i, wp in enumerate(self.custom_wps):
+                if hasattr(wp, 'remove_icon'):
+                    wp.remove_icon.clear_flag(lv.obj.FLAG.HIDDEN)
+                    # Ensure remove icon stays on top
+                    wp.remove_icon.move_foreground()
+                    if __debug__:
+                        print(f"WallpaperChange: Showing remove_icon {wp.remove_icon} for wp[{i}]")
+                else:
+                    if __debug__:
+                        print(f"WallpaperChange: wp[{i}] has no remove_icon attribute")
+            if __debug__:
+                print("WallpaperChange: Entered edit mode - showing remove icons")
+        else:
+            # Switch to normal mode and perform deletions
+            self.edit_button_label.set_text("Edit")
+            # Hide remove icons
+            for wp in self.custom_wps:
+                if hasattr(wp, 'remove_icon'):
+                    wp.remove_icon.add_flag(lv.obj.FLAG.HIDDEN)
+            
+            # Delete marked files
+            if self.marked_for_deletion:
+                if __debug__:
+                    print(f"WallpaperChange: Exiting edit mode - deleting {len(self.marked_for_deletion)} files")
+                self.delete_marked_files()
+            else:
+                if __debug__:
+                    print("WallpaperChange: Exiting edit mode - no files to delete")
+    
+    def on_remove_icon_clicked(self, event_obj, wallpaper):
+        """Handle remove icon click"""
+        if __debug__:
+            print(f"WallpaperChange: Remove icon clicked for {wallpaper.img_path}")
+            
+        # Mark wallpaper for deletion and hide it immediately
+        self.marked_for_deletion.add(wallpaper)
+        
+        # Hide the entire wallpaper item immediately
+        wallpaper.add_flag(lv.obj.FLAG.HIDDEN)
+        
+        # Also hide the remove icon
+        if hasattr(wallpaper, 'remove_icon'):
+            wallpaper.remove_icon.add_flag(lv.obj.FLAG.HIDDEN)
+        
+        if __debug__:
+            print(f"WallpaperChange: Marked {wallpaper.img_path} for deletion, total marked: {len(self.marked_for_deletion)}")
+            print(f"WallpaperChange: Wallpaper {wallpaper.img_path} hidden immediately")
+    
+    def delete_marked_files(self):
+        """Delete files marked for deletion"""
+        from trezor import io
+        import storage.device as storage_device
+        
+        if __debug__:
+            print(f"WallpaperChange: Starting deletion of {len(self.marked_for_deletion)} files")
+        
+        marked_count = len(self.marked_for_deletion)
+        
+        for wallpaper in self.marked_for_deletion:
+            try:
+                # Extract file name from img_path
+                img_path = wallpaper.img_path
+                if "A:1:/res/wallpapers/" in img_path:
+                    # Custom wallpaper path format: A:1:/res/wallpapers/filename.ext (without zoom- prefix)
+                    filename = img_path.replace("A:1:/res/wallpapers/", "")
+                    
+                    # Delete original file first
+                    original_path = f"1:/res/wallpapers/{filename}"
+                    if __debug__:
+                        print(f"WallpaperChange: Deleting original file: {original_path}")
+                    try:
+                        io.fatfs.unlink(original_path)
+                    except:
+                        if __debug__:
+                            print(f"WallpaperChange: Original file {original_path} not found or already deleted")
+                    
+                    # Delete zoom file (add zoom- prefix)
+                    zoom_filename = f"zoom-{filename}"
+                    zoom_path = f"1:/res/wallpapers/{zoom_filename}"
+                    if __debug__:
+                        print(f"WallpaperChange: Deleting zoom file: {zoom_path}")
+                    try:
+                        io.fatfs.unlink(zoom_path)
+                    except:
+                        if __debug__:
+                            print(f"WallpaperChange: Zoom file {zoom_path} not found or already deleted")
+                    
+                    # Delete blur file if it exists
+                    blur_filename = filename.replace('.jpg', '-blur.jpg').replace('.png', '-blur.png')
+                    blur_path = f"1:/res/wallpapers/{blur_filename}"
+                    if __debug__:
+                        print(f"WallpaperChange: Attempting to delete blur file: {blur_path}")
+                    try:
+                        io.fatfs.unlink(blur_path)
+                        if __debug__:
+                            print(f"WallpaperChange: Successfully deleted blur file: {blur_path}")
+                    except:
+                        if __debug__:
+                            print(f"WallpaperChange: Blur file {blur_path} not found or already deleted")
+                    
+                    # Check if this wallpaper is currently in use and replace it
+                    self.replace_if_in_use(img_path)
+                    
+                    if __debug__:
+                        print(f"WallpaperChange: Successfully deleted {img_path}")
+                        
+            except Exception as e:
+                if __debug__:
+                    print(f"WallpaperChange: Error deleting {wallpaper.img_path}: {e}")
+        
+        # Clear the marked for deletion set
+        self.marked_for_deletion.clear()
+        
+        # Decrease wallpaper count
+        for _ in range(marked_count):
+            storage_device.decrease_wp_cnts()
+        
+        # Refresh the screen to show updated wallpaper list
+        if __debug__:
+            print("WallpaperChange: Refreshing screen after deletions")
+        self.__init__(self.prev_scr)
+    
+    def replace_if_in_use(self, deleted_path):
+        """Replace deleted wallpaper with wallpaper-7.jpg if it's currently in use"""
+        import storage.device as storage_device
+        
+        try:
+            current_homescreen = storage_device.get_homescreen()
+            current_lockscreen = storage_device.get_lockscreen()
+            replacement_path = "A:/res/wallpaper-7.jpg"
+            
+            # Check homescreen
+            if current_homescreen and deleted_path in current_homescreen:
+                if __debug__:
+                    print(f"WallpaperChange: Replacing homescreen wallpaper with {replacement_path}")
+                storage_device.set_homescreen(replacement_path)
+            
+            # Check lockscreen  
+            if current_lockscreen and deleted_path in current_lockscreen:
+                if __debug__:
+                    print(f"WallpaperChange: Replacing lockscreen wallpaper with {replacement_path}")
+                storage_device.set_lockscreen(replacement_path)
+                
+        except Exception as e:
+            if __debug__:
+                print(f"WallpaperChange: Error checking/replacing wallpapers in use: {e}")
 
 
 class ShutdownSetting(AnimScreen):

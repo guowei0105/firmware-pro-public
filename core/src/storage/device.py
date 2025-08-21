@@ -781,6 +781,14 @@ def increase_wp_cnts() -> None:
     _WALLPAPER_COUNTS_VALUE = cnts
 
 
+def decrease_wp_cnts() -> None:
+    global _WALLPAPER_COUNTS_VALUE
+    cur_cnt = get_wp_cnts()
+    cnts = max(0, cur_cnt - 1)  # Ensure count never goes below 0
+    common.set(_NAMESPACE, _WALLPAPER_COUNTS, cnts.to_bytes(2, "big"), public=True)
+    _WALLPAPER_COUNTS_VALUE = cnts
+
+
 def get_wp_cnts() -> int:
     global _WALLPAPER_COUNTS_VALUE
     if _WALLPAPER_COUNTS_VALUE is None:
