@@ -2350,7 +2350,6 @@ class NftLockScreenPreview(AnimScreen):
                     storage_device.set_lockscreen(lockscreen_path)
                     
                     # Navigate back to MainScreen (AppDrawer)
-                    from . import MainScreen
                     main_screen = MainScreen()
                     self.load_screen(main_screen, destroy_self=True)
                     return
@@ -2613,7 +2612,6 @@ class NftHomeScreenPreview(AnimScreen):
                             print(f"[NftHomeScreenPreview] Error setting homescreen: {e}")
                     
                     # Navigate back to MainScreen (AppDrawer)
-                    from . import MainScreen
                     main_screen = MainScreen()
                     self.load_screen(main_screen, destroy_self=True)
                     return
