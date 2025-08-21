@@ -2334,24 +2334,31 @@ class NftLockScreenPreview(AnimScreen):
                         lv.scr_load(self.prev_scr)
                     return
                 elif hasattr(self, "rti_btn") and target == self.rti_btn:
-                    # Set as lock screen with proper path format for 800x480 screen
-                    # Convert to proper format for setting as lockscreen
+                    # Set as lock screen - convert A:1: to A: format for storage
                     lockscreen_path = self.nft_path
                     
-                    # Convert path format for setting lockscreen
+                    # Convert A:1:/res/nfts/imgs/ to A:/res/nfts/imgs/ for storage
                     if lockscreen_path.startswith("A:1:"):
                         lockscreen_path = lockscreen_path.replace("A:1:", "A:")
-                    elif lockscreen_path.startswith("1:"):
-                        lockscreen_path = "A:" + lockscreen_path[2:]
                     
                     if __debug__:
+                        print(f"[NftLockScreenPreview] Original path: {self.nft_path}")
                         print(f"[NftLockScreenPreview] Setting lockscreen to: {lockscreen_path}")
                     
-                    storage_device.set_lockscreen(lockscreen_path)
+                    try:
+                        storage_device.set_lockscreen(lockscreen_path)
+                        if __debug__:
+                            print(f"[NftLockScreenPreview] Lockscreen set successfully")
+                            # Verify it was saved
+                            saved_path = storage_device.get_lockscreen()
+                            print(f"[NftLockScreenPreview] Verified saved path: {saved_path}")
+                    except Exception as e:
+                        if __debug__:
+                            print(f"[NftLockScreenPreview] Error setting lockscreen: {e}")
                     
-                    # Navigate back to MainScreen (AppDrawer)
-                    main_screen = MainScreen()
-                    self.load_screen(main_screen, destroy_self=True)
+                    # Navigate back to previous screen instead of creating new MainScreen
+                    if self.prev_scr is not None:
+                        lv.scr_load(self.prev_scr)
                     return
 
 
@@ -2585,35 +2592,31 @@ class NftHomeScreenPreview(AnimScreen):
                         lv.scr_load(self.prev_scr)
                     return
                 elif hasattr(self, "rti_btn") and target == self.rti_btn:
-                    # Set as home screen with proper path format
+                    # Set as home screen - convert A:1: to A: format for storage
                     wallpaper_path = self.current_wallpaper_path
                     
-                    if __debug__:
-                        print(f"[NftHomeScreenPreview] Setting homescreen with: {wallpaper_path}")
-                    
-                    # Convert path format for storage - storage needs A: prefix
+                    # Convert A:1:/res/nfts/imgs/ to A:/res/nfts/imgs/ for storage
                     if wallpaper_path.startswith("A:1:"):
                         wallpaper_path = wallpaper_path.replace("A:1:", "A:")
-                    elif wallpaper_path.startswith("1:"):
-                        wallpaper_path = "A:" + wallpaper_path[2:]
-                    elif not wallpaper_path.startswith("A:"):
-                        # Add A: prefix if missing
-                        wallpaper_path = "A:" + wallpaper_path.lstrip("/")
                     
                     if __debug__:
-                        print(f"[NftHomeScreenPreview] Converted path for storage: {wallpaper_path}")
+                        print(f"[NftHomeScreenPreview] Original path: {self.current_wallpaper_path}")
+                        print(f"[NftHomeScreenPreview] Setting homescreen to: {wallpaper_path}")
                     
                     try:
                         storage_device.set_homescreen(wallpaper_path)
                         if __debug__:
                             print(f"[NftHomeScreenPreview] Successfully set homescreen")
+                            # Verify it was saved
+                            saved_path = storage_device.get_homescreen()
+                            print(f"[NftHomeScreenPreview] Verified saved path: {saved_path}")
                     except Exception as e:
                         if __debug__:
                             print(f"[NftHomeScreenPreview] Error setting homescreen: {e}")
                     
-                    # Navigate back to MainScreen (AppDrawer)
-                    main_screen = MainScreen()
-                    self.load_screen(main_screen, destroy_self=True)
+                    # Navigate back to previous screen instead of creating new MainScreen
+                    if self.prev_scr is not None:
+                        lv.scr_load(self.prev_scr)
                     return
             else:
                 # Handle button clicks for Blur button only
