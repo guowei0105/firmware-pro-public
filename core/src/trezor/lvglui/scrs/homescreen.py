@@ -2116,51 +2116,68 @@ class NftGallery(Screen):
         lv.scr_load(scr)
 
 
-class NftManager(Screen):
+class NftManager(AnimScreen):
     def __init__(self, prev_scr, nft_config, file_name):
         self.zoom_path = f"A:1:/res/nfts/zooms/{file_name}"
         self.file_name = file_name.replace("zoom-", "")
         self.img_path = f"A:1:/res/nfts/imgs/{self.file_name}"
+        
         super().__init__(
-            prev_scr,
-            title=nft_config["header"],
-            subtitle=nft_config["subheader"],
-            icon_path=self.img_path,
+            prev_scr=prev_scr,
+            title="Wallpaper",
             nav_back=True,
         )
         self.nft_config = nft_config
-        self.content_area.set_style_max_height(756, 0)
-        self.icon.align_to(self.nav_back, lv.ALIGN.OUT_BOTTOM_LEFT, 0, 8)
-        self.title.align_to(self.icon, lv.ALIGN.OUT_BOTTOM_LEFT, 8, 16)
-        self.subtitle.align_to(self.title, lv.ALIGN.OUT_BOTTOM_LEFT, 0, 16)
-        # self.icon.add_style(StyleWrapper().radius(40).clip_corner(True), 0)
-        self.btn_yes = NormalButton(self.content_area)
-        self.btn_yes.set_size(456, 98)
-        self.btn_yes.enable(lv_colors.ONEKEY_PURPLE, lv_colors.BLACK)
-        self.btn_yes.label.set_text(_(i18n_keys.BUTTON__SET_AS_HOMESCREEN))
-        self.btn_yes.align_to(self.subtitle, lv.ALIGN.OUT_BOTTOM_MID, 0, 32)
-
-        self.btn_del = NormalButton(self.content_area, "")
-        self.btn_del.set_size(456, 98)
-        self.btn_del.align_to(self.btn_yes, lv.ALIGN.OUT_BOTTOM_MID, 0, 8)
-        self.panel = lv.obj(self.btn_del)
-        self.panel.remove_style_all()
-        self.panel.set_size(lv.SIZE.CONTENT, lv.SIZE.CONTENT)
-        self.panel.clear_flag(lv.obj.FLAG.CLICKABLE)
-        self.panel.add_style(
+        
+        # Add trash icon to title bar (right side)
+        self.trash_icon = lv.imgbtn(self.content_area)
+        self.trash_icon.set_src(lv.imgbtn.STATE.RELEASED, "A:/res/btn-del-white.png", None, None)
+        self.trash_icon.set_size(48, 48)
+        self.trash_icon.align(lv.ALIGN.TOP_RIGHT, -12, 56)
+        self.trash_icon.add_style(StyleWrapper().bg_opa(lv.OPA.TRANSP).border_width(0), 0)
+        
+        # Main NFT image (456x456 as requested)
+        self.nft_image = lv.img(self.content_area)
+        self.nft_image.set_src(self.img_path)
+        self.nft_image.set_size(456, 456)
+        self.nft_image.align_to(self.title, lv.ALIGN.OUT_BOTTOM_MID, 0, 32)
+        self.nft_image.add_style(StyleWrapper().radius(20).clip_corner(True), 0)
+        
+        # Title text below image
+        self.nft_title = lv.label(self.content_area)
+        self.nft_title.set_text(nft_config["header"] or "Title")
+        self.nft_title.add_style(
             StyleWrapper()
-            .bg_color(lv_colors.ONEKEY_BLACK)
-            .text_color(lv_colors.ONEKEY_RED_1)
-            .bg_opa(lv.OPA.TRANSP)
-            .border_width(0)
-            .align(lv.ALIGN.CENTER),
-            0,
+            .text_font(font_GeistSemiBold38)
+            .text_color(lv_colors.WHITE)
+            .text_align(lv.TEXT_ALIGN.LEFT), 0
         )
-        self.btn_del_img = lv.img(self.panel)
-        self.btn_del_img.set_src("A:/res/btn-del.png")
-        self.btn_label = lv.label(self.panel)
-        self.btn_label.set_text(_(i18n_keys.BUTTON__DELETE))
-        self.btn_label.align_to(self.btn_del_img, lv.ALIGN.OUT_RIGHT_MID, 4, 1)
+        self.nft_title.align_to(self.nft_image, lv.ALIGN.OUT_BOTTOM_LEFT, 8, 16)
+        
+        # Description text below title
+        self.nft_description = lv.label(self.content_area)
+        self.nft_description.set_text(nft_config["subheader"] or "Type description here.")
+        self.nft_description.add_style(
+            StyleWrapper()
+            .text_font(font_GeistRegular30)
+            .text_color(lv_colors.WHITE_2)
+            .text_align(lv.TEXT_ALIGN.LEFT), 0
+        )
+        self.nft_description.align_to(self.nft_title, lv.ALIGN.OUT_BOTTOM_LEFT, 0, 8)
+        
+        # Set as Lock Screen button (purple) - height 98px as requested
+        self.btn_lock_screen = NormalButton(self.content_area)
+        self.btn_lock_screen.set_size(456, 98)
+        self.btn_lock_screen.enable(lv_colors.ONEKEY_PURPLE, lv_colors.WHITE)
+        self.btn_lock_screen.label.set_text("Set as Lock Screen")
+        self.btn_lock_screen.align_to(self.nft_description, lv.ALIGN.OUT_BOTTOM_LEFT, -8, 32)
+        
+        # Set as Home Screen button (gray) - height 98px as requested
+        self.btn_home_screen = NormalButton(self.content_area)
+        self.btn_home_screen.set_size(456, 98)
+        self.btn_home_screen.enable(lv_colors.GRAY_1, lv_colors.WHITE)
+        self.btn_home_screen.label.set_text("Set as Home Screen")
+        self.btn_home_screen.align_to(self.btn_lock_screen, lv.ALIGN.OUT_BOTTOM_LEFT, 0, 8)
 
     def del_callback(self):
         io.fatfs.unlink(self.zoom_path[2:])
@@ -2183,14 +2200,10 @@ class NftManager(Screen):
                 if target == self.nav_back.nav_btn:
                     if self.prev_scr is not None:
                         self.load_screen(self.prev_scr, destroy_self=True)
-            else:
-                if target == self.btn_yes:
-                    NftManager.ConfirmSetHomeScreen(self.img_path)
-
-                elif target == self.btn_del:
+                elif target == self.trash_icon:
+                    # Handle trash icon click - delete NFT
                     from trezor.ui.layouts import confirm_remove_nft
                     from trezor.wire import DUMMY_CONTEXT
-
                     workflow.spawn(
                         confirm_remove_nft(
                             DUMMY_CONTEXT,
@@ -2198,6 +2211,13 @@ class NftManager(Screen):
                             self.zoom_path,
                         )
                     )
+            else:
+                if target == self.btn_lock_screen:
+                    # Navigate to lock screen preview
+                    NftLockScreenPreview(self, self.img_path, self.nft_config)
+                elif target == self.btn_home_screen:
+                    # Navigate to home screen preview
+                    NftHomeScreenPreview(self, self.img_path, self.nft_config)
 
     class ConfirmSetHomeScreen(FullSizeWindow):
         def __init__(self, homescreen):
@@ -2221,6 +2241,386 @@ class NftManager(Screen):
                     workflow.spawn(utils.internal_reloop())
                 elif target == self.btn_no:
                     self.destroy()
+
+
+class NftLockScreenPreview(AnimScreen):
+    def __init__(self, prev_scr, nft_path, nft_config):
+        super().__init__(
+            prev_scr=prev_scr,
+            title="Preview",
+            nav_back=True,
+            rti_path="A:/res/checkmark.png"
+        )
+        self.nft_path = nft_path
+        self.nft_config = nft_config
+        
+        if __debug__:
+            print(f"[NftLockScreenPreview] Init with nft_path: {nft_path}")
+        
+        # Main container for the screen
+        self.container = lv.obj(self.content_area)
+        self.container.set_size(lv.pct(100), lv.pct(100))
+        self.container.align(lv.ALIGN.TOP_MID, 0, 0)
+        self.container.add_style(
+            StyleWrapper().bg_opa(lv.OPA.TRANSP).pad_all(0).border_width(0), 0
+        )
+        self.container.clear_flag(lv.obj.FLAG.CLICKABLE)
+        self.container.add_flag(lv.obj.FLAG.EVENT_BUBBLE)
+        
+        # Lock screen preview container with image - NFT image 118px from top, 344x574 size
+        self.preview_container = lv.obj(self.container)
+        self.preview_container.set_size(344, 574)
+        self.preview_container.align(lv.ALIGN.TOP_MID, 0, 118)  # 118px from top as requested
+        self.preview_container.add_style(
+            StyleWrapper()
+            .bg_opa(lv.OPA.TRANSP)
+            .pad_all(0)
+            .border_width(0)
+            .radius(40)
+            .clip_corner(True), 0
+        )
+        self.preview_container.clear_flag(lv.obj.FLAG.CLICKABLE)
+        self.preview_container.add_flag(lv.obj.FLAG.EVENT_BUBBLE)
+        self.preview_container.set_scrollbar_mode(lv.SCROLLBAR_MODE.OFF)
+        self.preview_container.clear_flag(lv.obj.FLAG.SCROLLABLE)
+        
+        # Lock screen preview image using NFT - scale to fill height and crop sides
+        self.lockscreen_preview = lv.img(self.preview_container)
+        self.lockscreen_preview.set_src(nft_path)
+        # Scale image to fill height (574px) while maintaining aspect ratio
+        # This will crop the sides to show the center portion
+        scale = int(574 * 256 / 456)  # Scale based on height
+        self.lockscreen_preview.set_zoom(scale)
+        self.lockscreen_preview.align(lv.ALIGN.CENTER, 0, 0)
+        
+        # Device name and bluetooth name overlaid on the image
+        device_name = storage_device.get_model() or "OneKey Pro"
+        ble_name = storage_device.get_ble_name() or uart.get_ble_name()
+        
+        # Device name label (overlaid on image)
+        self.device_name_label = lv.label(self.preview_container)
+        self.device_name_label.set_text(device_name)
+        self.device_name_label.add_style(
+            StyleWrapper()
+            .text_font(font_GeistSemiBold38)
+            .text_color(lv_colors.WHITE)
+            .text_align(lv.TEXT_ALIGN.CENTER), 0
+        )
+        self.device_name_label.align_to(self.preview_container, lv.ALIGN.TOP_MID, 0, 49)
+        
+        # Bluetooth name label (overlaid on image)
+        self.bluetooth_label = lv.label(self.preview_container)
+        if ble_name and len(ble_name) >= 4:
+            self.bluetooth_label.set_text("Pro " + ble_name[-4:])
+        else:
+            self.bluetooth_label.set_text("Pro")
+        self.bluetooth_label.add_style(
+            StyleWrapper()
+            .text_font(font_GeistRegular26)
+            .text_color(lv_colors.WHITE)
+            .text_align(lv.TEXT_ALIGN.CENTER), 0
+        )
+        self.bluetooth_label.align_to(self.device_name_label, lv.ALIGN.OUT_BOTTOM_MID, 0, 8)
+
+    def eventhandler(self, event_obj):
+        event = event_obj.code
+        target = event_obj.get_target()
+        if event == lv.EVENT.CLICKED:
+            if utils.lcd_resume():
+                return
+            if isinstance(target, lv.imgbtn):
+                if hasattr(self, "nav_back") and target == self.nav_back.nav_btn:
+                    if self.prev_scr is not None:
+                        lv.scr_load(self.prev_scr)
+                    return
+                elif hasattr(self, "rti_btn") and target == self.rti_btn:
+                    # Set as lock screen with proper path format for 800x480 screen
+                    # Convert to proper format for setting as lockscreen
+                    lockscreen_path = self.nft_path
+                    
+                    # Convert path format for setting lockscreen
+                    if lockscreen_path.startswith("A:1:"):
+                        lockscreen_path = lockscreen_path.replace("A:1:", "A:")
+                    elif lockscreen_path.startswith("1:"):
+                        lockscreen_path = "A:" + lockscreen_path[2:]
+                    
+                    if __debug__:
+                        print(f"[NftLockScreenPreview] Setting lockscreen to: {lockscreen_path}")
+                    
+                    storage_device.set_lockscreen(lockscreen_path)
+                    
+                    # Navigate back to MainScreen (AppDrawer)
+                    from . import MainScreen
+                    main_screen = MainScreen()
+                    self.load_screen(main_screen, destroy_self=True)
+                    return
+
+
+class NftHomeScreenPreview(AnimScreen):
+    def __init__(self, prev_scr, nft_path, nft_config):
+        super().__init__(
+            prev_scr=prev_scr,
+            title="Preview",
+            nav_back=True,
+            rti_path="A:/res/checkmark.png"
+        )
+        self.nft_path = nft_path
+        self.nft_config = nft_config
+        self.original_wallpaper_path = nft_path
+        self.is_blur_active = False
+        
+        # Check if blur file exists
+        file_name = nft_path.split("/")[-1]
+        file_name_without_ext = file_name.split(".")[0]
+        blur_path = nft_path.replace(file_name, f"{file_name_without_ext}-blur.jpg")
+        self.blur_exists = self._check_blur_exists(blur_path)
+        
+        # Main container
+        self.container = lv.obj(self.content_area)
+        self.container.set_size(lv.pct(100), lv.pct(100))
+        self.container.align(lv.ALIGN.TOP_MID, 0, 0)
+        self.container.add_style(
+            StyleWrapper().bg_opa(lv.OPA.TRANSP).pad_all(0).border_width(0), 0
+        )
+        self.container.clear_flag(lv.obj.FLAG.CLICKABLE)
+        self.container.add_flag(lv.obj.FLAG.EVENT_BUBBLE)
+        
+        # Home screen preview container - NFT image 118px from top, 344x574 size
+        self.preview_container = lv.obj(self.container)
+        self.preview_container.set_size(344, 574)
+        self.preview_container.align(lv.ALIGN.TOP_MID, 0, 118)  # 118px from top as requested
+        self.preview_container.add_style(
+            StyleWrapper()
+            .bg_opa(lv.OPA.TRANSP)
+            .pad_all(0)
+            .border_width(0)
+            .radius(40)
+            .clip_corner(True), 0
+        )
+        self.preview_container.clear_flag(lv.obj.FLAG.CLICKABLE)
+        self.preview_container.add_flag(lv.obj.FLAG.EVENT_BUBBLE)
+        self.preview_container.set_scrollbar_mode(lv.SCROLLBAR_MODE.OFF)
+        self.preview_container.clear_flag(lv.obj.FLAG.SCROLLABLE)
+        
+        # Home screen preview image - scale to fill container with center-crop effect
+        self.homescreen_preview = lv.img(self.preview_container)
+        self.current_wallpaper_path = nft_path
+        self.homescreen_preview.set_src(nft_path)
+        # NFT images are typically 456x456 (based on NftManager), container is 344x574
+        # To fill the container height (574px) from source height (456px):
+        # Zoom = (574 / 456) * 256 = 322 (where 256 is the default zoom scale)
+        # This will make the image tall enough to fill the height and crop the sides
+        zoom_scale = int((574 / 456) * 256)
+        self.homescreen_preview.set_zoom(zoom_scale)
+        self.homescreen_preview.align(lv.ALIGN.CENTER, 0, 0)
+        
+        # Add 6 app icons like HomeScreenSetting (3 rows of 2, 100px size)
+        self.app_icons = []
+        icon_size = 100
+        icon_spacing_x = 48  # Horizontal spacing between icons
+        icon_spacing_y = 40  # Vertical spacing between icons
+        start_x = -((icon_size // 2) + (icon_spacing_x // 2))  # Centered: -74
+        start_y = 64  # First row distance from top of preview_container
+        
+        for i in range(6):
+            row = i // 2  # 0, 0, 1, 1, 2, 2
+            col = i % 2   # 0, 1, 0, 1, 0, 1
+            x_pos = start_x + col * (icon_size + icon_spacing_x)
+            y_pos = start_y + row * (icon_size + icon_spacing_y)
+            
+            # Create holder with rounded corners and clip to ensure rounded corners
+            icon_holder = lv.obj(self.preview_container)
+            icon_holder.set_size(icon_size, icon_size)
+            icon_holder.add_style(
+                StyleWrapper()
+                .bg_opa(lv.OPA.TRANSP)
+                .border_width(0)
+                .radius(36)
+                .clip_corner(True), 0
+            )
+            # Remove any scrollbars/scrolling from the holder
+            icon_holder.set_scrollbar_mode(lv.SCROLLBAR_MODE.OFF)
+            icon_holder.clear_flag(lv.obj.FLAG.SCROLLABLE)
+            if hasattr(lv, 'DIR'):
+                icon_holder.set_scroll_dir(lv.DIR.NONE)
+            icon_holder.align_to(self.preview_container, lv.ALIGN.TOP_MID, x_pos, y_pos)
+            
+            # Place the PNG inside; it will be clipped to rounded holder
+            icon_img = lv.img(icon_holder)
+            icon_img.set_src("A:/res/icon_example.png")
+            icon_img.align(lv.ALIGN.CENTER, 0, 0)
+            self.app_icons.append(icon_holder)
+        
+        # Create only Blur button for NFT HomeScreen preview (no Change button needed)
+        self._create_blur_button()
+        
+        # Position blur button centered at bottom
+        self.blur_button.align_to(self.preview_container, lv.ALIGN.OUT_BOTTOM_MID, 0, 10)
+        self.blur_label.align_to(self.blur_button, lv.ALIGN.OUT_BOTTOM_MID, 0, 4)
+
+    def _create_button_with_label(self, icon_path, text, callback):
+        """Create a button with icon and label like HomeScreenSetting"""
+        # Create button
+        button = lv.btn(self.container)
+        button.set_size(64, 64)
+        button.align_to(self.preview_container, lv.ALIGN.OUT_BOTTOM_MID, 0, 10)
+        button.add_style(StyleWrapper().border_width(0).radius(40), 0)
+        button.add_flag(lv.obj.FLAG.CLICKABLE)
+        button.clear_flag(lv.obj.FLAG.EVENT_BUBBLE)
+        
+        # Create icon
+        icon = lv.img(button)
+        if icon_path:  # Only set icon if path is not empty
+            icon.set_src(icon_path)
+        icon.align(lv.ALIGN.CENTER, 0, 0)
+        
+        # Create label
+        label = lv.label(self.container)
+        label.set_text(text)
+        label.add_style(StyleWrapper()
+                       .text_font(font_GeistRegular20)
+                       .text_color(lv_colors.WHITE)
+                       .text_align(lv.TEXT_ALIGN.CENTER), 0)
+        label.align_to(button, lv.ALIGN.OUT_BOTTOM_MID, 0, 4)
+        
+        # Add event callback
+        button.add_event_cb(callback, lv.EVENT.CLICKED, None)
+        
+        return button, icon, label
+    
+    def _create_blur_button(self):
+        """Create only Blur button like HomeScreenSetting"""
+        # Create Blur button with proper icon
+        self.blur_button, self.blur_button_icon, self.blur_label = \
+            self._create_button_with_label("A:/res/blur_no_selected.png", "Blur", self.on_blur_clicked)
+        
+        # Initialize blur button state
+        self._update_blur_button_state()
+    
+    def on_select_clicked(self, event_obj):
+        """Handle Change button click - navigate to wallpaper selection"""
+        # Navigate to WallperChange for wallpaper selection - not needed for NFT preview
+        pass
+    
+    def on_blur_clicked(self, event_obj):
+        """Handle Blur button click"""
+        if self.blur_exists:
+            self._toggle_blur()
+
+    def _check_blur_exists(self, blur_path):
+        try:
+            # Remove A:1: prefix and check if file exists
+            file_path = blur_path.replace("A:1:", "1:")
+            if __debug__:
+                print(f"[NftHomeScreenPreview] Checking blur file: {blur_path} -> {file_path}")
+            with io.fatfs.open(file_path, "r") as f:
+                if __debug__:
+                    print(f"[NftHomeScreenPreview] Blur file exists: {file_path}")
+                return True
+        except Exception as e:
+            if __debug__:
+                print(f"[NftHomeScreenPreview] Blur file not found: {file_path}, error: {e}")
+            return False
+    
+    def _update_blur_button_state(self):
+        """Update blur button state exactly like HomeScreenSetting"""
+        if not self.blur_exists:
+            # Disabled state - no blur version available (matching HomeScreenSetting)
+            icon_path = "A:/res/blur_not_available.png"
+            self.blur_button.clear_flag(lv.obj.FLAG.CLICKABLE)
+            # Make button look disabled
+            self.blur_button.set_style_bg_opa(lv.OPA.TRANSP, 0)
+            self.blur_button.set_style_border_width(0, 0)
+        else:
+            # Blur version available - clickable, restore styles
+            self.blur_button.add_flag(lv.obj.FLAG.CLICKABLE)
+            # Restore button styles
+            self.blur_button.set_style_bg_opa(lv.OPA.COVER, 0)
+            self.blur_button.set_style_border_width(1, 0)
+            
+            if getattr(self, 'is_blur_active', False):
+                icon_path = "A:/res/blur_selected.png"
+            else:
+                icon_path = "A:/res/blur_no_selected.png"
+        
+        # Update the blur button icon
+        self.blur_button_icon.set_src(icon_path)
+    
+    def _toggle_blur(self):
+        if not self.blur_exists:
+            return
+        
+        # Get original file name and construct blur path
+        file_name = self.nft_path.split("/")[-1]
+        file_name_without_ext = file_name.split(".")[0]
+        
+        # Construct blur path using the same directory structure
+        blur_path = self.nft_path.replace(file_name, f"{file_name_without_ext}-blur.jpg")
+        
+        if self.is_blur_active:
+            # Switch to original
+            self.current_wallpaper_path = self.original_wallpaper_path
+            self.is_blur_active = False
+        else:
+            # Switch to blur
+            self.current_wallpaper_path = blur_path
+            self.is_blur_active = True
+        
+        # Update the preview image
+        self.homescreen_preview.set_src(self.current_wallpaper_path)
+        # Re-apply zoom after changing source
+        scale = int(574 * 256 / 456)  # Scale based on height
+        self.homescreen_preview.set_zoom(scale)
+        self.homescreen_preview.align(lv.ALIGN.CENTER, 0, 0)
+        self._update_blur_button_state()
+
+    def eventhandler(self, event_obj):
+        event = event_obj.code
+        target = event_obj.get_target()
+        if event == lv.EVENT.CLICKED:
+            if utils.lcd_resume():
+                return
+            if isinstance(target, lv.imgbtn):
+                if hasattr(self, "nav_back") and target == self.nav_back.nav_btn:
+                    if self.prev_scr is not None:
+                        lv.scr_load(self.prev_scr)
+                    return
+                elif hasattr(self, "rti_btn") and target == self.rti_btn:
+                    # Set as home screen with proper path format
+                    wallpaper_path = self.current_wallpaper_path
+                    
+                    if __debug__:
+                        print(f"[NftHomeScreenPreview] Setting homescreen with: {wallpaper_path}")
+                    
+                    # Convert path format for storage - storage needs A: prefix
+                    if wallpaper_path.startswith("A:1:"):
+                        wallpaper_path = wallpaper_path.replace("A:1:", "A:")
+                    elif wallpaper_path.startswith("1:"):
+                        wallpaper_path = "A:" + wallpaper_path[2:]
+                    elif not wallpaper_path.startswith("A:"):
+                        # Add A: prefix if missing
+                        wallpaper_path = "A:" + wallpaper_path.lstrip("/")
+                    
+                    if __debug__:
+                        print(f"[NftHomeScreenPreview] Converted path for storage: {wallpaper_path}")
+                    
+                    try:
+                        storage_device.set_homescreen(wallpaper_path)
+                        if __debug__:
+                            print(f"[NftHomeScreenPreview] Successfully set homescreen")
+                    except Exception as e:
+                        if __debug__:
+                            print(f"[NftHomeScreenPreview] Error setting homescreen: {e}")
+                    
+                    # Navigate back to MainScreen (AppDrawer)
+                    from . import MainScreen
+                    main_screen = MainScreen()
+                    self.load_screen(main_screen, destroy_self=True)
+                    return
+            else:
+                # Handle button clicks for Blur button only
+                if hasattr(self, 'blur_button') and target == self.blur_button:
+                    self.on_blur_clicked(event_obj)
 
 
 class SettingsScreen(AnimScreen):
