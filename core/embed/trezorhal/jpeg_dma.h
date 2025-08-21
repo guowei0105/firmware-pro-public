@@ -1,6 +1,8 @@
 #ifndef _JPEG_DMA_H_
 #define _JPEG_DMA_H_
 
+#include <stdbool.h>
+
 enum { JPEG_FILE_LVGL = 0, JPEG_FILE_FATFS };
 
 void jpeg_init(void);
@@ -12,4 +14,9 @@ int jpeg_get_decode_state(void);
 int jpeg_get_decode_error(void);
 int jpeg_decode_start(const char *path);
 void jpeg_decode_info(uint32_t *width, uint32_t *height, uint32_t *subsampling);
+
+// LVGL兼容性：状态保存和恢复函数
+void jpeg_save_state(void);
+void jpeg_restore_state(void);
+
 #endif

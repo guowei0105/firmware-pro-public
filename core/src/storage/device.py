@@ -14,6 +14,7 @@ HOMESCREEN_MAXSIZE = 16384
 LABEL_MAXLENGTH = const(32)
 LANGUAGE_MAXLENGTH = const(16)
 HOMESCREEN_PATH_MAXSIZE = const(128)
+LOCKSCREEN_PATH_MAXSIZE = const(128)
 BLE_NAME_MAXLENGTH = const(16)
 BLE_VERSION_MAXLENGTH = const(8)
 PREVIOUS_LABEL_MAXLENGTH = const(13)
@@ -33,6 +34,7 @@ _AUTO_PASSPHRASE_VALUE: bool | None = None
 _PASSPHRASE_ALWAYS_ON_DEVICE_VALUE: bool | None = None
 _AUTOLOCK_DELAY_MS_VALUE: int | None = None
 _HOMESCREEN_VALUE: str | None = None
+_LOCKSCREEN_VALUE: str | None = None
 _BLE_NAME_VALUE: str | None = None
 _BLE_VERSION_VALUE: str | None = None
 _BLE_ENABLED_VALUE: bool | None = None
@@ -137,6 +139,12 @@ if utils.USE_THD89:
         "has_value": 0 | uctypes.UINT8,
         "size": 1 | uctypes.UINT16,
         "uuid": (3 | uctypes.ARRAY, HOMESCREEN_PATH_MAXSIZE | uctypes.UINT8),
+    }
+
+    struct_lockscreen: uctypes.StructDict = {
+        "has_value": 0 | uctypes.UINT8,
+        "size": 1 | uctypes.UINT16,
+        "uuid": (3 | uctypes.ARRAY, LOCKSCREEN_PATH_MAXSIZE | uctypes.UINT8),
     }
 
     struct_sessionkey: uctypes.StructDict = {
@@ -253,6 +261,8 @@ if utils.USE_THD89:
     offset += uctypes.sizeof(struct_bool, uctypes.LITTLE_ENDIAN)
     struct_public["auto_passphrase"] = (offset, struct_bool)
     offset += uctypes.sizeof(struct_bool, uctypes.LITTLE_ENDIAN)
+    struct_public["lockscreen"] = (offset, struct_lockscreen)
+    offset += uctypes.sizeof(struct_lockscreen, uctypes.LITTLE_ENDIAN)
 
     # public_field = uctypes.struct(0, struct_public, uctypes.LITTLE_ENDIAN)
     assert (
@@ -293,6 +303,7 @@ if utils.USE_THD89:
     _PASSPHRASE_ALWAYS_ON_DEVICE = struct_public["passphrase_always_on_device"][0]
     _AUTOLOCK_DELAY_MS = struct_public["autolock_delay_ms"][0]
     _HOMESCREEN = struct_public["homescreen"][0]
+    _LOCKSCREEN = struct_public["lockscreen"][0]
     _BLE_NAME = struct_public["ble_name"][0]
     _BLE_VERSION = struct_public["ble_version"][0]
     _BLE_ENABLED = struct_public["ble_enabled"][0]
@@ -974,6 +985,25 @@ def set_homescreen(full_path: str) -> None:
     _HOMESCREEN_VALUE = full_path
 
 
+def get_lockscreen() -> str | None:
+    global _LOCKSCREEN_VALUE
+
+    if _LOCKSCREEN_VALUE is None:
+        lockscreen = common.get(_NAMESPACE, _LOCKSCREEN, public=True)
+        _LOCKSCREEN_VALUE = (
+            lockscreen.decode() if lockscreen else utils.get_default_wallpaper()
+        )
+    return _LOCKSCREEN_VALUE
+
+
+def set_lockscreen(full_path: str) -> None:
+    if len(full_path.encode("utf-8")) > LOCKSCREEN_PATH_MAXSIZE:
+        raise ValueError  # lockscreen path too large
+    global _LOCKSCREEN_VALUE
+    common.set(_NAMESPACE, _LOCKSCREEN, full_path.encode(), public=True)
+    _LOCKSCREEN_VALUE = full_path
+
+
 def store_mnemonic_secret(
     secret: bytes,
     backup_type: BackupType | int,
@@ -1516,6 +1546,7 @@ def clear_global_cache() -> None:
     global _PASSPHRASE_ALWAYS_ON_DEVICE_VALUE
     global _AUTOLOCK_DELAY_MS_VALUE
     global _HOMESCREEN_VALUE
+    global _LOCKSCREEN_VALUE
     global _BLE_NAME_VALUE
     global _BLE_VERSION_VALUE
     global _BLE_ENABLED_VALUE
@@ -1556,6 +1587,7 @@ def clear_global_cache() -> None:
     _PASSPHRASE_ALWAYS_ON_DEVICE_VALUE = None
     _AUTOLOCK_DELAY_MS_VALUE = None
     _HOMESCREEN_VALUE = None
+    _LOCKSCREEN_VALUE = None
     _BLE_NAME_VALUE = None
     _BLE_VERSION_VALUE = None
     _BLE_ENABLED_VALUE = None

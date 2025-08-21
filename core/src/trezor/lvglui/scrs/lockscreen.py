@@ -31,7 +31,7 @@ class LockScreen(Screen):
         return False, None
 
     def __init__(self, device_name, ble_name="", dev_state=None):
-        lockscreen = storage_device.get_homescreen()
+        lockscreen = storage_device.get_lockscreen()
         self.double_click = DoubleClickDetector(click_timeout=800, click_dist=50)
         if not hasattr(self, "_init"):
             self._init = True

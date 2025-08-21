@@ -1095,22 +1095,26 @@ void lcd_cover_background_load_jpeg(const char* jpeg_path) {
   
   // printf("Loading JPEG wallpaper: %s\n", jpeg_path);
   
+  // === 最优解决方案：JPEG解码器状态完全隔离 ===
+  // 保存LVGL的JPEG解码器状态，确保不会影响LVGL的图片加载
+  jpeg_save_state();
+  
   // 使用专用的JPEG输出缓冲区
   uint32_t jpeg_output_address = FMC_SDRAM_JPEG_OUTPUT_DATA_BUFFER_ADDRESS;
   
-  // 初始化JPEG解码器（如果需要）
-  jpeg_init();
+  // 为AppDrawer初始化独立的JPEG解码器实例
+  // 设置为专用的FATFS模式，与LVGL模式完全隔离
+  jpeg_decode_file_operation(JPEG_FILE_FATFS);  // 明确使用FATFS模式
+  jpeg_decode_init(jpeg_output_address);        // 使用专用缓冲区
   
-  // 临时修改显示地址，让JPEG解码到Layer2
-  uint32_t original_display_addr = g_current_display_addr;
-  g_current_display_addr = (uint32_t)LAYER2_MEMORY_BASE;
-  // printf("[Layer2 JPEG] Temporarily set display address to Layer2: 0x%08lX\n", (uint32_t)LAYER2_MEMORY_BASE);
+  // 关键修复：使用直接地址解码，避免修改g_current_display_addr
+  // 这样完全避免了全局显示地址的冲突
+  int decode_result = jped_decode_to_address((char*)jpeg_path, 
+                                            jpeg_output_address, 
+                                            (uint32_t)LAYER2_MEMORY_BASE);
   
-  // 解码JPEG文件到Layer2
-  int decode_result = jped_decode((char*)jpeg_path, jpeg_output_address);
-  
-  // 恢复原始显示地址
-  g_current_display_addr = original_display_addr;
+  // 立即恢复LVGL的JPEG解码器状态，确保不会影响后续操作
+  jpeg_restore_state();
   
   if (decode_result != 0) {
     printf("ERROR: Failed to decode JPEG file %s, error code: %d\n", jpeg_path, decode_result);

@@ -6,6 +6,7 @@ from trezor import loop, utils
 from trezor.lvglui.scrs.components.anim import Anim
 
 import lvgl as lv  # type: ignore[Import "lvgl" could not be resolved]
+from lvgl import LvReferenceError  # type: ignore[Import "lvgl" could not be resolved]
 
 from ..lv_colors import lv_colors
 from .components import slider
@@ -36,8 +37,12 @@ def apply_animations(targets, back=False, exclude_types=()):
     def create_move_cb(targets_list):
         def cb(value):
             for target in targets_list:
-                target.set_style_translate_x(value, 0)
-                target.invalidate()
+                try:
+                    target.set_style_translate_x(value, 0)
+                    target.invalidate()
+                except LvReferenceError:
+                    # Object was deleted, skip it
+                    pass
 
         return cb
 

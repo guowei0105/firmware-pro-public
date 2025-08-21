@@ -791,6 +791,7 @@ message ListResDir {
 message FileInfoList {
     repeated FileInfo files = 1;
     message FileInfo {
+        
         required string name = 1;
         required uint64 size =2;
     }

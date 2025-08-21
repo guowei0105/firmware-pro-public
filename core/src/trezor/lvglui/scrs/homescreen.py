@@ -24,7 +24,7 @@ import ujson as json
 from apps.common import passphrase, safety_checks
 
 from ..lv_symbols import LV_SYMBOLS
-from . import font_GeistRegular26, font_GeistRegular30, font_GeistSemiBold26
+from . import font_GeistRegular20,font_GeistRegular26, font_GeistRegular30, font_GeistSemiBold26,font_GeistSemiBold38, font_GeistSemiBold48
 from .address import AddressManager, chains_brief_info
 from .common import AnimScreen, FullSizeWindow, Screen, lv  # noqa: F401, F403, F405
 from .components.anim import Anim
@@ -238,12 +238,14 @@ def change_state(is_busy: bool = False):
         main_screen = MainScreen()
         lv.scr_load(main_screen)
         main_screen.change_state(is_busy)
+
 class MainScreen(Screen):
     def __init__(self, device_name=None, ble_name=None, dev_state=None):
-        homescreen = storage_device.get_homescreen()
+        # homescreen = storage_device.get_homescreen()
+        lockscreen = storage_device.get_lockscreen()
         if not hasattr(self, "_init"):
             self._init = True
-            self._cached_homescreen = homescreen
+            # self._cached_lockscreen = lockscreen
             
             # Check if device name display is enabled
             show_device_names = storage_device.is_device_name_display_enabled()
@@ -267,6 +269,14 @@ class MainScreen(Screen):
                 super().__init__()
                 if __debug__:
                     print(f"[MAINSCREEN] Not showing device names, initialized without title/subtitle")
+            
+            # Set background for first-time initialization
+            self.add_style(
+                StyleWrapper().bg_img_src(lockscreen),
+                0,
+            )
+            if __debug__:
+                print(f"MainScreen: Initial background set to {lockscreen}")
         else:
             # Check if device name display setting has changed
             show_device_names = storage_device.is_device_name_display_enabled()
@@ -300,15 +310,18 @@ class MainScreen(Screen):
                 if __debug__:
                     print(f"[MAINSCREEN] Else branch - titles hidden and cleared")
             
-            if (
-                not hasattr(self, "_cached_homescreen")
-                or self._cached_homescreen != homescreen
-            ):
-                self._cached_homescreen = homescreen
-                self.add_style(
-                    StyleWrapper().bg_img_src(homescreen),
+            # if (
+            #     not hasattr(self, "_cached_lockscreen")
+            #     or self._cached_lockscreen != lockscreen
+            # ):
+            #     self._cached_lockscreen = lockscreen
+            lockscreen = storage_device.get_lockscreen()
+            self.add_style(
+                    StyleWrapper().bg_img_src(lockscreen),
                     0,
                 )
+            if __debug__:
+                print(f"MainScreen: Background refreshed to {lockscreen}")
             if hasattr(self, "dev_state"):
                 from apps.base import get_state
 
@@ -323,6 +336,8 @@ class MainScreen(Screen):
                 self.up_arrow.align_to(self.bottom_tips, lv.ALIGN.OUT_TOP_MID, 0, -8)
             if self.apps:
                 self.apps.refresh_text()
+                # 刷新AppDrawer背景以确保壁纸更新后背景同步更新
+                self.refresh_appdrawer_background()
             return
         # Align title and subtitle if they exist
         if hasattr(self, 'title') and self.title:
@@ -343,7 +358,7 @@ class MainScreen(Screen):
                 self.dev_state.align_to(self.content_area, lv.ALIGN.TOP_MID, 0, 124)
             self.dev_state.show(dev_state)
         self.add_style(
-            StyleWrapper().bg_img_src(homescreen),
+            StyleWrapper().bg_img_src(storage_device.get_lockscreen()),
             0,
         )
         self.clear_flag(lv.obj.FLAG.SCROLLABLE)
@@ -456,7 +471,9 @@ class MainScreen(Screen):
             # 严格控制：只允许UP手势
             if _dir == lv.DIR.TOP:
                 print("MainScreen: UP gesture detected in MainScreen view, showing AppDrawer")
+                self.refresh_appdrawer_background()
                 self.show_appdrawer_simple()
+
             else:
                 print(f"MainScreen: Ignoring non-UP gesture: {_dir}")
                 
@@ -471,15 +488,17 @@ class MainScreen(Screen):
                 if hasattr(display, 'cover_background_load_jpeg'):
                     try:
                         from storage import device
-                        homescreen_path = device.get_homescreen()
+                        lockscreen_path = device.get_lockscreen()
                         
-                        if not homescreen_path:
-                            homescreen_path = "res/wallpaper-1.jpg"
+                        if not lockscreen_path:
+                            display_path = "res/wallpaper-1.jpg"
                         else:
-                            if homescreen_path.startswith("A:/"):
-                                homescreen_path = homescreen_path[3:]
+                            if lockscreen_path.startswith("A:/"):
+                                display_path = lockscreen_path[3:]  # 为display系统创建专门变量
+                            else:
+                                display_path = lockscreen_path
                         
-                        display.cover_background_load_jpeg(homescreen_path)
+                        display.cover_background_load_jpeg(display_path)
                         print("MainScreen: Layer2 background loaded")
                         
                     except Exception:
@@ -516,8 +535,9 @@ class MainScreen(Screen):
                         self.apps.visible = True
                         
                         # 恢复 AppDrawer 的原始背景 (2222.png)
+                        current_homescreen = storage_device.get_homescreen()
                         self.apps.add_style(
-                            StyleWrapper().bg_img_src("A:/res/2222.png").border_width(0),
+                            StyleWrapper().bg_img_src(current_homescreen).border_width(0),
                             0,
                         )
                         print("MainScreen: AppDrawer shown behind layer2")
@@ -577,15 +597,17 @@ class MainScreen(Screen):
             if hasattr(display, 'cover_background_load_jpeg'):
                 try:
                     from storage import device
-                    homescreen_path = device.get_homescreen()
+                    lockscreen_path = device.get_lockscreen()
                     
-                    if not homescreen_path:
-                        homescreen_path = "res/wallpaper-1.jpg"
+                    if not lockscreen_path:
+                        display_path = "res/wallpaper-1.jpg"
                     else:
-                        if homescreen_path.startswith("A:/"):
-                            homescreen_path = homescreen_path[3:]
+                        if lockscreen_path.startswith("A:/"):
+                            display_path = lockscreen_path[3:]  # 为display系统创建专门变量
+                        else:
+                            display_path = lockscreen_path
                     
-                    display.cover_background_load_jpeg(homescreen_path)
+                    display.cover_background_load_jpeg(display_path)
                     print("MainScreen: Layer2 background loaded")
                     
                 except Exception:
@@ -618,8 +640,9 @@ class MainScreen(Screen):
                         # 3. 清除 FLAG.GESTURE_BUBBLE 标志，确保手势不会冒泡
                         self.apps.show()
                         # 恢复 AppDrawer 的原始背景 (2222.png)
+                        current_homescreen = storage_device.get_homescreen()
                         self.apps.add_style(
-                            StyleWrapper().bg_img_src("A:/res/2222.png").border_width(0),
+                            StyleWrapper().bg_img_src(current_homescreen).border_width(0),
                             0,
                         )
                         print("MainScreen: AppDrawer shown behind layer2 with proper gesture handling")
@@ -670,6 +693,12 @@ class MainScreen(Screen):
                 self.title.clear_flag(lv.obj.FLAG.HIDDEN)
             if hasattr(self, "subtitle"):
                 self.subtitle.clear_flag(lv.obj.FLAG.HIDDEN)
+    
+    def refresh_appdrawer_background(self):
+        """刷新AppDrawer的背景"""
+        if hasattr(self, 'apps') and self.apps:
+            self.apps.refresh_background()
+            print("MainScreen: AppDrawer background refreshed")
 
     def change_state(self, busy: bool):
         if busy:
@@ -752,8 +781,9 @@ class MainScreen(Screen):
                 StyleWrapper().bg_opa(lv.OPA.COVER).bg_color(lv_colors.BLACK).border_width(0),
                 0,
             )
+            homescreen = storage_device.get_homescreen()
             self.add_style(
-                StyleWrapper().bg_img_src("A:/res/2222.png").border_width(0),
+                StyleWrapper().bg_img_src(homescreen).border_width(0),
                 0,
             )
 
@@ -950,23 +980,28 @@ class MainScreen(Screen):
                 from trezorui import Display
                 display = Display()
                 
-                # 步骤1: 加载layer2背景
-                self.add_style(
-                    StyleWrapper().bg_img_src("A:/res/wallpaper-1.jpg").border_width(0),
-                    0,
-                )
+
+                from storage import device
+                # lockscreen_path = device.get_lockscreen()
+                # # 步骤1: 加载layer2背景
+                # self.add_style(
+                #     StyleWrapper().bg_img_src(lockscreen_path).border_width(0),
+                #     0,
+                # )
                 if hasattr(display, 'cover_background_load_jpeg'):
                     try:
                         from storage import device
-                        homescreen_path = device.get_homescreen()
+                        lockscreen_path = device.get_lockscreen()
                         
-                        if not homescreen_path:
-                            homescreen_path = "res/wallpaper-1.jpg"
+                        if not lockscreen_path:
+                            display_path = "res/wallpaper-1.jpg"
                         else:
-                            if homescreen_path.startswith("A:/"):
-                                homescreen_path = homescreen_path[3:]
+                            if lockscreen_path.startswith("A:/"):
+                                display_path = lockscreen_path[3:]  # 为display系统创建专门变量
+                            else:
+                                display_path = lockscreen_path
                         
-                        display.cover_background_load_jpeg(homescreen_path)
+                        display.cover_background_load_jpeg(display_path)
                         print("AppDrawer: Layer2 background loaded for DOWN gesture")
                         
                     except Exception:
@@ -1009,24 +1044,18 @@ class MainScreen(Screen):
                     
                     # 动画完成后隐藏layer2
                     def on_animation_complete():
-                        print("AppDrawer: Animation complete, hiding layer2")
+                        print("AppDrawer: Animation complete with hardware isolation")
                         try:
-                            # 延迟隐藏 layer2
-                            def hide_layer2():
-                                if hasattr(display, 'cover_background_hide'):
-                                    display.cover_background_hide()
-                                    print("AppDrawer: Layer2 hidden")
+                            # 简单隐藏Layer2 - 硬件冲突已在C层解决
+                            if hasattr(display, 'cover_background_hide'):
+                                display.cover_background_hide()
+                                print("AppDrawer: Layer2 hidden cleanly")
                             
-                            # 短暂延迟后隐藏 layer2 (100ms)
-                            hide_timer = lv.timer_create(
-                                lambda t: hide_layer2(),
-                                100, None
-                            )
-                            hide_timer.set_repeat_count(1)
+                            # 不再需要复杂的LVGL重置 - JPEG状态已被保护
+                            print("AppDrawer: Hardware JPEG isolation successful - LVGL images unaffected")
                             
-                        except Exception as e:
-                            print(f"AppDrawer: Error in animation complete: {e}")
-                    
+                        except Exception as error:
+                            print(f"AppDrawer: Error in simplified completion: {error}")
                     # 动画完成时隐藏layer2（250ms 动画时间）
                     completion_timer = lv.timer_create(
                         lambda t: on_animation_complete(),
@@ -1116,6 +1145,15 @@ class MainScreen(Screen):
         def dismiss(self):
             """简化的dismiss方法 - 不再使用，改用简化的直接隐藏方式"""
             print("AppDrawer: dismiss() method called - using simplified hide logic instead")
+        
+        def refresh_background(self):
+            """刷新AppDrawer的背景图片"""
+            homescreen = storage_device.get_homescreen()
+            self.add_style(
+                StyleWrapper().bg_img_src(homescreen).border_width(0),
+                0,
+            )
+            print(f"AppDrawer: Background refreshed to {homescreen}")
 
         def on_pressed(self, text_key):
             label = self.text_label[text_key]
@@ -3693,10 +3731,11 @@ class GeneralScreen(AnimScreen):
         self.language = ListItemBtn(
             self.container, _(i18n_keys.ITEM__LANGUAGE), GeneralScreen.cur_language
         )
-        self.display = ListItemBtn(self.container,_(i18n_keys.TITLE__DISPLAY))
-        self.home_scr = ListItemBtn(self.container, _(i18n_keys.ITEM__HOMESCREEN))
+        
+        self.home_scr = ListItemBtn(self.container, _(i18n_keys.BUTTON__WALLPAPER))
         self.animation = ListItemBtn(self.container, _(i18n_keys.ITEM__ANIMATIONS))
         self.tap_awake = ListItemBtn(self.container, _(i18n_keys.ITEM__LOCK_SCREEN))
+        self.display = ListItemBtn(self.container,_(i18n_keys.TITLE__DISPLAY))
         # self.power = ListItemBtn(
         #     self.content_area,
         #     _(i18n_keys.ITEM__POWER_OFF),
@@ -3714,7 +3753,7 @@ class GeneralScreen(AnimScreen):
         self.title.set_text(_(i18n_keys.TITLE__GENERAL))
         self.language.label_left.set_text(_(i18n_keys.ITEM__LANGUAGE))
         self.display.label_left.set_text(_(i18n_keys.TITLE__DISPLAY))
-        self.home_scr.label_left.set_text(_(i18n_keys.ITEM__HOMESCREEN))
+        self.home_scr.label_left.set_text(_(i18n_keys.BUTTON__WALLPAPER))
         self.animation.label_left.set_text(_(i18n_keys.ITEM__ANIMATIONS))
         self.tap_awake.label_left.set_text(_(i18n_keys.ITEM__LOCK_SCREEN))
         # self.power.label_left.set_text(_(i18n_keys.ITEM__POWER_OFF))
@@ -3732,7 +3771,7 @@ class GeneralScreen(AnimScreen):
         elif target == self.tap_awake:
             TapAwakeSetting(self)
         elif target == self.home_scr:
-            HomeScreenSetting(self)
+            WallpaperScreen(self)
         elif target == self.rti_btn:
             PowerOff()
         else:
@@ -4044,7 +4083,7 @@ class AutolockSetting(AnimScreen):
 
         super().__init__(
             prev_scr=prev_scr, 
-            title="自动锁定", 
+            title=_(i18n_keys.TITLE__AUTO_LOCK), 
             nav_back=True
         )
 
@@ -4054,7 +4093,7 @@ class AutolockSetting(AnimScreen):
         
         self.auto_lock = ListItemBtn(
             self.container,
-            "自动锁定",
+            _(i18n_keys.TITLE__AUTO_LOCK),
             AutolockSetting.cur_auto_lock,
         )
         
@@ -4072,9 +4111,9 @@ class AutolockSetting(AnimScreen):
         else:
             return f"{delay_ms // 3600000}小时"
 
-    def refresh_text(self):
-        self.title.set_text("自动锁定")
-        self.auto_lock.label_left.set_text("自动锁定")
+    def refresh_text(self):  
+        self.title.set_text(_(i18n_keys.TITLE__AUTO_LOCK))
+        self.auto_lock.label_left.set_text(_(i18n_keys.TITLE__AUTO_LOCK))
 
     def on_click(self, event_obj):
         code = event_obj.code
@@ -4085,6 +4124,563 @@ class AutolockSetting(AnimScreen):
             if target == self.auto_lock:
                 # Use the existing AutoLockSetting class
                 AutoLockSetting(self)
+
+
+class LockScreenSetting(AnimScreen):
+    def collect_animation_targets(self) -> list:
+        targets = []
+        if hasattr(self, "container") and self.container:
+            targets.append(self.container)
+        return targets
+
+    def __init__(self, prev_scr=None, selected_wallpaper=None):
+        if not hasattr(self, "_init"):
+            self._init = True
+        else:
+            # Even if already initialized, update the wallpaper if a new one is provided
+            if selected_wallpaper:
+                self.selected_wallpaper = selected_wallpaper
+                self.current_wallpaper_path = selected_wallpaper
+                if hasattr(self, 'lockscreen_preview'):
+                    self.lockscreen_preview.set_src(selected_wallpaper)
+                    if __debug__:
+                        print(f"LockScreenSetting: Updated wallpaper to {selected_wallpaper}")
+            self.refresh_text()
+            return
+        
+        self.selected_wallpaper = selected_wallpaper
+        
+        super().__init__(
+            prev_scr=prev_scr,
+            nav_back=True,
+            rti_path="A:/res/checkmark.png"
+        )
+        
+        if __debug__:
+            print("LockScreenSetting initialized")
+            print(f"Has nav_back: {hasattr(self, 'nav_back')}")
+            print(f"Has rti_btn: {hasattr(self, 'rti_btn')}")
+            if hasattr(self, 'nav_back'):
+                print(f"nav_back: {self.nav_back}")
+            if hasattr(self, 'rti_btn'):
+                print(f"rti_btn: {self.rti_btn}")
+        
+        # Main container for the screen
+        self.container = lv.obj(self.content_area)
+        self.container.set_size(lv.pct(100), lv.pct(100))
+        self.container.align(lv.ALIGN.TOP_MID, 0, 0)
+        self.container.add_style(
+            StyleWrapper().bg_opa(lv.OPA.TRANSP).pad_all(0).border_width(0), 0
+        )
+        # Don't capture click events - let them pass through to buttons
+        self.container.clear_flag(lv.obj.FLAG.CLICKABLE)
+        self.container.add_flag(lv.obj.FLAG.EVENT_BUBBLE)
+        
+        
+        # Lock screen preview container with image
+        self.preview_container = lv.obj(self.container)
+        self.preview_container.set_size(344, 574)  # Larger preview size
+        self.preview_container.align(lv.ALIGN.TOP_MID, 0, 105)  # Below status bar
+        self.preview_container.add_style(
+            StyleWrapper()
+            .bg_opa(lv.OPA.TRANSP)
+            .pad_all(0)
+            .border_width(0)
+            , 0
+        )
+        # Don't capture click events - let them pass through to buttons
+        self.preview_container.clear_flag(lv.obj.FLAG.CLICKABLE)
+        self.preview_container.add_flag(lv.obj.FLAG.EVENT_BUBBLE)
+        
+        # Lock screen preview image
+        self.lockscreen_preview = lv.img(self.preview_container)
+        
+        # Use selected wallpaper if provided, otherwise use current lock screen
+        if self.selected_wallpaper:
+            self.current_wallpaper_path = self.selected_wallpaper
+            self.lockscreen_preview.set_src(self.selected_wallpaper)
+        else:
+            # Get current lock screen image from storage
+            lockscreen_path = storage_device.get_lockscreen()
+            if lockscreen_path:
+                self.current_wallpaper_path = lockscreen_path
+                self.lockscreen_preview.set_src(lockscreen_path)
+            else:
+                # Use default wallpaper if no custom lockscreen is set
+                self.current_wallpaper_path = "A:/res/wallpaper-2.jpg"
+                self.lockscreen_preview.set_src("A:/res/wallpaper-2.jpg")
+        
+        self.lockscreen_preview.set_size(344, 574)
+        self.lockscreen_preview.align(lv.ALIGN.CENTER, 0, 0)
+        
+        # Device name and bluetooth name overlaid on the image
+        device_name = storage_device.get_model() or "OneKey Pro"
+        ble_name = storage_device.get_ble_name() or uart.get_ble_name()
+
+        # Device name label (overlaid on image, horizontally centered, 距离上边缘49px)
+        self.device_name_label = lv.label(self.preview_container)
+        self.device_name_label.set_text(device_name)
+        self.device_name_label.add_style(
+            StyleWrapper()
+            .text_font(font_GeistSemiBold38)
+            .text_color(lv_colors.WHITE)
+            .text_align(lv.TEXT_ALIGN.CENTER), 0
+        )
+        # device_name 距离 preview_container 上边缘49px，水平居中（不垂直居中）
+        self.device_name_label.align_to(self.preview_container, lv.ALIGN.TOP_MID, 0, 49)
+
+        # Bluetooth name label (overlaid on image, placed below device_name_label)
+        self.bluetooth_label = lv.label(self.preview_container)
+        if ble_name and len(ble_name) >= 4:
+            self.bluetooth_label.set_text("Pro " + ble_name[-4:])
+        else:
+            self.bluetooth_label.set_text("Pro")
+        self.bluetooth_label.add_style(
+            StyleWrapper()
+            .text_font(font_GeistRegular26)
+            .text_color(lv_colors.WHITE)
+            .text_align(lv.TEXT_ALIGN.CENTER), 0
+        )
+        # bluetooth_label 距离 device_name_label 下边缘 8px，水平居中（不垂直居中）
+        self.bluetooth_label.align_to(self.device_name_label, lv.ALIGN.OUT_BOTTOM_MID, 0, 8)
+        self.change_button = lv.btn(self.container)
+        self.change_button.set_size(64, 64)
+        self.change_button.align_to(self.preview_container, lv.ALIGN.OUT_BOTTOM_MID, 0, 10)
+        # Remove border from the button_icon (icon itself is an image, so no border by default)
+        # But to be sure, also remove border from the button itself
+        self.change_button.add_style(
+            StyleWrapper()
+            .border_width(0)
+            .radius(40), 0
+        )
+
+        # Icon in the button - using landscape icon as shown in the image
+        self.button_icon = lv.img(self.change_button)
+        self.button_icon.set_src("A:/res/wallper.png")  # Landscape icon for wallpaper selection
+        self.button_icon.align(lv.ALIGN.CENTER, 0, 0)
+
+        # "Change" text below button
+        self.change_label = lv.label(self.container)
+        self.change_label.set_text("Change")
+        self.change_label.add_style(
+            StyleWrapper()
+            .text_font(font_GeistRegular20)
+            .text_color(lv_colors.WHITE)
+            .text_align(lv.TEXT_ALIGN.CENTER), 0
+        )
+        self.change_label.align_to(self.change_button, lv.ALIGN.OUT_BOTTOM_MID, 0, 4)
+
+        # Add event handlers
+        self.change_button.add_event_cb(self.on_select_clicked, lv.EVENT.CLICKED, None)
+        # Don't make the preview image clickable
+
+        # Add event handler for button_icon: click to go to HomeScreenSetting
+        def _on_button_icon_clicked(e):
+            self.load_screen(WallperChange(self), destroy_self=True)
+        self.button_icon.add_flag(lv.obj.FLAG.CLICKABLE)
+        self.button_icon.add_event_cb(_on_button_icon_clicked, lv.EVENT.CLICKED, None)
+
+        self.load_screen(self)
+        gc.collect()
+
+    
+
+    def on_select_clicked(self, event_obj):
+        """Handle select button click - open wallpaper selection"""
+        target = event_obj.get_target()
+        if target == self.change_button:
+            # Navigate to WallperChange for wallpaper selection
+            WallperChange(self)
+
+    def on_wallpaper_clicked(self, event_obj):
+        """Handle wallpaper image click - same as select button"""
+        self.cycle_wallpaper()
+
+    def cycle_wallpaper(self):
+        """Cycle through available wallpapers for demo"""
+        wallpapers = [
+            "A:/res/wallpaper-1.jpg",
+            "A:/res/wallpaper-2.jpg", 
+            "A:/res/wallpaper-3.jpg",
+            "A:/res/wallpaper-4.jpg"
+        ]
+        
+        current_src = self.lockscreen_preview.get_src()
+        try:
+            current_index = wallpapers.index(current_src)
+            next_index = (current_index + 1) % len(wallpapers)
+        except ValueError:
+            next_index = 0
+            
+        self.lockscreen_preview.set_src(wallpapers[next_index])
+        
+        # TODO: Save selected wallpaper to storage
+        # storage_device.set_lock_screen_wallpaper(wallpapers[next_index])
+
+    def refresh_text(self):
+        """Refresh display when returning to this screen"""
+        # TODO: Load current wallpaper from storage and update preview
+        pass
+
+    def eventhandler(self, event_obj):
+        """Override event handler to ensure clicks are handled"""
+        event = event_obj.code
+        target = event_obj.get_target()
+        
+        if __debug__:
+            print(f"LockScreenSetting eventhandler: event={event}, target={target}, type={type(target)}")
+            
+        if event == lv.EVENT.CLICKED:
+            if __debug__:
+                print("CLICKED event detected")
+            if utils.lcd_resume():
+                return
+                
+            # Check if target is imgbtn (direct button click)
+            if isinstance(target, lv.imgbtn):
+                if __debug__:
+                    print("Target is imgbtn!")
+                if hasattr(self, "nav_back") and target == self.nav_back.nav_btn:
+                    if __debug__:
+                        print("Back button clicked!")
+                    if self.prev_scr is not None:
+                        self.load_screen(self.prev_scr, destroy_self=True)
+                    return
+                elif hasattr(self, "rti_btn") and target == self.rti_btn:
+                    if __debug__:
+                        print("Checkmark button clicked!")
+                    self.on_click_ext(target)
+                    return
+                    
+            # Check if target is the navigation container (back button area)
+            if hasattr(self, "nav_back") and target == self.nav_back:
+                if __debug__:
+                    print("Navigation container clicked - going back!")
+                if self.prev_scr is not None:
+                    self.load_screen(self.prev_scr, destroy_self=True)
+                return
+                    
+            # If not handled above, call parent eventhandler
+            if __debug__:
+                print("Calling parent eventhandler")
+            super().eventhandler(event_obj)
+
+    def on_click_ext(self, target):
+        """Handle checkmark icon click in the upper right corner"""
+        if __debug__:
+            print(f"on_click_ext called with target: {target}")
+            print(f"Has rti_btn: {hasattr(self, 'rti_btn')}")
+            if hasattr(self, 'rti_btn'):
+                print(f"rti_btn: {self.rti_btn}")
+                print(f"target == rti_btn: {target == self.rti_btn}")
+        
+        if hasattr(self, "rti_btn") and target == self.rti_btn:
+            # Use the stored wallpaper path instead of get_src()
+            current_wallpaper = getattr(self, 'current_wallpaper_path', None)
+            if __debug__:
+                print(f"Checkmark clicked! Current wallpaper: {current_wallpaper}")
+            if current_wallpaper:
+                # Save the wallpaper path
+                storage_device.set_lockscreen(current_wallpaper)
+                if __debug__:
+                    print("LockScreenSetting: Lockscreen wallpaper saved")
+            # Go back to previous screen
+            if self.prev_scr is not None:
+                if __debug__:
+                    print("LockScreenSetting: Going back to previous screen")
+                self.load_screen(self.prev_scr, destroy_self=True)
+
+
+
+class WallperChange(AnimScreen):
+    def collect_animation_targets(self) -> list:
+        targets = []
+        if hasattr(self, "container") and self.container:
+            targets.append(self.container)
+        if hasattr(self, "wps"):
+            for wp in self.wps:
+                targets.append(wp)
+        return targets
+
+    def __init__(self, prev_scr=None):
+        if not hasattr(self, "_init"):
+            self._init = True
+            super().__init__(
+                prev_scr=prev_scr, title=_(i18n_keys.TITLE__CHANGE_WALLPAPER), nav_back=True
+            )
+        else:
+            self.container.delete()
+
+        # Get custom wallpapers
+        file_name_list = []
+        if not utils.EMULATOR:
+            for size, _attrs, name in io.fatfs.listdir("1:/res/wallpapers"):
+                if size > 0 and name[:4] == "zoom":
+                    file_name_list.append(name)
+        
+        if file_name_list:
+            file_name_list.sort(
+                key=lambda name: int(
+                    name[5:].split("-")[-1][: -(len(name.split(".")[1]) + 1)]
+                )
+            )
+
+        # Calculate grid layout
+        internal_wp_nums = 7
+        custom_wp_nums = len(file_name_list)
+        
+        # Calculate rows needed: Custom header + custom images (if any) + Pro header + pro images
+        custom_rows = math.ceil(custom_wp_nums / 3) if custom_wp_nums > 0 else 0
+        pro_rows = math.ceil(internal_wp_nums / 3)
+        
+        # Build row description: Custom header + custom rows + Pro header + pro rows
+        row_dsc = [60]  # Custom header
+        if custom_rows > 0:
+            row_dsc.extend([GRID_CELL_SIZE_ROWS] * custom_rows)  # Custom images
+        row_dsc.append(60)  # Pro header  
+        row_dsc.extend([GRID_CELL_SIZE_ROWS] * pro_rows)  # Pro images
+        row_dsc.append(lv.GRID_TEMPLATE.LAST)
+        
+        # 3 columns
+        col_dsc = [
+            GRID_CELL_SIZE_COLS,
+            GRID_CELL_SIZE_COLS, 
+            GRID_CELL_SIZE_COLS,
+            lv.GRID_TEMPLATE.LAST,
+        ]
+        
+        self.container = ContainerGrid(
+            self.content_area,
+            row_dsc=row_dsc,
+            col_dsc=col_dsc,
+            pad_gap=12,
+        )
+        self.container.align_to(self.nav_back, lv.ALIGN.OUT_BOTTOM_LEFT, 12, 20)
+        
+        # Enable event bubbling for the container
+        self.container.add_flag(lv.obj.FLAG.EVENT_BUBBLE)
+        
+        current_row = 0
+        
+        # Custom section header
+        self.custom_header = lv.label(self.container)
+        self.custom_header.set_text("Custom")
+        self.custom_header.add_style(
+            StyleWrapper()
+            .text_font(font_GeistSemiBold26)
+            .text_color(lv_colors.WHITE)
+            .text_align(lv.TEXT_ALIGN.LEFT), 0
+        )
+        self.custom_header.set_grid_cell(lv.GRID_ALIGN.START, 0, 3, lv.GRID_ALIGN.START, current_row, 1)
+        current_row += 1
+        
+        # Custom wallpapers
+        self.wps = []
+        if file_name_list:
+            for i, file_name in enumerate(file_name_list):
+                path_dir = "A:1:/res/wallpapers/"
+                current_wp = ImgGridItem(
+                    self.container,
+                    i % 3,
+                    current_row + (i // 3),
+                    file_name,
+                    path_dir,
+                    is_internal=False,
+                )
+                self.wps.append(current_wp)
+                if __debug__:
+                    print(f"WallperChange: Added custom wp {i}: {current_wp}, img_path: {current_wp.img_path}")
+            current_row += custom_rows
+
+        # Pro section header
+        self.pro_header = lv.label(self.container)
+        self.pro_header.set_text("Pro")
+        self.pro_header.add_style(
+            StyleWrapper()
+            .text_font(font_GeistSemiBold26)
+            .text_color(lv_colors.WHITE)
+            .text_align(lv.TEXT_ALIGN.LEFT), 0
+        )
+        self.pro_header.set_grid_cell(lv.GRID_ALIGN.START, 0, 3, lv.GRID_ALIGN.START, current_row, 1)
+        current_row += 1
+
+        # Pro wallpapers (built-in)
+        for i in range(internal_wp_nums):
+            path_dir = "A:/res/"
+            file_name = f"zoom-wallpaper-{i+1}.jpg"
+
+            current_wp = ImgGridItem(
+                self.container,
+                i % 3,
+                current_row + (i // 3),
+                file_name,
+                path_dir,
+                is_internal=True,
+            )
+            self.wps.append(current_wp)
+            if __debug__:
+                print(f"WallperChange: Added pro wp {i}: {current_wp}, img_path: {current_wp.img_path}")
+            
+        self.container.add_event_cb(self.on_click, lv.EVENT.CLICKED, None)
+        self.load_screen(self)
+        gc.collect()
+
+    def on_click(self, event_obj):
+        code = event_obj.code
+        target = event_obj.get_target()
+        if __debug__:
+            print(f"WallperChange: on_click called, code: {code}, target: {target}")
+            print(f"WallperChange: prev_scr: {self.prev_scr}")
+            print(f"WallperChange: prev_scr.__class__: {self.prev_scr.__class__ if hasattr(self.prev_scr, '__class__') else 'No class'}")
+            print(f"WallperChange: prev_scr.__class__.__name__: {self.prev_scr.__class__.__name__ if hasattr(self.prev_scr, '__class__') else 'No name'}")
+        if code == lv.EVENT.CLICKED:
+            if utils.lcd_resume():
+                return
+            if __debug__:
+                print(f"WallperChange: Checking if target in wps, target: {target}")
+                print(f"WallperChange: wps length: {len(self.wps) if hasattr(self, 'wps') else 'No wps'}")
+                if hasattr(self, 'wps'):
+                    for i, wp in enumerate(self.wps):
+                        print(f"WallperChange: wps[{i}]: {wp}")
+            if target not in self.wps:
+                if __debug__:
+                    print("WallperChange: target not in wps, returning")
+                return
+            for wp in self.wps:
+                if target == wp:
+                    if __debug__:
+                        print(f"WallperChange: Found matching wp, img_path: {wp.img_path}")
+                        print(f"WallperChange: prev_scr type: {self.prev_scr.__class__.__name__ if hasattr(self.prev_scr, '__class__') else 'Unknown'}")
+                    # Determine which setting screen to navigate back to based on prev_scr type
+                    if hasattr(self.prev_scr, '__class__'):
+                        if self.prev_scr.__class__.__name__ == "HomeScreenSetting":
+                            if __debug__:
+                                print("WallperChange: Navigating to HomeScreenSetting")
+                            new_screen = HomeScreenSetting(self.prev_scr.prev_scr, selected_wallpaper=wp.img_path)
+                            self.load_screen(new_screen, destroy_self=True)
+                        else:  # LockScreenSetting
+                            if __debug__:
+                                print("WallperChange: Navigating to LockScreenSetting")
+                            new_screen = LockScreenSetting(self.prev_scr.prev_scr, selected_wallpaper=wp.img_path)
+                            self.load_screen(new_screen, destroy_self=True)
+
+    def on_select_clicked(self, event_obj):
+        """Handle select button click - open wallpaper selection"""
+        target = event_obj.get_target()
+        if target == self.change_button:
+            # Navigate to WallperChange for wallpaper selection
+            WallperChange(self)
+
+    def on_wallpaper_clicked(self, event_obj):
+        """Handle wallpaper image click - same as select button"""
+        self.cycle_wallpaper()
+
+    def cycle_wallpaper(self):
+        """Cycle through available wallpapers for demo"""
+        wallpapers = [
+            "A:/res/wallpaper-1.jpg",
+            "A:/res/wallpaper-2.jpg", 
+            "A:/res/wallpaper-3.jpg",
+            "A:/res/wallpaper-4.jpg"
+        ]
+        
+        current_src = self.lockscreen_preview.get_src()
+        try:
+            current_index = wallpapers.index(current_src)
+            next_index = (current_index + 1) % len(wallpapers)
+        except ValueError:
+            next_index = 0
+            
+        self.lockscreen_preview.set_src(wallpapers[next_index])
+        
+        # TODO: Save selected wallpaper to storage
+        # storage_device.set_lock_screen_wallpaper(wallpapers[next_index])
+
+    def refresh_text(self):
+        """Refresh display when returning to this screen"""
+        # TODO: Load current wallpaper from storage and update preview
+        pass
+
+    def eventhandler(self, event_obj):
+        """Override event handler to ensure clicks are handled"""
+        event = event_obj.code
+        target = event_obj.get_target()
+        
+        if __debug__:
+            print(f"LockScreenSetting eventhandler: event={event}, target={target}, type={type(target)}")
+            
+        if event == lv.EVENT.CLICKED:
+            if __debug__:
+                print("CLICKED event detected")
+            if utils.lcd_resume():
+                return
+                
+            # Check if target is imgbtn (direct button click)
+            if isinstance(target, lv.imgbtn):
+                if __debug__:
+                    print("Target is imgbtn!")
+                if hasattr(self, "nav_back") and target == self.nav_back.nav_btn:
+                    if __debug__:
+                        print("Back button clicked!")
+                    if self.prev_scr is not None:
+                        self.load_screen(self.prev_scr, destroy_self=True)
+                    return
+                elif hasattr(self, "rti_btn") and target == self.rti_btn:
+                    if __debug__:
+                        print("Checkmark button clicked!")
+                    self.on_click_ext(target)
+                    return
+                    
+            # Check if target is the navigation container (back button area)
+            if hasattr(self, "nav_back") and target == self.nav_back:
+                if __debug__:
+                    print("Navigation container clicked - going back!")
+                if self.prev_scr is not None:
+                    self.load_screen(self.prev_scr, destroy_self=True)
+                return
+                    
+            # If not handled above, call parent eventhandler
+            if __debug__:
+                print("Calling parent eventhandler")
+            super().eventhandler(event_obj)
+
+    def on_click_ext(self, target):
+        """Handle checkmark icon click in the upper right corner"""
+        if __debug__:
+            print(f"on_click_ext called with target: {target}")
+            print(f"Has rti_btn: {hasattr(self, 'rti_btn')}")
+            if hasattr(self, 'rti_btn'):
+                print(f"rti_btn: {self.rti_btn}")
+                print(f"target == rti_btn: {target == self.rti_btn}")
+        
+        if hasattr(self, "rti_btn") and target == self.rti_btn:
+            # Use the stored wallpaper path instead of get_src()
+            current_wallpaper = getattr(self, 'current_wallpaper_path', None)
+            if __debug__:
+                print(f"Checkmark clicked! Current wallpaper: {current_wallpaper}")
+            if current_wallpaper:
+                # Save the wallpaper path based on the calling screen type
+                if hasattr(self.prev_scr, '__class__'):
+                    if self.prev_scr.__class__.__name__ == "HomeScreenSetting":
+                        storage_device.set_homescreen(current_wallpaper)
+                        if __debug__:
+                            print("WallperChange: Homescreen wallpaper saved")
+                    else:  # LockScreenSetting
+                        storage_device.set_lockscreen(current_wallpaper)
+                        if __debug__:
+                            print("WallperChange: Lockscreen wallpaper saved")
+                else:
+                    # Fallback: assume it's for homescreen if we can't determine
+                    storage_device.set_homescreen(current_wallpaper)
+                    if __debug__:
+                        print("WallperChange: Wallpaper saved (fallback to homescreen)")
+            # Go back to previous screen
+            if self.prev_scr is not None:
+                if __debug__:
+                    print("Going back to previous screen")
+                self.load_screen(self.prev_scr, destroy_self=True)
+
+
 
 
 class ShutdownSetting(AnimScreen):
@@ -5424,118 +6020,724 @@ class ShutingDown(FullSizeWindow):
         workflow.spawn(shutdown_delay())
 
 
-class HomeScreenSetting(AnimScreen):
+
+class WallpaperScreen(AnimScreen):
+    cur_language = ""
+
     def collect_animation_targets(self) -> list:
         targets = []
         if hasattr(self, "container") and self.container:
             targets.append(self.container)
-        if hasattr(self, "wps"):
-            for wp in self.wps:
-                targets.append(wp)
         return targets
 
     def __init__(self, prev_scr=None):
-        homescreen = storage_device.get_homescreen()
         if not hasattr(self, "_init"):
             self._init = True
-            self.from_wallpaper = False
-            super().__init__(
-                prev_scr=prev_scr, title=_(i18n_keys.TITLE__HOMESCREEN), nav_back=True
-            )
-
         else:
-            self.container.delete()
-
-        internal_wp_nums = 7
-        wp_nums = internal_wp_nums
-        file_name_list = []
-        if not utils.EMULATOR:
-            for size, _attrs, name in io.fatfs.listdir("1:/res/wallpapers"):
-                if wp_nums >= 12:
-                    break
-                if size > 0 and name[:4] == "zoom":
-                    wp_nums += 1
-                    file_name_list.append(name)
-        rows_num = math.ceil(wp_nums / 3)
-        row_dsc = [GRID_CELL_SIZE_ROWS] * rows_num
-        row_dsc.append(lv.GRID_TEMPLATE.LAST)
-        # 3 columns
-        col_dsc = [
-            GRID_CELL_SIZE_COLS,
-            GRID_CELL_SIZE_COLS,
-            GRID_CELL_SIZE_COLS,
-            lv.GRID_TEMPLATE.LAST,
-        ]
-        self.container = ContainerGrid(
-            self.content_area,
-            row_dsc=row_dsc,
-            col_dsc=col_dsc,
-            pad_gap=12,
+            self.refresh_text()
+            return
+        super().__init__(
+            prev_scr=prev_scr,
+            title=_(i18n_keys.TITLE__WALLPAPER),
+            nav_back=True,
         )
-        self.container.align_to(self.title, lv.ALIGN.OUT_BOTTOM_MID, 0, 40)
-        self.wps = []
-        for i in range(internal_wp_nums):
-            path_dir = "A:/res/"
-            file_name = f"zoom-wallpaper-{i+1}.jpg"
 
-            current_wp = ImgGridItem(
-                self.container,
-                i % 3,
-                i // 3,
-                file_name,
-                path_dir,
-                is_internal=True,
-            )
-            self.wps.append(current_wp)
-            if homescreen == current_wp.img_path:
-                current_wp.set_checked(True)
+        self.container = ContainerFlexCol(self.content_area, self.title, padding_row=2)        
+        self.lock_screen = ListItemBtn(self.container, _(i18n_keys.ITEM__LOCK_SCREEN))
+        self.home_screen = ListItemBtn(self.container, _(i18n_keys.ITEM__HOME_SCREEN))
+        self.content_area.add_event_cb(self.on_click_event, lv.EVENT.CLICKED, None)
+        self.load_screen(self)
 
-        if not utils.EMULATOR:
-            file_name_list.sort(
-                key=lambda name: int(
-                    name[5:].split("-")[-1][: -(len(name.split(".")[1]) + 1)]
-                )
-            )
-            for i, file_name in enumerate(file_name_list):
-                path_dir = "A:1:/res/wallpapers/"
-                current_wp = ImgGridItem(
-                    self.container,
-                    (i + internal_wp_nums) % 3,
-                    (i + internal_wp_nums) // 3,
-                    file_name,
-                    path_dir,
-                    is_internal=False,
-                )
-                self.wps.append(current_wp)
-                if homescreen == current_wp.img_path:
-                    current_wp.set_checked(True)
-        self.container.add_event_cb(self.on_click, lv.EVENT.CLICKED, None)
+    def refresh_text(self):
+        self.lock_screen.label_left.set_text(_(i18n_keys.ITEM__LOCK_SCREEN))
+        self.home_screen.label_left.set_text(_(i18n_keys.ITEM__HOME_SCREEN))
+        # self.power.align_to(self.container, lv.ALIGN.OUT_BOTTOM_MID, 0, 12)
+
+    def on_click_event(self, event_obj):
+        target = event_obj.get_target()
+        if target == self.lock_screen:
+            # LanguageSetting(self)
+            LockScreenSetting(self)
+        elif target == self.home_screen:
+            HomeScreenSetting(self)
+        else:
+            pass
+
+
+
+
+
+class HomeScreenSetting(AnimScreen):
+    # 类变量：追踪所有活跃的实例以便于批量刷新
+    _active_instances = []
+    
+    def collect_animation_targets(self) -> list:
+        targets = []
+        if hasattr(self, "container") and self.container:
+            targets.append(self.container)
+        return targets
+
+    def __init__(self, prev_scr=None, selected_wallpaper=None):
+        if __debug__:
+            print(f"[HomeScreenSetting.__init__] called, prev_scr={prev_scr}, selected_wallpaper={selected_wallpaper}")
+        if hasattr(self, "_init"):
+            if __debug__:
+                print("[HomeScreenSetting.__init__] Already initialized, updating wallpaper if needed")
+            # 如果已经初始化，只更新壁纸
+            if selected_wallpaper:
+                if __debug__:
+                    print(f"[HomeScreenSetting.__init__] Updating wallpaper to {selected_wallpaper}")
+                self._update_wallpaper(selected_wallpaper)
+            self.refresh_text()
+            return
+        self._init = True
+        
+        # 将当前实例加入活跃列表
+        if self not in HomeScreenSetting._active_instances:
+            HomeScreenSetting._active_instances.append(self)
+
+        self.selected_wallpaper = selected_wallpaper
+
+        if __debug__:
+            print("[HomeScreenSetting.__init__] First time initialization")
+        super().__init__(
+            prev_scr=prev_scr,
+            nav_back=True,
+            rti_path="A:/res/checkmark.png"
+        )
+
+        # Disable scrollbar for this screen
+        self.content_area.set_scrollbar_mode(lv.SCROLLBAR_MODE.OFF)
+
+        # Main container for the screen
+        self.container = lv.obj(self.content_area)
+        self.container.set_size(lv.pct(100), lv.pct(100))
+        self.container.align(lv.ALIGN.TOP_MID, 0, 0)
+        self.container.add_style(
+            StyleWrapper().bg_opa(lv.OPA.TRANSP).pad_all(0).border_width(0), 0
+        )
+        # Don't capture click events - let them pass through to buttons
+        self.container.clear_flag(lv.obj.FLAG.CLICKABLE)
+        self.container.add_flag(lv.obj.FLAG.EVENT_BUBBLE)
+
+        # Home screen preview container with image (same size as LockScreenSetting)
+        self.preview_container = lv.obj(self.container)
+        self.preview_container.set_size(344, 574)  # Same as LockScreenSetting
+        self.preview_container.align(lv.ALIGN.TOP_MID, 0, 105)  # Below status bar
+        self.preview_container.add_style(
+            StyleWrapper()
+            .bg_opa(lv.OPA.TRANSP)
+            .pad_all(0)
+            .border_width(0), 0
+        )
+        # Don't capture click events - let them pass through to buttons
+        self.preview_container.clear_flag(lv.obj.FLAG.CLICKABLE)
+        self.preview_container.add_flag(lv.obj.FLAG.EVENT_BUBBLE)
+
+        # Home screen preview image
+        self.homescreen_preview = lv.img(self.preview_container)
+        if __debug__:
+            print(f"[HomeScreenSetting.__init__] Created homescreen_preview: {self.homescreen_preview}")
+            print(f"[HomeScreenSetting.__init__] Preview container: {self.preview_container}")
+
+        # Initialize blur cache first
+        self._blur_cache = {}
+
+        # Use selected wallpaper if provided, otherwise load blur state from storage
+        if self.selected_wallpaper:
+            if __debug__:
+                print(f"[HomeScreenSetting.__init__] Using selected_wallpaper: {self.selected_wallpaper}")
+            self.original_wallpaper_path = self.selected_wallpaper
+            self.current_wallpaper_path = self.selected_wallpaper
+            self.is_blur_active = False
+            self.homescreen_preview.set_src(self.selected_wallpaper)
+            if __debug__:
+                print(f"[HomeScreenSetting.__init__] Set preview src to selected: {self.selected_wallpaper}")
+                print(f"[HomeScreenSetting.__init__] Preview object: {self.homescreen_preview}")
+        else:
+            if __debug__:
+                print("[HomeScreenSetting.__init__] No selected_wallpaper, loading blur state from storage")
+            # Load blur state from storage - this sets all wallpaper paths and blur state
+            self._load_blur_state()
+            # Set preview to current wallpaper (might be blur or original)
+            if __debug__:
+                print(f"[HomeScreenSetting.__init__] Setting preview src to: {self.current_wallpaper_path}")
+                print(f"[HomeScreenSetting.__init__] Testing filesystem before set_src...")
+                # 测试直接文件访问
+                try:
+                    file_path = self.current_wallpaper_path[2:] if self.current_wallpaper_path.startswith('A:/') else self.current_wallpaper_path
+                    stat_result = io.fatfs.stat(file_path)
+                    print(f"[HomeScreenSetting.__init__] File {file_path} exists, size: {stat_result[6]}")
+                except Exception as file_error:
+                    print(f"[HomeScreenSetting.__init__] File access error: {file_error}")
+                
+                # 测试简单图片创建
+                try:
+                    test_img = lv.img(None)
+                    test_img.set_src("A:/res/up-home.png")  # PNG测试
+                    test_src = test_img.get_src()
+                    print(f"[HomeScreenSetting.__init__] PNG test: {test_src}, type: {type(test_src)}")
+                    test_img.delete()
+                    
+                    test_img2 = lv.img(None)
+                    test_img2.set_src("A:/res/wallpaper-2.jpg")  # JPG测试
+                    test_src2 = test_img2.get_src()
+                    print(f"[HomeScreenSetting.__init__] JPG test: {test_src2}, type: {type(test_src2)}")
+                    test_img2.delete()
+                except Exception as test_error:
+                    print(f"[HomeScreenSetting.__init__] Simple test error: {test_error}")
+                    
+            self.homescreen_preview.set_src(self.current_wallpaper_path)
+            if __debug__:
+                print(f"[HomeScreenSetting.__init__] Preview src set successfully")
+                # 检查初始设置后的状态
+                try:
+                    initial_src = self.homescreen_preview.get_src()
+                    print(f"[HomeScreenSetting.__init__] After initial set_src - actual src: {initial_src}")
+                    print(f"[HomeScreenSetting.__init__] After initial set_src - actual type: {type(initial_src)}")
+                    
+                    # Blob对象实际上是正常的！检查是否为null
+                    if initial_src is None:
+                        print(f"[HomeScreenSetting.__init__] Image source is null - this indicates a real problem")
+                        # 如果真的是null，再尝试一次
+                        self.homescreen_preview.set_src(self.current_wallpaper_path)
+                        retry_src = self.homescreen_preview.get_src()
+                        print(f"[HomeScreenSetting.__init__] After retry - src: {retry_src}")
+                    else:
+                        print(f"[HomeScreenSetting.__init__] Image source loaded successfully (Blob is normal data)")
+                except Exception as e:
+                    print(f"[HomeScreenSetting.__init__] Error checking initial src state: {e}")
+
+        self.homescreen_preview.set_size(344, 574)
+        self.homescreen_preview.align(lv.ALIGN.CENTER, 0, 0)
+
+       
+        # self.app_icons = []
+        # icon_size = 100
+        # icon_spacing_x = 41  # Horizontal spacing between icons
+        # icon_spacing_y = 40  # Vertical spacing between icons
+        # start_x = -((icon_size // 2) + (icon_spacing_x // 2))  # Centered: -70
+        # start_y = 64  # First row distance from top of preview_container
+
+        # for i in range(6):
+        #     row = i // 2  # 0, 0, 1, 1, 2, 2
+        #     col = i % 2   # 0, 1, 0, 1, 0, 1
+
+        #     # Position the icon
+        #     x_pos = start_x + col * (icon_size + icon_spacing_x)
+        #     y_pos = start_y + row * (icon_size + icon_spacing_y)
+
+        #     # Create holder with rounded corners and clip to ensure rounded corners without white layer
+        #     icon_holder = lv.obj(self.preview_container)
+        #     icon_holder.set_size(icon_size, icon_size)
+        #     icon_holder.add_style(
+        #         StyleWrapper()
+        #         .bg_opa(lv.OPA.TRANSP)
+        #         .border_width(0)
+        #         .radius(36)
+        #         .clip_corner(True), 0
+        #     )
+        #     # Remove any scrollbars/scrolling from the holder
+        #     icon_holder.set_scrollbar_mode(lv.SCROLLBAR_MODE.OFF)
+        #     icon_holder.clear_flag(lv.obj.FLAG.SCROLLABLE)
+        #     if hasattr(lv, 'DIR'):
+        #         icon_holder.set_scroll_dir(lv.DIR.NONE)
+        #     icon_holder.align_to(self.preview_container, lv.ALIGN.TOP_MID, x_pos, y_pos)
+
+        #     # Place the PNG inside; it will be clipped to rounded holder
+        #     icon_img = lv.img(icon_holder)
+        #     icon_img.set_src("A:/res/icon_example.png")
+        #     icon_img.align(lv.ALIGN.CENTER, 0, 0)
+
+        #     self.app_icons.append(icon_holder)
+        # 创建按钮组
+        if __debug__:
+            print("[HomeScreenSetting.__init__] Creating buttons")
+        self._create_buttons()
+
+        # 简化按钮定位 - 使用相对位置而不是绝对位置
+        # Change按钮左对齐，Blur按钮右对齐
+        self.change_button.align_to(self.preview_container, lv.ALIGN.OUT_BOTTOM_LEFT, 50, 10)
+        self.blur_button.align_to(self.preview_container, lv.ALIGN.OUT_BOTTOM_RIGHT, -50, 10)
+
+        # 重新对齐标签
+        self.change_label.align_to(self.change_button, lv.ALIGN.OUT_BOTTOM_MID, 0, 4)
+        self.blur_label.align_to(self.blur_button, lv.ALIGN.OUT_BOTTOM_MID, 0, 4)
+
+        if __debug__:
+            print("[HomeScreenSetting.__init__] Loading screen and collecting garbage")
         self.load_screen(self)
         gc.collect()
 
-    def on_click(self, event_obj):
-        code = event_obj.code
-        target = event_obj.get_target()
-        if code == lv.EVENT.CLICKED:
-            if utils.lcd_resume():
-                return
-            if target not in self.wps:
-                return
-            for wp in self.wps:
-                if target == wp:
-                    WallPaperManage(
-                        self,
-                        img_path=wp.img_path,
-                        zoom_path=wp.zoom_path,
-                        is_internal=wp.is_internal,
-                    )
+    def _create_button_with_label(self, icon_path, text, callback):
+        """创建一个带图标和标签的按钮"""
+        if __debug__:
+            print(f"[HomeScreenSetting._create_button_with_label] Creating button with text='{text}', icon='{icon_path}'")
 
-    def _load_scr(self, scr: "Screen", back: bool = False) -> None:
-        if self.from_wallpaper:
-            scr.set_pos(0, 0)
-            lv.scr_load(scr)
+        # 创建按钮
+        button = lv.btn(self.container)
+        button.set_size(64, 64)
+        button.align_to(self.preview_container, lv.ALIGN.OUT_BOTTOM_MID, 0, 10)
+        button.add_style(StyleWrapper().border_width(0).radius(40), 0)
+        button.add_flag(lv.obj.FLAG.CLICKABLE)
+        button.clear_flag(lv.obj.FLAG.EVENT_BUBBLE)
+
+        # 为了测试，给按钮添加背景色
+        if __debug__:
+            button.add_style(StyleWrapper().bg_color(lv.palette_main(lv.PALETTE.BLUE)).bg_opa(lv.OPA._50), 0)
+
+        # 创建图标
+        icon = lv.img(button)
+        if icon_path:  # 只有当路径不为空时才设置图标
+            icon.set_src(icon_path)
+            
+            # 验证图标是否真的加载成功
+            if __debug__:
+                try:
+                    actual_icon_src = icon.get_src()
+                    print(f"[HomeScreenSetting._create_button_with_label] Icon src: {actual_icon_src}, type: {type(actual_icon_src)}")
+                    # Blob对象实际上是正常的！不是错误！
+                    if actual_icon_src is not None:
+                        print(f"[HomeScreenSetting._create_button_with_label] Button icon loaded (Blob is normal!)")
+                    else:
+                        print(f"[HomeScreenSetting._create_button_with_label] Button icon failed - null source")
+                except Exception as icon_error:
+                    print(f"[HomeScreenSetting._create_button_with_label] Icon verification error: {icon_error}")
+        icon.align(lv.ALIGN.CENTER, 0, 0)
+
+        # 创建标签
+        label = lv.label(self.container)
+        label.set_text(text)
+        label.add_style(StyleWrapper()
+                       .text_font(font_GeistRegular20)
+                       .text_color(lv_colors.WHITE)
+                       .text_align(lv.TEXT_ALIGN.CENTER), 0)
+        label.align_to(button, lv.ALIGN.OUT_BOTTOM_MID, 0, 4)
+
+        # 添加事件回调
+        button.add_event_cb(callback, lv.EVENT.CLICKED, None)
+
+        if __debug__:
+            print(f"[HomeScreenSetting._create_button_with_label] Button created successfully, callback added")
+
+        return button, icon, label
+
+    def _create_buttons(self):
+        """创建 Change 和 Blur 按钮"""
+        if __debug__:
+            print("[HomeScreenSetting._create_buttons] Starting to create buttons...")
+
+        # 创建 Change 按钮
+        self.change_button, self.button_icon, self.change_label = \
+            self._create_button_with_label("A:/res/change-wallper.png", "Change", self.on_select_clicked)
+
+        # 创建 Blur 按钮
+        self.blur_button, self.blur_button_icon, self.blur_label = \
+            self._create_button_with_label("", "Blur", self.on_blur_clicked)
+
+        # 初始化模糊按钮状态
+        self._update_blur_button_state()
+
+        if __debug__:
+            print(f"[HomeScreenSetting._create_buttons] Buttons created - Change: {self.change_button}, Blur: {self.blur_button}")
+
+    def _update_wallpaper(self, wallpaper_path):
+        """简化的壁纸更新方法"""
+        if __debug__:
+            print(f"[HomeScreenSetting._update_wallpaper] Updating wallpaper to {wallpaper_path}")
+        self.selected_wallpaper = wallpaper_path
+        self.original_wallpaper_path = wallpaper_path
+        self.current_wallpaper_path = wallpaper_path
+        self.is_blur_active = False
+        if hasattr(self, 'homescreen_preview'):
+            if __debug__:
+                print(f"[HomeScreenSetting._update_wallpaper] Before set_src - preview: {self.homescreen_preview}")
+                print(f"[HomeScreenSetting._update_wallpaper] Setting src to: {wallpaper_path}")
+            self.homescreen_preview.set_src(wallpaper_path)
+            if __debug__:
+                print(f"[HomeScreenSetting._update_wallpaper] After set_src - done")
+        if hasattr(self, '_update_blur_button_state'):
+            self._update_blur_button_state()
+
+    def on_select_clicked(self, event_obj):
+        """Handle Change button click - navigate to wallpaper selection"""
+        if __debug__:
+            print("[HomeScreenSetting.on_select_clicked] Change button clicked - navigating to wallpaper selection")
+        # Navigate to WallperChange for wallpaper selection
+        WallperChange(self)
+
+    def eventhandler(self, event_obj):
+        """简化的事件处理"""
+        event = event_obj.code
+        target = event_obj.get_target()
+        if __debug__:
+            print(f"[HomeScreenSetting.eventhandler] Event: {event}, Target: {target}")
+
+        if event == lv.EVENT.CLICKED:
+            if utils.lcd_resume():
+                if __debug__:
+                    print("[HomeScreenSetting.eventhandler] LCD resume, returning")
+                return
+
+            # 处理导航按钮
+            if isinstance(target, lv.imgbtn):
+                if hasattr(self, "nav_back") and target == self.nav_back.nav_btn:
+                    if __debug__:
+                        print("[HomeScreenSetting.eventhandler] Back button clicked")
+                    if self.prev_scr is not None:
+                        self.load_screen(self.prev_scr, destroy_self=True)
+                    return
+                elif hasattr(self, "rti_btn") and target == self.rti_btn:
+                    if __debug__:
+                        print("[HomeScreenSetting.eventhandler] RTI button clicked")
+                    self.on_click_ext(target)
+                    return
+
+        # 其他事件交给父类处理
+        if __debug__:
+            print("[HomeScreenSetting.eventhandler] Passing event to super")
+        super().eventhandler(event_obj)
+
+    def refresh_text(self):
+        """Refresh text elements when language changes"""
+        if __debug__:
+            print("[HomeScreenSetting.refresh_text] Refreshing text")
+        if hasattr(self, 'change_label'):
+            self.change_label.set_text("Change")
+            
+    def refresh_images_after_animation(self):
+        """
+        AppDrawer动画后强制刷新图片以解决Blob问题
+        这个方法会被 AppDrawer 的 on_animation_complete 回调调用
+        """
+        if __debug__:
+            print(f"[HomeScreenSetting.refresh_images_after_animation] Starting refresh for instance {id(self)}")
+            
+        try:
+            if hasattr(self, 'homescreen_preview') and self.homescreen_preview:
+                # 检查当前图片源状态
+                current_src = self.homescreen_preview.get_src()
+                if __debug__:
+                    print(f"[HomeScreenSetting.refresh_images_after_animation] Current src: {current_src}, type: {type(current_src)}")
+                
+                # 如果返回了Blob对象，说明需要重建图片对象
+                if str(current_src).lower() == "blob" or current_src is None or current_src == "":
+                    if __debug__:
+                        print(f"[HomeScreenSetting.refresh_images_after_animation] Detected Blob/null source, rebuilding image object...")
+                    
+                    self._rebuild_image_object()
+                else:
+                    if __debug__:
+                        print(f"[HomeScreenSetting.refresh_images_after_animation] Source OK, no refresh needed")
+                        
+        except Exception as e:
+            if __debug__:
+                print(f"[HomeScreenSetting.refresh_images_after_animation] Error during refresh: {e}")
+                
+    def __del__(self):
+        """清理时从活跃列表中移除"""
+        try:
+            if self in HomeScreenSetting._active_instances:
+                HomeScreenSetting._active_instances.remove(self)
+        except:
+            pass
+    
+    def _rebuild_image_object(self):
+        """
+        使用与按钮图标相同的方式重新创建图片显示
+        """
+        if __debug__:
+            print(f"[HomeScreenSetting._rebuild_image_object] Using button-style image creation...")
+            
+        try:
+            if hasattr(self, 'homescreen_preview') and hasattr(self, 'preview_container'):
+                target_path = getattr(self, 'current_wallpaper_path', 'A:/res/wallpaper-2.jpg')
+                
+                # 删除旧的预览对象
+                if self.homescreen_preview:
+                    self.homescreen_preview.delete()
+                gc.collect()
+                
+                # 创建一个按钮容器来承载图片（模仿按钮图标的成功模式）
+                self.preview_button = lv.btn(self.preview_container)
+                self.preview_button.set_size(344, 574)
+                self.preview_button.align(lv.ALIGN.CENTER, 0, 0)
+                self.preview_button.remove_style_all()
+                self.preview_button.add_style(
+                    StyleWrapper()
+                    .bg_opa(lv.OPA.TRANSP)
+                    .border_width(0)
+                    .pad_all(0),
+                    0
+                )
+                self.preview_button.clear_flag(lv.obj.FLAG.CLICKABLE)  # 不响应点击
+                
+                # 在按钮内创建图片（和按钮图标完全相同的方式）
+                self.homescreen_preview = lv.img(self.preview_button)
+                self.homescreen_preview.set_size(344, 574)
+                self.homescreen_preview.align(lv.ALIGN.CENTER, 0, 0)
+                
+                # 使用和按钮图标相同的set_src调用方式
+                self.homescreen_preview.set_src(target_path)
+                
+                if __debug__:
+                    print(f"[HomeScreenSetting._rebuild_image_object] Button-style image created for: {target_path}")
+                    # 验证结果（如果可能）
+                    try:
+                        test_src = self.homescreen_preview.get_src()
+                        print(f"[HomeScreenSetting._rebuild_image_object] Result: {test_src}, type: {type(test_src)}")
+                        if str(test_src).lower() != "blob":
+                            print(f"[HomeScreenSetting._rebuild_image_object] SUCCESS! Image loaded properly!")
+                        else:
+                            print(f"[HomeScreenSetting._rebuild_image_object] Still Blob - deeper issue")
+                    except Exception as verify_error:
+                        print(f"[HomeScreenSetting._rebuild_image_object] Verify error: {verify_error}")
+                    
+        except Exception as e:
+            if __debug__:
+                print(f"[HomeScreenSetting._rebuild_image_object] Button-style creation error: {e}")
+        if hasattr(self, 'blur_label'):
+            self.blur_label.set_text("Blur")
+
+    def on_click_ext(self, target):
+        """Handle right navigation button (checkmark) click"""
+        if __debug__:
+            print("[HomeScreenSetting.on_click_ext] Right button clicked (checkmark)")
+        # Save current wallpaper and return to previous screen
+        if hasattr(self, 'current_wallpaper_path') and self.current_wallpaper_path:
+            storage_device.set_homescreen(self.current_wallpaper_path)
+            if __debug__:
+                print(f"[HomeScreenSetting.on_click_ext] Saved homescreen wallpaper: {self.current_wallpaper_path}")
+
+        # Return to previous screen
+        if self.prev_scr is not None:
+            if __debug__:
+                print("[HomeScreenSetting.on_click_ext] Returning to previous screen")
+            self.load_screen(self.prev_scr, destroy_self=True)
+
+    def _get_blur_wallpaper_path(self, original_path):
+        """Generate the blur version path from original wallpaper path"""
+        if __debug__:
+            print(f"[HomeScreenSetting._get_blur_wallpaper_path] original_path={original_path}")
+        if not original_path:
+            return None
+
+        # Split the path at the last dot to separate name and extension
+        if '.' in original_path:
+            path_without_ext, ext = original_path.rsplit('.', 1)
+            blur_path = f"{path_without_ext}-blur.{ext}"
         else:
-            super()._load_scr(scr, back)
+            blur_path = f"{original_path}-blur"
+
+        if __debug__:
+            print(f"[HomeScreenSetting._get_blur_wallpaper_path] blur_path={blur_path}")
+        return blur_path
+
+    def _blur_wallpaper_exists(self, blur_path):
+        """简单检查模糊壁纸是否存在"""
+        if __debug__:
+            print(f"[HomeScreenSetting._blur_wallpaper_exists] blur_path={blur_path}")
+        if not blur_path:
+            return False
+
+        try:
+            # 统一处理路径格式，去掉前缀
+            if blur_path.startswith("A:/"):
+                file_path = blur_path[2:]  # 去掉 "A:/" 前缀
+            elif blur_path.startswith("A:1:/"):
+                file_path = blur_path[4:]  # 去掉 "A:1:/" 前缀
+            else:
+                file_path = blur_path
+
+            # 直接检查文件是否存在
+            io.fatfs.stat(file_path)
+            if __debug__:
+                print(f"[HomeScreenSetting._blur_wallpaper_exists] Blur file exists: {file_path}")
+            return True
+
+        except Exception as e:
+            if __debug__:
+                print(f"[HomeScreenSetting._blur_wallpaper_exists] Blur file does not exist: {blur_path}, error: {e}")
+            # 文件不存在或其他错误
+            return False
+
+    def _update_blur_button_state(self):
+        """更新模糊按钮状态"""
+        if __debug__:
+            print("[HomeScreenSetting._update_blur_button_state] Updating blur button state")
+        if not hasattr(self, 'original_wallpaper_path'):
+            if __debug__:
+                print("[HomeScreenSetting._update_blur_button_state] No original_wallpaper_path")
+            return
+
+        blur_path = self._get_blur_wallpaper_path(self.original_wallpaper_path)
+        blur_exists = self._blur_wallpaper_exists(blur_path) if blur_path else False
+
+        # 根据状态设置图标
+        if not blur_exists:
+            icon_path = "A:/res/blur_not_available.png"
+        elif getattr(self, 'is_blur_active', False):
+            icon_path = "A:/res/blur_selected.png"
+        else:
+            icon_path = "A:/res/blur_no_selected.png"
+
+        if __debug__:
+            print(f"[HomeScreenSetting._update_blur_button_state] Setting blur_button_icon to {icon_path}")
+        self.blur_button_icon.set_src(icon_path)
+
+    def on_blur_clicked(self, event_obj):
+        """模糊按钮点击 - 切换原图和模糊图"""
+        if __debug__:
+            print("[HomeScreenSetting.on_blur_clicked] Blur button clicked")
+
+        blur_path = self._get_blur_wallpaper_path(self.original_wallpaper_path)
+
+        if not blur_path or not self._blur_wallpaper_exists(blur_path):
+            if __debug__:
+                print("[HomeScreenSetting.on_blur_clicked] No blur version available")
+            return  # 没有模糊版本，直接返回
+
+        # 切换状态
+        self.is_blur_active = not getattr(self, 'is_blur_active', False)
+        
+        # 根据blur状态选择正确的图片路径
+        test_path = blur_path if self.is_blur_active else self.original_wallpaper_path
+        if __debug__:
+            blur_status = "blur" if self.is_blur_active else "original"
+            print(f"[HomeScreenSetting.on_blur_clicked] Switching to {blur_status} image: {test_path}")
+            
+        self.current_wallpaper_path = test_path
+        print(f"[HomeScreenSetting.on_blur_clicked] current_wallpaper_path: {self.current_wallpaper_path}") 
+        
+        # 添加详细日志
+        if __debug__:
+            print(f"[HomeScreenSetting.on_blur_clicked] Before set_src - preview object: {self.homescreen_preview}")
+            print(f"[HomeScreenSetting.on_blur_clicked] Before set_src - preview parent: {self.homescreen_preview.get_parent()}")
+            print(f"[HomeScreenSetting.on_blur_clicked] Before set_src - preview size: {self.homescreen_preview.get_width()}x{self.homescreen_preview.get_height()}")
+            
+            # 检查文件是否存在
+            try:
+                if self.current_wallpaper_path.startswith("A:/"):
+                    file_path = self.current_wallpaper_path[2:]
+                else:
+                    file_path = self.current_wallpaper_path
+                io.fatfs.stat(file_path)
+                print(f"[HomeScreenSetting.on_blur_clicked] File exists check passed for: {file_path}")
+            except Exception as e:
+                print(f"[HomeScreenSetting.on_blur_clicked] File exists check FAILED for: {file_path}, error: {e}")
+            
+        # 由于可能已经变成label，需要检查类型
+        if hasattr(self.homescreen_preview, 'set_src'):
+            self.homescreen_preview.set_src(self.current_wallpaper_path)
+            
+            # 添加显示层面的调试信息
+            if __debug__:
+                print(f"[HomeScreenSetting.on_blur_clicked] Preview object after set_src: {self.homescreen_preview}")
+                print(f"[HomeScreenSetting.on_blur_clicked] Preview parent: {self.homescreen_preview.get_parent()}")
+                print(f"[HomeScreenSetting.on_blur_clicked] Preview has HIDDEN flag: {self.homescreen_preview.has_flag(lv.obj.FLAG.HIDDEN)}")
+                print(f"[HomeScreenSetting.on_blur_clicked] Preview opacity: {self.homescreen_preview.get_style_opa(0)}")
+                
+                # 检查容器状态
+                if hasattr(self, 'preview_container'):
+                    print(f"[HomeScreenSetting.on_blur_clicked] Container has HIDDEN flag: {self.preview_container.has_flag(lv.obj.FLAG.HIDDEN)}")
+                    print(f"[HomeScreenSetting.on_blur_clicked] Container size: {self.preview_container.get_width()}x{self.preview_container.get_height()}")
+                
+                # 强制刷新显示
+                try:
+                    self.homescreen_preview.invalidate()
+                    if hasattr(self, 'preview_container'):
+                        self.preview_container.invalidate()
+                    print(f"[HomeScreenSetting.on_blur_clicked] Display refresh triggered")
+                except Exception as refresh_error:
+                    print(f"[HomeScreenSetting.on_blur_clicked] Refresh error: {refresh_error}")
+        else:
+            # 已经是label，更新文本
+            filename = self.current_wallpaper_path.split('/')[-1] if '/' in self.current_wallpaper_path else self.current_wallpaper_path
+            display_text = f"Wallpaper\n{filename}\n\n(LVGL filesystem\ndamaged after\nAppDrawer animation)"
+            self.homescreen_preview.set_text(display_text)
+        
+        if __debug__:
+            print(f"[HomeScreenSetting.on_blur_clicked] Set preview to: {self.current_wallpaper_path}")
+            # 检查设置后的实际状态
+            try:
+                actual_src = self.homescreen_preview.get_src()
+                print(f"[HomeScreenSetting.on_blur_clicked] After set_src - actual src: {actual_src}")
+                print(f"[HomeScreenSetting.on_blur_clicked] After set_src - actual type: {type(actual_src)}")
+                
+                # Blob是正常的，不需要重建
+                if actual_src is not None:
+                    print(f"[HomeScreenSetting.on_blur_clicked] Image source set successfully (Blob is normal)")
+                else:
+                    print(f"[HomeScreenSetting.on_blur_clicked] WARNING: Image source is null")
+            except Exception as e:
+                print(f"[HomeScreenSetting.on_blur_clicked] Error checking src state: {e}")
+            
+        self.invalidate()
+
+        if __debug__:
+            print(f"[HomeScreenSetting.on_blur_clicked] Switched to {'blur' if self.is_blur_active else 'original'} wallpaper: {self.current_wallpaper_path}")
+
+        # 更新按钮状态
+        self._update_blur_button_state()
+
+    def _load_blur_state(self):
+        """Load blur state by analyzing the current homescreen path"""
+        try:
+            # Get current homescreen from storage
+            current_homescreen = storage_device.get_homescreen() or "A:/res/wallpaper-2.jpg"
+
+            if __debug__:
+                print(f"[HomeScreenSetting._load_blur_state] Loading blur state from homescreen: {current_homescreen}")
+
+            # Check if current homescreen is a blur version (contains '-blur')
+            if '-blur.' in current_homescreen:
+                # Currently showing blur version
+                self.is_blur_active = True
+                self.current_wallpaper_path = current_homescreen
+                # Get original path by removing '-blur' more carefully
+                # Split by '.' to get extension, then remove '-blur' from the name part
+                path_parts = current_homescreen.rsplit('.', 1)
+                if len(path_parts) == 2:
+                    name_part, ext = path_parts
+                    if name_part.endswith('-blur'):
+                        self.original_wallpaper_path = name_part[:-5] + '.' + ext  # Remove '-blur' (5 chars)
+                    else:
+                        self.original_wallpaper_path = current_homescreen  # Fallback
+                else:
+                    self.original_wallpaper_path = current_homescreen  # Fallback
+                if __debug__:
+                    print(f"[HomeScreenSetting._load_blur_state] Detected blur mode")
+                    print(f"[HomeScreenSetting._load_blur_state] Current (blur): {current_homescreen}")
+                    print(f"[HomeScreenSetting._load_blur_state] Original: {self.original_wallpaper_path}")
+            else:
+                # Currently showing original version
+                self.is_blur_active = False
+                self.original_wallpaper_path = current_homescreen
+                self.current_wallpaper_path = current_homescreen
+                if __debug__:
+                    print(f"[HomeScreenSetting._load_blur_state] Detected original mode - path: {self.original_wallpaper_path}")
+
+        except Exception as e:
+            if __debug__:
+                print(f"[HomeScreenSetting._load_blur_state] Error loading blur state: {e}")
+            # Fallback to safe defaults
+            current_homescreen = "A:/res/wallpaper-2.jpg"
+            self.original_wallpaper_path = current_homescreen
+            self.current_wallpaper_path = current_homescreen
+            self.is_blur_active = False
+
+    def set_wallpaper(self, wallpaper_path):
+        """Set wallpaper and update blur button state"""
+        if __debug__:
+            print(f"[HomeScreenSetting.set_wallpaper] Setting wallpaper to {wallpaper_path}")
+        if wallpaper_path:
+            self.original_wallpaper_path = wallpaper_path
+            self.current_wallpaper_path = wallpaper_path
+            self.is_blur_active = False
+            self.homescreen_preview.set_src(wallpaper_path)
+            self._update_blur_button_state()
+            if __debug__:
+                print(f"[HomeScreenSetting.set_wallpaper] Wallpaper set to {wallpaper_path}")
 
 
 class WallPaperManage(Screen):
