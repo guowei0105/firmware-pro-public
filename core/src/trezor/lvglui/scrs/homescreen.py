@@ -2378,6 +2378,21 @@ class NftLockScreenPreview(AnimScreen):
                                 if __debug__:
                                     print(f"[NftLockScreenPreview] AppDrawer background refreshed")
                         
+                        # Force refresh LockScreen if it exists to apply new NFT background
+                        try:
+                            from .lockscreen import LockScreen
+                            if hasattr(LockScreen, '_instance') and LockScreen._instance:
+                                lock_screen = LockScreen._instance
+                                lock_screen.add_style(
+                                    StyleWrapper().bg_img_src(lockscreen_path).bg_img_opa(lv.OPA._40),
+                                    0,
+                                )
+                                if __debug__:
+                                    print(f"[NftLockScreenPreview] LockScreen refreshed with new background")
+                        except Exception as e:
+                            if __debug__:
+                                print(f"[NftLockScreenPreview] LockScreen refresh error: {e}")
+                        
                     except Exception as e:
                         if __debug__:
                             print(f"[NftLockScreenPreview] Error setting lockscreen: {e}")
