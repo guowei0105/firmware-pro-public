@@ -103,6 +103,7 @@ class LockScreen(Screen):
                 self.subtitle.align_to(self.title, lv.ALIGN.OUT_BOTTOM_MID, 0, 16)
             else:
                 self.subtitle.align_to(self.content_area, lv.ALIGN.TOP_MID, 0, 76)
+        # Apply lockscreen background (works for all wallpaper types including NFTs)
         self.add_style(
             StyleWrapper().bg_img_src(lockscreen).bg_img_opa(lv.OPA._40),
             0,

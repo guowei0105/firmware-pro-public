@@ -1187,7 +1187,7 @@ class MainScreen(Screen):
             handlers = {
                 "settings": lambda: SettingsScreen(self.parent),
                 "guide": lambda: UserGuide(self.parent),
-                "nft": lambda: NftGallery(self.parent),
+                "nft": lambda: self._create_nft_gallery(),
                 "backup": lambda: BackupWallet(self.parent),
                 "scan": lambda: ScanScreen(self.parent),
                 "connect": lambda: ConnectWalletWays(self.parent),
@@ -1196,6 +1196,30 @@ class MainScreen(Screen):
             }
             if name in handlers:
                 handlers[name]()
+        
+        def _create_nft_gallery(self):
+            """Create NFT gallery with singleton cleanup"""
+            try:
+                # Clean up existing NftGallery instance to allow fresh creation
+                if hasattr(NftGallery, '_instance'):
+                    if __debug__:
+                        print("[AppDrawer] Cleaning up existing NftGallery instance")
+                    old_instance = NftGallery._instance
+                    try:
+                        old_instance.delete()
+                    except:
+                        pass
+                    del NftGallery._instance
+                    
+                # Create new NftGallery instance
+                if __debug__:
+                    print("[AppDrawer] Creating new NftGallery instance")
+                return NftGallery(self.parent)
+            except Exception as e:
+                if __debug__:
+                    print(f"[AppDrawer] Error creating NftGallery: {e}")
+                # Fallback to direct creation
+                return NftGallery(self.parent)
                 
         def test_cover_background(self):
             """Test function for CoverBackground control"""
@@ -2143,6 +2167,7 @@ class NftManager(AnimScreen):
         self.trash_icon.set_size(48, 48)
         self.trash_icon.align(lv.ALIGN.TOP_RIGHT, -12, 56)
         self.trash_icon.add_style(StyleWrapper().bg_opa(lv.OPA.TRANSP).border_width(0), 0)
+        self.trash_icon.add_flag(lv.obj.FLAG.EVENT_BUBBLE)  # Enable event bubbling
         
         # Main NFT image (456x456 as requested)
         self.nft_image = lv.img(self.content_area)
@@ -2345,15 +2370,34 @@ class NftLockScreenPreview(AnimScreen):
                     # Set as lock screen - convert A:1: to A: format for storage
                     lockscreen_path = self.nft_path
                     
-                    # Convert A:1:/res/nfts/imgs/ to A:/res/nfts/imgs/ for storage
-                    if lockscreen_path.startswith("A:1:"):
-                        lockscreen_path = lockscreen_path.replace("A:1:", "A:")
+                    # Keep NFT paths as A:1: format (like custom wallpapers) - don't convert
+                    # if lockscreen_path.startswith("A:1:"):
+                    #     lockscreen_path = lockscreen_path.replace("A:1:", "A:")
                     
                     if __debug__:
                         print(f"[NftLockScreenPreview] Original path: {self.nft_path}")
                         print(f"[NftLockScreenPreview] Setting lockscreen to: {lockscreen_path}")
+                        
+                    # For NFT lockscreens, we need to handle the square format differently
+                    # NFTs are 456x456 but lockscreens expect 480x800 (or similar aspect ratio)
+                    # For now, let LVGL handle the scaling, but mark it as NFT for special handling
+                    if __debug__:
+                        print(f"[NftLockScreenPreview] Using NFT path: {lockscreen_path}")
+                        print(f"[NftLockScreenPreview] Note: NFT is square format, lockscreen will scale/crop")
                     
                     try:
+                        # First, verify the NFT file exists and is accessible
+                        test_file_path = lockscreen_path.replace("A:", "1:")
+                        try:
+                            stat_result = io.fatfs.stat(test_file_path)
+                            file_size = stat_result[6] if len(stat_result) > 6 else "unknown"
+                            if __debug__:
+                                print(f"[NftLockScreenPreview] NFT file verified: {test_file_path}, size: {file_size}")
+                        except Exception as file_err:
+                            if __debug__:
+                                print(f"[NftLockScreenPreview] NFT file access error: {file_err}")
+                                print(f"[NftLockScreenPreview] Trying original path: {lockscreen_path}")
+                        
                         storage_device.set_lockscreen(lockscreen_path)
                         if __debug__:
                             print(f"[NftLockScreenPreview] Lockscreen set successfully")
@@ -2383,12 +2427,30 @@ class NftLockScreenPreview(AnimScreen):
                             from .lockscreen import LockScreen
                             if hasattr(LockScreen, '_instance') and LockScreen._instance:
                                 lock_screen = LockScreen._instance
-                                lock_screen.add_style(
-                                    StyleWrapper().bg_img_src(lockscreen_path).bg_img_opa(lv.OPA._40),
-                                    0,
-                                )
                                 if __debug__:
-                                    print(f"[NftLockScreenPreview] LockScreen refreshed with new background")
+                                    print(f"[NftLockScreenPreview] Found LockScreen instance: {lock_screen}")
+                                
+                                # For NFT lockscreens, try different background image settings
+                                style = StyleWrapper().bg_img_src(lockscreen_path).bg_img_opa(lv.OPA._40)
+                                
+                                # Try to set background image tiling mode for better NFT display
+                                try:
+                                    # LVGL might support background image recolor or tiling
+                                    if hasattr(lv, 'BG_IMG_TILED') or hasattr(lv.style_t, 'set_bg_img_tiled'):
+                                        if __debug__:
+                                            print(f"[NftLockScreenPreview] Trying tiled background mode")
+                                        # This might help with square images
+                                except:
+                                    pass
+                                
+                                lock_screen.add_style(style, 0)
+                                # Force invalidate to refresh the display
+                                lock_screen.invalidate()
+                                if __debug__:
+                                    print(f"[NftLockScreenPreview] LockScreen refreshed and invalidated")
+                            else:
+                                if __debug__:
+                                    print(f"[NftLockScreenPreview] No LockScreen instance found")
                         except Exception as e:
                             if __debug__:
                                 print(f"[NftLockScreenPreview] LockScreen refresh error: {e}")
@@ -2646,9 +2708,9 @@ class NftHomeScreenPreview(AnimScreen):
                     # Set as home screen - convert A:1: to A: format for storage
                     wallpaper_path = self.current_wallpaper_path
                     
-                    # Convert A:1:/res/nfts/imgs/ to A:/res/nfts/imgs/ for storage
-                    if wallpaper_path.startswith("A:1:"):
-                        wallpaper_path = wallpaper_path.replace("A:1:", "A:")
+                    # Keep NFT paths as A:1: format (like custom wallpapers) - don't convert  
+                    # if wallpaper_path.startswith("A:1:"):
+                    #     wallpaper_path = wallpaper_path.replace("A:1:", "A:")
                     
                     if __debug__:
                         print(f"[NftHomeScreenPreview] Original path: {self.current_wallpaper_path}")
@@ -4693,8 +4755,30 @@ class LockScreenSetting(AnimScreen):
         # Use selected wallpaper if provided, otherwise use current lock screen
         if self.selected_wallpaper:
             self.current_wallpaper_path = self.selected_wallpaper
-            # Use the selected wallpaper path directly (already in correct format)
-            self.lockscreen_preview.set_src(self.selected_wallpaper)
+            # Use selected wallpaper path directly - LVGL supports A:1: format
+            display_path = self.selected_wallpaper
+            if __debug__:
+                print(f"LockScreenSetting: Setting lockscreen preview")
+                print(f"LockScreenSetting: Original path: {self.selected_wallpaper}")
+                print(f"LockScreenSetting: Display path: {display_path}")
+                # Check if file exists using same method as HomeScreenSetting
+                try:
+                    # Convert path for file system check
+                    if display_path.startswith("A:1:/res/wallpapers/"):
+                        file_check_path = display_path.replace("A:1:/res/wallpapers/", "1:/res/wallpapers/")
+                    elif display_path.startswith("A:/res/wallpapers/"):
+                        file_check_path = display_path.replace("A:/res/wallpapers/", "1:/res/wallpapers/")
+                    else:
+                        file_check_path = display_path
+                    
+                    stat_info = io.fatfs.stat(file_check_path)
+                    file_size = stat_info[0]  # First element is file size
+                    print(f"LockScreenSetting: File exists, size: {file_size} bytes")
+                except Exception as e:
+                    print(f"LockScreenSetting: File check failed: {e}")
+            self.lockscreen_preview.set_src(display_path)
+            if __debug__:
+                print(f"LockScreenSetting: Preview src set, current_wallpaper_path: {self.current_wallpaper_path}")
         else:
             # Get current lock screen image from storage
             lockscreen_path = storage_device.get_lockscreen()
@@ -4856,10 +4940,15 @@ class LockScreenSetting(AnimScreen):
                     self.load_screen(self.prev_scr, destroy_self=True)
                 return
                     
-            # If not handled above, call parent eventhandler
-            if __debug__:
-                print("Calling parent eventhandler")
-            super().eventhandler(event_obj)
+            # Only call parent eventhandler for specific unhandled cases
+            # Don't call for general container clicks to avoid duplicate WallpaperChange creation
+            if isinstance(target, (lv.btn, lv.imgbtn)) and not hasattr(target, '_processed'):
+                if __debug__:
+                    print("Calling parent eventhandler for button")
+                super().eventhandler(event_obj)
+            else:
+                if __debug__:
+                    print(f"Skipping parent eventhandler for target type: {type(target)}")
 
     def on_click_ext(self, target):
         """Handle checkmark icon click in the upper right corner"""
@@ -5226,7 +5315,7 @@ class WallperChange(AnimScreen):
                     if __debug__:
                         print(f"WallperChange: Found matching wp, img_path: {wp.img_path}")
                         print(f"WallperChange: prev_scr type: {self.prev_scr.__class__.__name__ if hasattr(self.prev_scr, '__class__') else 'Unknown'}")
-                    # Determine which setting screen to navigate back to based on prev_scr type
+                    # Navigate back to the original setting screen and update wallpaper
                     if hasattr(self.prev_scr, '__class__'):
                         if self.prev_scr.__class__.__name__ == "HomeScreenSetting":
                             if __debug__:
@@ -5277,84 +5366,6 @@ class WallperChange(AnimScreen):
         # TODO: Load current wallpaper from storage and update preview
         pass
 
-    def eventhandler(self, event_obj):
-        """Override event handler to ensure clicks are handled"""
-        event = event_obj.code
-        target = event_obj.get_target()
-        
-        if __debug__:
-            print(f"LockScreenSetting eventhandler: event={event}, target={target}, type={type(target)}")
-            
-        if event == lv.EVENT.CLICKED:
-            if __debug__:
-                print("CLICKED event detected")
-            if utils.lcd_resume():
-                return
-                
-            # Check if target is imgbtn (direct button click)
-            if isinstance(target, lv.imgbtn):
-                if __debug__:
-                    print("Target is imgbtn!")
-                if hasattr(self, "nav_back") and target == self.nav_back.nav_btn:
-                    if __debug__:
-                        print("Back button clicked!")
-                    if self.prev_scr is not None:
-                        self.load_screen(self.prev_scr, destroy_self=True)
-                    return
-                elif hasattr(self, "rti_btn") and target == self.rti_btn:
-                    if __debug__:
-                        print("Checkmark button clicked!")
-                    self.on_click_ext(target)
-                    return
-                    
-            # Check if target is the navigation container (back button area)
-            if hasattr(self, "nav_back") and target == self.nav_back:
-                if __debug__:
-                    print("Navigation container clicked - going back!")
-                if self.prev_scr is not None:
-                    self.load_screen(self.prev_scr, destroy_self=True)
-                return
-                    
-            # If not handled above, call parent eventhandler
-            if __debug__:
-                print("Calling parent eventhandler")
-            super().eventhandler(event_obj)
-
-    def on_click_ext(self, target):
-        """Handle checkmark icon click in the upper right corner"""
-        if __debug__:
-            print(f"on_click_ext called with target: {target}")
-            print(f"Has rti_btn: {hasattr(self, 'rti_btn')}")
-            if hasattr(self, 'rti_btn'):
-                print(f"rti_btn: {self.rti_btn}")
-                print(f"target == rti_btn: {target == self.rti_btn}")
-        
-        if hasattr(self, "rti_btn") and target == self.rti_btn:
-            # Use the stored wallpaper path instead of get_src()
-            current_wallpaper = getattr(self, 'current_wallpaper_path', None)
-            if __debug__:
-                print(f"Checkmark clicked! Current wallpaper: {current_wallpaper}")
-            if current_wallpaper:
-                # Save the wallpaper path based on the calling screen type
-                if hasattr(self.prev_scr, '__class__'):
-                    if self.prev_scr.__class__.__name__ == "HomeScreenSetting":
-                        storage_device.set_homescreen(current_wallpaper)
-                        if __debug__:
-                            print("WallperChange: Homescreen wallpaper saved")
-                    else:  # LockScreenSetting
-                        storage_device.set_lockscreen(current_wallpaper)
-                        if __debug__:
-                            print("WallperChange: Lockscreen wallpaper saved")
-                else:
-                    # Fallback: assume it's for homescreen if we can't determine
-                    storage_device.set_homescreen(current_wallpaper)
-                    if __debug__:
-                        print("WallperChange: Wallpaper saved (fallback to homescreen)")
-            # Go back to previous screen
-            if self.prev_scr is not None:
-                if __debug__:
-                    print("Going back to previous screen")
-                self.load_screen(self.prev_scr, destroy_self=True)
 
     def on_edit_button_clicked(self, event_obj):
         """Handle Edit/Done button click"""
