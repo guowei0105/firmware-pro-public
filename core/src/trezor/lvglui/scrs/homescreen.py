@@ -2360,13 +2360,41 @@ class NftLockScreenPreview(AnimScreen):
                             # Verify it was saved
                             saved_path = storage_device.get_lockscreen()
                             print(f"[NftLockScreenPreview] Verified saved path: {saved_path}")
+                        
+                        # Force refresh MainScreen background to apply new lockscreen
+                        if hasattr(MainScreen, '_instance') and MainScreen._instance:
+                            main_screen = MainScreen._instance
+                            # Refresh the background with new lockscreen
+                            main_screen.add_style(
+                                StyleWrapper().bg_img_src(lockscreen_path),
+                                0,
+                            )
+                            if __debug__:
+                                print(f"[NftLockScreenPreview] MainScreen background refreshed")
+                            
+                            # Also refresh AppDrawer if it exists
+                            if hasattr(main_screen, 'apps') and main_screen.apps:
+                                main_screen.apps.refresh_background()
+                                if __debug__:
+                                    print(f"[NftLockScreenPreview] AppDrawer background refreshed")
+                        
                     except Exception as e:
                         if __debug__:
                             print(f"[NftLockScreenPreview] Error setting lockscreen: {e}")
                     
-                    # Navigate back to previous screen instead of creating new MainScreen
-                    if self.prev_scr is not None:
-                        lv.scr_load(self.prev_scr)
+                    # Navigate back to MainScreen (AppDrawer) after setting lockscreen
+                    # Find the root MainScreen instance
+                    main_screen = None
+                    if hasattr(MainScreen, '_instance') and MainScreen._instance:
+                        main_screen = MainScreen._instance
+                    else:
+                        main_screen = MainScreen()
+                    
+                    if __debug__:
+                        print(f"[NftLockScreenPreview] Navigating to MainScreen: {main_screen}")
+                    
+                    # Use AnimScreen's load_screen method for proper navigation
+                    self.load_screen(main_screen, destroy_self=True)
                     return
 
 
@@ -2618,13 +2646,43 @@ class NftHomeScreenPreview(AnimScreen):
                             # Verify it was saved
                             saved_path = storage_device.get_homescreen()
                             print(f"[NftHomeScreenPreview] Verified saved path: {saved_path}")
+                        
+                        # Force refresh MainScreen background to apply new homescreen
+                        if hasattr(MainScreen, '_instance') and MainScreen._instance:
+                            main_screen = MainScreen._instance
+                            # Refresh the background with new homescreen (lockscreen still used for background)
+                            lockscreen_path = storage_device.get_lockscreen()
+                            if lockscreen_path:
+                                main_screen.add_style(
+                                    StyleWrapper().bg_img_src(lockscreen_path),
+                                    0,
+                                )
+                                if __debug__:
+                                    print(f"[NftHomeScreenPreview] MainScreen background refreshed with lockscreen")
+                            
+                            # Also refresh AppDrawer if it exists  
+                            if hasattr(main_screen, 'apps') and main_screen.apps:
+                                main_screen.apps.refresh_background()
+                                if __debug__:
+                                    print(f"[NftHomeScreenPreview] AppDrawer background refreshed")
+                        
                     except Exception as e:
                         if __debug__:
                             print(f"[NftHomeScreenPreview] Error setting homescreen: {e}")
                     
-                    # Navigate back to previous screen instead of creating new MainScreen
-                    if self.prev_scr is not None:
-                        lv.scr_load(self.prev_scr)
+                    # Navigate back to MainScreen (AppDrawer) after setting homescreen
+                    # Find the root MainScreen instance
+                    main_screen = None
+                    if hasattr(MainScreen, '_instance') and MainScreen._instance:
+                        main_screen = MainScreen._instance
+                    else:
+                        main_screen = MainScreen()
+                    
+                    if __debug__:
+                        print(f"[NftHomeScreenPreview] Navigating to MainScreen: {main_screen}")
+                    
+                    # Use AnimScreen's load_screen method for proper navigation
+                    self.load_screen(main_screen, destroy_self=True)
                     return
             else:
                 # Handle button clicks for Blur button only
