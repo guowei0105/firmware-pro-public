@@ -23,8 +23,7 @@ from trezor.ui import display, style
 import ujson as json
 from apps.common import passphrase, safety_checks
 
-from ..lv_symbols import LV_SYMBOLS
-from . import font_GeistRegular20,font_GeistRegular26, font_GeistRegular30, font_GeistSemiBold26,font_GeistSemiBold38, font_GeistSemiBold48
+from . import font_GeistRegular20,font_GeistRegular26, font_GeistRegular30, font_GeistSemiBold26,font_GeistSemiBold30,font_GeistSemiBold38, font_GeistSemiBold48
 from .address import AddressManager, chains_brief_info
 from .common import AnimScreen, FullSizeWindow, Screen, lv  # noqa: F401, F403, F405
 from .components.anim import Anim
@@ -2164,8 +2163,8 @@ class NftManager(AnimScreen):
         # Add trash icon to title bar (right side)
         self.trash_icon = lv.imgbtn(self.content_area)
         self.trash_icon.set_src(lv.imgbtn.STATE.RELEASED, "A:/res/btn-del-white.png", None, None)
-        self.trash_icon.set_size(48, 48)
-        self.trash_icon.align(lv.ALIGN.TOP_RIGHT, -12, 56)
+        self.trash_icon.set_size(40, 40)
+        self.trash_icon.align(lv.ALIGN.TOP_RIGHT, -16, 60)
         self.trash_icon.add_style(StyleWrapper().bg_opa(lv.OPA.TRANSP).border_width(0), 0)
         self.trash_icon.add_flag(lv.obj.FLAG.EVENT_BUBBLE)  # Enable event bubbling
         
@@ -2181,15 +2180,17 @@ class NftManager(AnimScreen):
         self.nft_title.set_text(nft_config["header"] or "Title")
         self.nft_title.add_style(
             StyleWrapper()
-            .text_font(font_GeistSemiBold38)
+            .text_font(font_GeistSemiBold48)
             .text_color(lv_colors.WHITE)
             .text_align(lv.TEXT_ALIGN.LEFT), 0
         )
-        self.nft_title.align_to(self.nft_image, lv.ALIGN.OUT_BOTTOM_LEFT, 8, 16)
+        self.nft_title.align_to(self.nft_image, lv.ALIGN.OUT_BOTTOM_LEFT, 12, 12)
         
         # Description text below title
         self.nft_description = lv.label(self.content_area)
         self.nft_description.set_text(nft_config["subheader"] or "Type description here.")
+        self.nft_description.set_long_mode(lv.label.LONG.WRAP)  # Enable text wrapping
+        self.nft_description.set_size(456, lv.SIZE.CONTENT)  # Max width 456px, auto height
         self.nft_description.add_style(
             StyleWrapper()
             .text_font(font_GeistRegular30)
@@ -2317,13 +2318,23 @@ class NftLockScreenPreview(AnimScreen):
         self.preview_container.set_scrollbar_mode(lv.SCROLLBAR_MODE.OFF)
         self.preview_container.clear_flag(lv.obj.FLAG.SCROLLABLE)
         
-        # Lock screen preview image using NFT - scale to fill height and crop sides
+        # Lock screen preview image using NFT - fit to container with black background
+        # Set container to black background
+        self.preview_container.set_style_bg_color(lv.color_hex(0x000000), 0)
+        self.preview_container.set_style_bg_opa(lv.OPA.COVER, 0)
+        
         self.lockscreen_preview = lv.img(self.preview_container)
         self.lockscreen_preview.set_src(nft_path)
-        # Scale image to fill height (574px) while maintaining aspect ratio
-        # This will crop the sides to show the center portion
-        scale = int(574 * 256 / 456)  # Scale based on height
-        self.lockscreen_preview.set_zoom(scale)
+        # Use image's natural size, then scale with zoom to fit container
+        self.lockscreen_preview.set_size(lv.SIZE.CONTENT, lv.SIZE.CONTENT)
+        
+        # Calculate zoom to fit image within 344x574 while maintaining aspect ratio
+        # Assume typical NFT size is around 456x456, calculate zoom for both dimensions
+        zoom_x = int((344 / 456) * 256)  # Scale to fit width
+        zoom_y = int((574 / 456) * 256)  # Scale to fit height
+        zoom = min(zoom_x, zoom_y)  # Use smaller zoom to ensure image fits completely
+        
+        self.lockscreen_preview.set_zoom(zoom)
         self.lockscreen_preview.align(lv.ALIGN.CENTER, 0, 0)
         
         # Device name and bluetooth name overlaid on the image
@@ -2521,54 +2532,48 @@ class NftHomeScreenPreview(AnimScreen):
         self.preview_container.set_scrollbar_mode(lv.SCROLLBAR_MODE.OFF)
         self.preview_container.clear_flag(lv.obj.FLAG.SCROLLABLE)
         
-        # Home screen preview image - scale to fill container with center-crop effect
+        # Home screen preview image - fit to container with black background
+        # Set container to black background
+        self.preview_container.set_style_bg_color(lv.color_hex(0x000000), 0)
+        self.preview_container.set_style_bg_opa(lv.OPA.COVER, 0)
+        
         self.homescreen_preview = lv.img(self.preview_container)
         self.current_wallpaper_path = nft_path
         self.homescreen_preview.set_src(nft_path)
-        # NFT images are typically 456x456 (based on NftManager), container is 344x574
-        # To fill the container height (574px) from source height (456px):
-        # Zoom = (574 / 456) * 256 = 322 (where 256 is the default zoom scale)
-        # This will make the image tall enough to fill the height and crop the sides
-        zoom_scale = int((574 / 456) * 256)
-        self.homescreen_preview.set_zoom(zoom_scale)
+        # Use image's natural size, then scale with zoom to fit container
+        self.homescreen_preview.set_size(lv.SIZE.CONTENT, lv.SIZE.CONTENT)
+        
+        # Calculate zoom to fit image within 344x574 while maintaining aspect ratio
+        # Assume typical NFT size is around 456x456, calculate zoom for both dimensions
+        zoom_x = int((344 / 456) * 256)  # Scale to fit width
+        zoom_y = int((574 / 456) * 256)  # Scale to fit height
+        zoom = min(zoom_x, zoom_y)  # Use smaller zoom to ensure image fits completely
+        
+        self.homescreen_preview.set_zoom(zoom)
         self.homescreen_preview.align(lv.ALIGN.CENTER, 0, 0)
         
         # Add 6 app icons like HomeScreenSetting (3 rows of 2, 100px size)
         self.app_icons = []
         icon_size = 100
-        icon_spacing_x = 48  # Horizontal spacing between icons
-        icon_spacing_y = 40  # Vertical spacing between icons
-        start_x = -((icon_size // 2) + (icon_spacing_x // 2))  # Centered: -74
+        icon_spacing_x = 41  # Horizontal spacing between icons
+        icon_spacing_y = 40.3  # Vertical spacing between icons
+        start_x = -((icon_size // 2) + (icon_spacing_x // 2))  # Centered
         start_y = 64  # First row distance from top of preview_container
         
         for i in range(6):
             row = i // 2  # 0, 0, 1, 1, 2, 2
             col = i % 2   # 0, 1, 0, 1, 0, 1
-            x_pos = start_x + col * (icon_size + icon_spacing_x)
-            y_pos = start_y + row * (icon_size + icon_spacing_y)
+            x_pos = int(start_x + col * (icon_size + icon_spacing_x))
+            y_pos = int(start_y + row * (icon_size + icon_spacing_y))
             
-            # Create holder with rounded corners and clip to ensure rounded corners
-            icon_holder = lv.obj(self.preview_container)
-            icon_holder.set_size(icon_size, icon_size)
-            icon_holder.add_style(
-                StyleWrapper()
-                .bg_opa(lv.OPA.TRANSP)
-                .border_width(0)
-                .radius(36)
-                .clip_corner(True), 0
-            )
-            # Remove any scrollbars/scrolling from the holder
-            icon_holder.set_scrollbar_mode(lv.SCROLLBAR_MODE.OFF)
-            icon_holder.clear_flag(lv.obj.FLAG.SCROLLABLE)
-            if hasattr(lv, 'DIR'):
-                icon_holder.set_scroll_dir(lv.DIR.NONE)
-            icon_holder.align_to(self.preview_container, lv.ALIGN.TOP_MID, x_pos, y_pos)
-            
-            # Place the PNG inside; it will be clipped to rounded holder
-            icon_img = lv.img(icon_holder)
+            # Create image directly without holder to show natural shape
+            icon_img = lv.img(self.preview_container)
             icon_img.set_src("A:/res/icon_example.png")
-            icon_img.align(lv.ALIGN.CENTER, 0, 0)
-            self.app_icons.append(icon_holder)
+            # Let image use its natural size
+            icon_img.set_size(lv.SIZE.CONTENT, lv.SIZE.CONTENT)
+            # Position the image
+            icon_img.align_to(self.preview_container, lv.ALIGN.TOP_MID, x_pos, y_pos)
+            self.app_icons.append(icon_img)
         
         # Create only Blur button for NFT HomeScreen preview (no Change button needed)
         self._create_blur_button()
@@ -4287,11 +4292,17 @@ class GeneralScreen(AnimScreen):
         self.language = ListItemBtn(
             self.container, _(i18n_keys.ITEM__LANGUAGE), GeneralScreen.cur_language
         )
-        
-        self.home_scr = ListItemBtn(self.container, _(i18n_keys.BUTTON__WALLPAPER))
+
+        self.wallpaper = ListItemBtn(self.container,_(i18n_keys.BUTTON__WALLPAPER))
+
         self.animation = ListItemBtn(self.container, _(i18n_keys.ITEM__ANIMATIONS))
-        self.tap_awake = ListItemBtn(self.container, _(i18n_keys.ITEM__LOCK_SCREEN))
-        self.display = ListItemBtn(self.container,_(i18n_keys.TITLE__DISPLAY))
+
+        self.touch = ListItemBtn(self.container, _(i18n_keys.BUTTON__TOUCH))
+        
+        self.display = ListItemBtn(self.container, _(i18n_keys.BUTTON__DISPLAY))
+       
+        
+        
         # self.power = ListItemBtn(
         #     self.content_area,
         #     _(i18n_keys.ITEM__POWER_OFF),
@@ -4309,9 +4320,9 @@ class GeneralScreen(AnimScreen):
         self.title.set_text(_(i18n_keys.TITLE__GENERAL))
         self.language.label_left.set_text(_(i18n_keys.ITEM__LANGUAGE))
         self.display.label_left.set_text(_(i18n_keys.TITLE__DISPLAY))
-        self.home_scr.label_left.set_text(_(i18n_keys.BUTTON__WALLPAPER))
+        self.wallpaper.label_left.set_text(_(i18n_keys.BUTTON__WALLPAPER))
         self.animation.label_left.set_text(_(i18n_keys.ITEM__ANIMATIONS))
-        self.tap_awake.label_left.set_text(_(i18n_keys.ITEM__LOCK_SCREEN))
+        self.touch.label_left.set_text(_(i18n_keys.BUTTON__TOUCH))
         # self.power.label_left.set_text(_(i18n_keys.ITEM__POWER_OFF))
         self.container.update_layout()
         # self.power.align_to(self.container, lv.ALIGN.OUT_BOTTOM_MID, 0, 12)
@@ -4323,10 +4334,10 @@ class GeneralScreen(AnimScreen):
         elif target == self.display:
             DisplayScreen(self)
         elif target == self.animation:
-            Animations(self)
-        elif target == self.tap_awake:
-            TapAwakeSetting(self)
-        elif target == self.home_scr:
+            AnimationSetting(self)
+        elif target == self.touch:
+            TouchSetting(self)
+        elif target == self.wallpaper:
             WallpaperScreen(self)
         elif target == self.rti_btn:
             PowerOff()
@@ -4383,7 +4394,7 @@ class DisplayScreen(AnimScreen):
         self.auto_container = ContainerFlexCol(
             self.content_area, None, padding_row=2
         )
-        self.auto_container.align_to(self.container, lv.ALIGN.OUT_BOTTOM_MID, 0, 8)
+        self.auto_container.align_to(self.container, lv.ALIGN.OUT_BOTTOM_MID, 0, 12)
         
         self.autolock = ListItemBtn(
             self.auto_container,
@@ -4401,7 +4412,7 @@ class DisplayScreen(AnimScreen):
         self.device_info_container = ContainerFlexCol(
             self.content_area, None, padding_row=2
         )
-        self.device_info_container.align_to(self.auto_container, lv.ALIGN.OUT_BOTTOM_MID, 0, 8)
+        self.device_info_container.align_to(self.auto_container, lv.ALIGN.OUT_BOTTOM_MID, 0, 12)
         
         self.model_name_bt_id = ListItemBtnWithSwitch(
             self.device_info_container,
@@ -4841,7 +4852,7 @@ class LockScreenSetting(AnimScreen):
 
         # "Change" text below button
         self.change_label = lv.label(self.container)
-        self.change_label.set_text("Change")
+        self.change_label.set_text(_(i18n_keys.BUTTON__CHANGE))
         self.change_label.add_style(
             StyleWrapper()
             .text_font(font_GeistRegular20)
@@ -5113,6 +5124,8 @@ class WallperChange(AnimScreen):
         row_dsc = [60]  # Custom header
         if custom_rows > 0:
             row_dsc.extend([GRID_CELL_SIZE_ROWS] * custom_rows)  # Custom images
+        else:
+            row_dsc.append(178)  # Empty state text container (with 56px spacing to Collection)
         row_dsc.append(60)  # Pro header  
         row_dsc.extend([GRID_CELL_SIZE_ROWS] * pro_rows)  # Pro images
         row_dsc.append(lv.GRID_TEMPLATE.LAST)
@@ -5131,7 +5144,7 @@ class WallperChange(AnimScreen):
             col_dsc=col_dsc,
             pad_gap=12,
         )
-        self.container.align_to(self.nav_back, lv.ALIGN.OUT_BOTTOM_LEFT, 12, 20)
+        self.container.align_to(self.nav_back, lv.ALIGN.OUT_BOTTOM_LEFT, -6, 20)
         
         # Enable event bubbling for the container
         self.container.add_flag(lv.obj.FLAG.EVENT_BUBBLE)
@@ -5149,10 +5162,10 @@ class WallperChange(AnimScreen):
         
         # Custom text on the left
         self.custom_header = lv.label(self.custom_header_container)
-        self.custom_header.set_text("Custom")
+        self.custom_header.set_text(_(i18n_keys.OPTION__CUSTOM__INSERT))
         self.custom_header.add_style(
             StyleWrapper()
-            .text_font(font_GeistSemiBold26)
+            .text_font(font_GeistSemiBold30)
             .text_color(lv_colors.WHITE)
             .text_align(lv.TEXT_ALIGN.LEFT), 0
         )
@@ -5162,15 +5175,15 @@ class WallperChange(AnimScreen):
         if file_name_list:
             self.edit_button = lv.btn(self.custom_header_container)
             self.edit_button.set_size(60, 30)
-            self.edit_button.add_style(StyleWrapper().bg_color(lv_colors.ONEKEY_GRAY_3).border_opa(lv.OPA.TRANSP), 0)
-            self.edit_button.align(lv.ALIGN.RIGHT_MID, 0, 0)
+            self.edit_button.add_style(StyleWrapper().bg_opa(lv.OPA.TRANSP).border_opa(lv.OPA.TRANSP), 0)
+            self.edit_button.align(lv.ALIGN.RIGHT_MID, -12, 0)
             
             self.edit_button_label = lv.label(self.edit_button)
-            self.edit_button_label.set_text("Edit")
+            self.edit_button_label.set_text(_(i18n_keys.BUTTON__EDIT))
             self.edit_button_label.add_style(
                 StyleWrapper()
                 .text_font(font_GeistSemiBold26)
-                .text_color(lv_colors.WHITE), 0
+                .text_color(lv.color_hex(0xD2D2D2)), 0
             )
             self.edit_button_label.center()
             
@@ -5197,29 +5210,27 @@ class WallperChange(AnimScreen):
                 self.custom_wps.append(current_wp)
                 
                 # Create remove icon for each custom wallpaper (initially hidden)
-                # Create a simple button instead of image for better event handling
+                # Use remove_icon.png directly with 44px hot area
                 remove_icon = lv.btn(self.container)
-                remove_icon.set_size(24, 24)
+                remove_icon.set_size(44, 44)  # 44px hot area
                 remove_icon.clear_flag(lv.obj.FLAG.SCROLLABLE)
                 remove_icon.add_flag(lv.obj.FLAG.HIDDEN)  # Initially hidden
                 remove_icon.add_flag(lv.obj.FLAG.CLICKABLE)
                 
-                # Style the button
-                remove_icon.set_style_bg_color(lv.color_hex(0xFF0000), 0)  # Red background
-                remove_icon.set_style_bg_opa(200, 0)
-                remove_icon.set_style_radius(12, 0)  # Round button
+                # Style the button - transparent background for hot area
+                remove_icon.set_style_bg_opa(lv.OPA.TRANSP, 0)
                 remove_icon.set_style_border_opa(lv.OPA.TRANSP, 0)
                 remove_icon.set_style_shadow_opa(lv.OPA.TRANSP, 0)
                 
-                # Add X text
-                label = lv.label(remove_icon)
-                label.set_text("×")
-                label.set_style_text_color(lv.color_hex(0xFFFFFF), 0)
-                label.set_style_text_font(font_GeistSemiBold26, 0)
-                label.center()
+                # Use remove_icon.png image directly
+                remove_icon_img = lv.img(remove_icon)
+                remove_icon_img.set_src("A:/res/remove_icon.png")
+                remove_icon_img.set_size(40, 40)  # Display size 40x40 as specified
+                remove_icon_img.center()  # Center in the 44px hot area
+                remove_icon_img.clear_flag(lv.obj.FLAG.CLICKABLE)  # Not clickable, parent handles events
                 
-                # Position relative to wallpaper - right top corner with slight overlap
-                remove_icon.align_to(current_wp, lv.ALIGN.TOP_RIGHT, -8, 8)
+                # Position relative to wallpaper - slightly overlapping the rounded corner
+                remove_icon.align_to(current_wp, lv.ALIGN.TOP_RIGHT, 14, -14)  # Slightly inside to overlap rounded corner
                 remove_icon.move_foreground()
                 
                 # Add independent event handler for the button
@@ -5232,10 +5243,54 @@ class WallperChange(AnimScreen):
                     print(f"WallperChange: Added custom wp {i}: {current_wp}, img_path: {current_wp.img_path}")
                     print(f"WallperChange: Created remove_icon {remove_icon} for wp {i}")
             current_row += custom_rows
+        else:
+            # No custom wallpapers - show instructional text
+            self.empty_state_container = lv.obj(self.container)
+            self.empty_state_container.set_size(lv.pct(100), 178)  # Height for title + description + spacing
+            self.empty_state_container.clear_flag(lv.obj.FLAG.SCROLLABLE)
+            self.empty_state_container.set_style_bg_opa(lv.OPA.TRANSP, 0)
+            self.empty_state_container.set_style_border_opa(lv.OPA.TRANSP, 0)
+            self.empty_state_container.set_style_pad_all(0, 0)
+            self.empty_state_container.set_grid_cell(lv.GRID_ALIGN.STRETCH, 0, 3, lv.GRID_ALIGN.START, current_row, 1)
+            
+            # Title: "Add Wallpaper from OneKey App"
+            self.empty_title = lv.label(self.empty_state_container)
+            self.empty_title.set_text(_(i18n_keys.TITLE__ADD_WALLPAPER_FROM_ONEKEY_APP))
+            self.empty_title.add_style(
+                StyleWrapper()
+                .text_font(font_GeistSemiBold30)
+                .text_color(lv_colors.WHITE)
+                .text_align(lv.TEXT_ALIGN.LEFT)
+                .text_letter_space(-1), 0  # 缩小字间距
+            )
+            self.empty_title.align(lv.ALIGN.TOP_LEFT, 0, 18)
+            
+            # Description: "Upload an image in My OneKey > Select your OneKey device > Wallpaper."
+            self.empty_desc = lv.label(self.empty_state_container)
+            self.empty_desc.set_text(_(i18n_keys.TITLE__ADD_WALLPAPER_FROM_ONEKEY_APP_DESC))
+            self.empty_desc.set_long_mode(lv.label.LONG.WRAP)  # Enable text wrapping
+            self.empty_desc.set_size(lv.pct(100), lv.SIZE.CONTENT)  # Full width, auto height
+            self.empty_desc.add_style(
+                StyleWrapper()
+                .text_font(font_GeistRegular20)
+                .text_color(lv_colors.ONEKEY_GRAY_1)
+                .text_align(lv.TEXT_ALIGN.LEFT)
+                .text_letter_space(-2), 0  # 缩小字间距
+            )
+            self.empty_desc.align_to(self.empty_title, lv.ALIGN.OUT_BOTTOM_LEFT, 0, 16)
+            self.empty_desc.add_style(
+                StyleWrapper()
+                .text_font(font_GeistRegular26)
+                .text_color(lv_colors.ONEKEY_GRAY_1)
+                .text_align(lv.TEXT_ALIGN.LEFT), 0
+            )
+            self.empty_desc.align_to(self.empty_title, lv.ALIGN.OUT_BOTTOM_LEFT, 0, 16)
+            
+            current_row += 1
 
         # Pro section header
         self.pro_header = lv.label(self.container)
-        self.pro_header.set_text("Pro")
+        self.pro_header.set_text(_(i18n_keys.TITLE__COLLECTION))
         self.pro_header.add_style(
             StyleWrapper()
             .text_font(font_GeistSemiBold26)
@@ -5392,7 +5447,7 @@ class WallperChange(AnimScreen):
                 print("WallpaperChange: Entered edit mode - showing remove icons")
         else:
             # Switch to normal mode and perform deletions
-            self.edit_button_label.set_text("Edit")
+            self.edit_button_label.set_text(_(i18n_keys.BUTTON__EDIT))
             # Hide remove icons
             for wp in self.custom_wps:
                 if hasattr(wp, 'remove_icon'):
@@ -5644,10 +5699,6 @@ class Animations(AnimScreen):
         GeneralScreen.cur_language = langs[
             langs_keys.index(storage_device.get_language())
         ][1]
-        self.keyboard_haptic = ListItemBtn(
-            self.container,
-            _(i18n_keys.ITEM__VIBRATION_AND_HAPTIC),
-        )
         self.animation = ListItemBtn(self.container, _(i18n_keys.ITEM__ANIMATIONS))
         self.container.add_event_cb(self.on_click, lv.EVENT.CLICKED, None)
         self.load_screen(self)
@@ -5655,9 +5706,6 @@ class Animations(AnimScreen):
 
     def refresh_text(self):
         self.title.set_text(_(i18n_keys.TITLE__ANIMATIONS))
-        self.keyboard_haptic.label_left.set_text(
-            _(i18n_keys.ITEM__VIBRATION_AND_HAPTIC)
-        )
         self.animation.label_left.set_text(_(i18n_keys.ITEM__ANIMATIONS))
 
     def on_click(self, event_obj):
@@ -5666,9 +5714,7 @@ class Animations(AnimScreen):
         if code == lv.EVENT.CLICKED:
             if utils.lcd_resume():
                 return
-            if target == self.keyboard_haptic:
-                KeyboardHapticSetting(self)
-            elif target == self.animation:
+            if target == self.animation:
                 AnimationSetting(self)
 
 
@@ -6135,11 +6181,15 @@ class AnimationSetting(AnimScreen):
                     self.tips.set_text(_(i18n_keys.CONTENT__ANIMATIONS__DISABLED_HINT))
 
 
-class TapAwakeSetting(AnimScreen):
+class TouchSetting(AnimScreen):
     def collect_animation_targets(self) -> list:
         targets = []
         if hasattr(self, "container") and self.container:
             targets.append(self.container)
+        if hasattr(self, "keyboard_tips") and self.keyboard_tips:
+            targets.append(self.keyboard_tips)
+        if hasattr(self, "container2") and self.container2:
+            targets.append(self.container2)
         if hasattr(self, "description") and self.description:
             targets.append(self.description)
         return targets
@@ -6153,18 +6203,45 @@ class TapAwakeSetting(AnimScreen):
             prev_scr=prev_scr, title=_(i18n_keys.TITLE__LOCK_SCREEN), nav_back=True
         )
 
-        self.container = ContainerFlexCol(self.content_area, self.title)
-        self.tap_awake = ListItemBtnWithSwitch(
-            self.container, _(i18n_keys.ITEM__TAP_TO_WAKE)
+        # First container for keyboard haptic
+        self.container = ContainerFlexCol(self.content_area, self.title, padding_row=2)
+        self.keyboard = ListItemBtnWithSwitch(
+            self.container, _(i18n_keys.ITEM__KEYBOARD_HAPTIC), is_haptic_feedback=True
         )
+        
+        # Keyboard haptic description
+        self.keyboard_tips = lv.label(self.content_area)
+        self.keyboard_tips.set_size(456, lv.SIZE.CONTENT)
+        self.keyboard_tips.set_long_mode(lv.label.LONG.WRAP)
+        self.keyboard_tips.set_style_text_color(lv_colors.ONEKEY_GRAY, lv.STATE.DEFAULT)
+        self.keyboard_tips.set_style_text_font(font_GeistRegular26, lv.STATE.DEFAULT)
+        self.keyboard_tips.set_style_text_line_space(3, 0)
+        self.keyboard_tips.align_to(self.container, lv.ALIGN.OUT_BOTTOM_LEFT, 8, 16)
+        self.keyboard_tips.set_text(_(i18n_keys.CONTENT__VIBRATION_HAPTIC__HINT))
+        
+        # Second container for tap awake
+        self.container2 = ContainerFlexCol(self.content_area, self.keyboard_tips, padding_row=2)
+        self.container2.align_to(self.keyboard_tips, lv.ALIGN.OUT_BOTTOM_LEFT, -8, 24)
+        self.tap_awake = ListItemBtnWithSwitch(
+            self.container2, _(i18n_keys.ITEM__TAP_TO_WAKE)
+        )
+        
+        # Tap awake description
         self.description = lv.label(self.content_area)
         self.description.set_size(456, lv.SIZE.CONTENT)
         self.description.set_long_mode(lv.label.LONG.WRAP)
         self.description.set_style_text_color(lv_colors.ONEKEY_GRAY, lv.STATE.DEFAULT)
         self.description.set_style_text_font(font_GeistRegular26, lv.STATE.DEFAULT)
         self.description.set_style_text_line_space(3, 0)
-        self.description.align_to(self.container, lv.ALIGN.OUT_BOTTOM_LEFT, 8, 16)
+        self.description.align_to(self.tap_awake, lv.ALIGN.OUT_BOTTOM_LEFT, 0, 16)
 
+        # Set keyboard haptic state
+        if storage_device.keyboard_haptic_enabled():
+            self.keyboard.add_state()
+        else:
+            self.keyboard.clear_state()
+        
+        # Set tap awake state
         if storage_device.is_tap_awake_enabled():
             self.tap_awake.add_state()
             self.description.set_text(_(i18n_keys.CONTENT__TAP_TO_WAKE_ENABLED__HINT))
@@ -6172,6 +6249,7 @@ class TapAwakeSetting(AnimScreen):
             self.tap_awake.clear_state()
             self.description.set_text(_(i18n_keys.CONTENT__TAP_TO_WAKE_DISABLED__HINT))
         self.container.add_event_cb(self.on_value_changed, lv.EVENT.VALUE_CHANGED, None)
+        self.container2.add_event_cb(self.on_value_changed, lv.EVENT.VALUE_CHANGED, None)
         self.load_screen(self)
         gc.collect()
 
@@ -6179,7 +6257,12 @@ class TapAwakeSetting(AnimScreen):
         code = event_obj.code
         target = event_obj.get_target()
         if code == lv.EVENT.VALUE_CHANGED:
-            if target == self.tap_awake.switch:
+            if target == self.keyboard.switch:
+                if target.has_state(lv.STATE.CHECKED):
+                    storage_device.toggle_keyboard_haptic(True)
+                else:
+                    storage_device.toggle_keyboard_haptic(False)
+            elif target == self.tap_awake.switch:
                 if target.has_state(lv.STATE.CHECKED):
                     self.description.set_text(
                         _(i18n_keys.CONTENT__TAP_TO_WAKE_ENABLED__HINT)
@@ -6190,6 +6273,7 @@ class TapAwakeSetting(AnimScreen):
                         _(i18n_keys.CONTENT__TAP_TO_WAKE_DISABLED__HINT)
                     )
                     storage_device.set_tap_awake_enable(False)
+
 
 
 class AutoShutDownSetting(AnimScreen):
@@ -7066,10 +7150,10 @@ class HomeScreenSetting(AnimScreen):
 
        
         self.app_icons = []
-        icon_size = 100
-        icon_spacing_x = 48  # Horizontal spacing between icons
-        icon_spacing_y = 40  # Vertical spacing between icons
-        start_x = -((icon_size // 2) + (icon_spacing_x // 2))  # Centered: -70
+        icon_size = 110
+        icon_spacing_x = 41  # Horizontal spacing between icons
+        icon_spacing_y = 40.3  # Vertical spacing between icons
+        start_x = -((icon_size // 2) + (icon_spacing_x // 2))  # Centered
         start_y = 64  # First row distance from top of preview_container
 
         for i in range(6):
@@ -7077,32 +7161,18 @@ class HomeScreenSetting(AnimScreen):
             col = i % 2   # 0, 1, 0, 1, 0, 1
 
             # Position the icon
-            x_pos = start_x + col * (icon_size + icon_spacing_x)
-            y_pos = start_y + row * (icon_size + icon_spacing_y)
+            x_pos = int(start_x + col * (icon_size + icon_spacing_x))
+            y_pos = int(start_y + row * (icon_size + icon_spacing_y))
 
-            # Create holder with rounded corners and clip to ensure rounded corners without white layer
-            icon_holder = lv.obj(self.preview_container)
-            icon_holder.set_size(icon_size, icon_size)
-            icon_holder.add_style(
-                StyleWrapper()
-                .bg_opa(lv.OPA.TRANSP)
-                .border_width(0)
-                .radius(36)
-                .clip_corner(True), 0
-            )
-            # Remove any scrollbars/scrolling from the holder
-            icon_holder.set_scrollbar_mode(lv.SCROLLBAR_MODE.OFF)
-            icon_holder.clear_flag(lv.obj.FLAG.SCROLLABLE)
-            if hasattr(lv, 'DIR'):
-                icon_holder.set_scroll_dir(lv.DIR.NONE)
-            icon_holder.align_to(self.preview_container, lv.ALIGN.TOP_MID, x_pos, y_pos)
-
-            # Place the PNG inside; it will be clipped to rounded holder
-            icon_img = lv.img(icon_holder)
+            # Create image directly without holder to show natural shape
+            icon_img = lv.img(self.preview_container)
             icon_img.set_src("A:/res/icon_example.png")
-            icon_img.align(lv.ALIGN.CENTER, 0, 0)
+            # Let image use its natural size
+            icon_img.set_size(lv.SIZE.CONTENT, lv.SIZE.CONTENT)
+            # Position the image
+            icon_img.align_to(self.preview_container, lv.ALIGN.TOP_MID, x_pos, y_pos)
 
-            self.app_icons.append(icon_holder)
+            self.app_icons.append(icon_img)
         # 创建按钮组
         if __debug__:
             print("[HomeScreenSetting.__init__] Creating buttons")
@@ -7130,7 +7200,7 @@ class HomeScreenSetting(AnimScreen):
         # 创建按钮
         button = lv.btn(self.container)
         button.set_size(64, 64)
-        button.align_to(self.preview_container, lv.ALIGN.OUT_BOTTOM_MID, 0, 10)
+        button.align_to(self.preview_container, lv.ALIGN.OUT_BOTTOM_MID, 0, 8)
         button.add_style(StyleWrapper().border_width(0).radius(40), 0)
         button.add_flag(lv.obj.FLAG.CLICKABLE)
         button.clear_flag(lv.obj.FLAG.EVENT_BUBBLE)
@@ -7182,11 +7252,11 @@ class HomeScreenSetting(AnimScreen):
 
         # 创建 Change 按钮
         self.change_button, self.button_icon, self.change_label = \
-            self._create_button_with_label("A:/res/change-wallper.png", "Change", self.on_select_clicked)
+            self._create_button_with_label("A:/res/change-wallper.png", _(i18n_keys.BUTTON__CHANGE), self.on_select_clicked)
 
         # 创建 Blur 按钮
         self.blur_button, self.blur_button_icon, self.blur_label = \
-            self._create_button_with_label("", "Blur", self.on_blur_clicked)
+            self._create_button_with_label("", _(i18n_keys.BUTTON__BLUR), self.on_blur_clicked)
 
         # 初始化模糊按钮状态
         self._update_blur_button_state()
@@ -7266,7 +7336,7 @@ class HomeScreenSetting(AnimScreen):
         if __debug__:
             print("[HomeScreenSetting.refresh_text] Refreshing text")
         if hasattr(self, 'change_label'):
-            self.change_label.set_text("Change")
+            self.change_label.set_text(_(i18n_keys.BUTTON__CHANGE))
             
     def refresh_images_after_animation(self):
         """
