@@ -1,6 +1,7 @@
 import gc
 import math
 from micropython import const
+import utime
 
 import storage.cache
 import storage.device as storage_device
@@ -41,6 +42,92 @@ from .widgets.style import StyleWrapper
 
 _attach_to_pin_task_running = False
 
+# 动画状态跟踪
+_animation_in_progress = False
+_animation_start_time = 0
+_last_operation_time = 0  # 防止操作过于频繁
+_last_jpeg_loaded = None  # 缓存上次加载的JPEG路径
+_operation_count = 0  # 操作计数器
+_active_timers = []  # 跟踪活动的定时器
+_cached_styles = {}  # 缓存样式对象字典
+
+def get_timestamp():
+    """获取当前时间戳（毫秒）"""
+    return utime.ticks_ms()
+
+def log_with_timestamp(message):
+    """带时间戳的日志 - 轻量版"""
+    if __debug__ and False:  # 禁用日志输出以提高性能
+        timestamp = get_timestamp()
+        print(f"[{timestamp}] {message}")
+        
+def check_operation_frequency():
+    """检查操作频率，防止过快操作"""
+    global _last_operation_time, _operation_count
+    current_time = get_timestamp()
+    if current_time - _last_operation_time < 100:  # 100ms 内不允许重复操作
+        return False
+    
+    _last_operation_time = current_time
+    _operation_count += 1
+    if __debug__ and _operation_count % 5 == 0:  # 每5次操作打印一次内存
+        print(f"Operation #{_operation_count}: Memory status: {get_memory_info()}")
+    return True
+
+def cleanup_timers():
+    """清理所有活动的定时器"""
+    global _active_timers
+    for timer in _active_timers:
+        try:
+            if timer:
+                timer.delete()
+        except:
+            pass
+    _active_timers.clear()
+
+def force_memory_cleanup():
+    """强制内存清理"""
+    if __debug__:
+        mem_before = gc.mem_alloc()
+    
+    # 多次垃圾收集
+    for i in range(5):  # 增加到5次
+        try:
+            gc.collect()
+        except:
+            pass
+    
+    # 定期清理样式缓存（保留最近使用的2个）
+    global _cached_styles
+    styles_cleaned = 0
+    if len(_cached_styles) > 2:
+        # 只保留最后2个，清理其他
+        keys = list(_cached_styles.keys())
+        for key in keys[:-2]:
+            del _cached_styles[key]
+            styles_cleaned += 1
+    
+    if __debug__:
+        mem_after = gc.mem_alloc()
+        print(f"[GC] Memory cleanup: before {mem_before}B, after {mem_after}B, cleaned {styles_cleaned} styles")
+    
+    # 注意：不清理定时器和JPEG缓存，避免重复加载和破坏正在运行的动画
+
+def get_cached_style(image_src):
+    """获取缓存的样式对象，避免重复创建"""
+    global _cached_styles
+    if image_src not in _cached_styles:
+        _cached_styles[image_src] = StyleWrapper().bg_img_src(image_src).border_width(0)
+    return _cached_styles[image_src]
+
+def get_memory_info():
+    """获取内存信息"""
+    try:
+        mem_alloc = gc.mem_alloc()
+        mem_free = gc.mem_free()
+        return f"{mem_alloc}B used, {mem_free}B free, {mem_alloc + mem_free}B total"
+    except:
+        return "memory info unavailable"
 
 def brightness2_percent_str(brightness: int) -> str:
     return f"{int(brightness / style.BACKLIGHT_MAX * 100)}%"
@@ -452,34 +539,52 @@ class MainScreen(Screen):
 
     def on_main_gesture(self, event_obj):
         """处理 MainScreen 的手势事件 - 严格控制：只有MainScreen可见时才允许UP手势"""
+        global _animation_in_progress
         code = event_obj.code
         if code == lv.EVENT.GESTURE:
+            # 如果动画正在进行，忽略手势
+            if _animation_in_progress:
+                return
+            
             # 检查AppDrawer是否可见
             if hasattr(self, 'apps') and self.apps:
                 is_app_drawer_hidden = self.apps.has_flag(lv.obj.FLAG.HIDDEN)
                 if not is_app_drawer_hidden:
                     # AppDrawer可见时，MainScreen不处理任何手势
-                    print("MainScreen: AppDrawer is visible, ignoring all gestures")
                     return
                 
             # 只有AppDrawer隐藏时（MainScreen可见），才允许UP手势
             indev = lv.indev_get_act()
             _dir = indev.get_gesture_dir()
-            print(f"MainScreen: Gesture detected in MainScreen view, direction: {_dir}")
             
             # 严格控制：只允许UP手势
             if _dir == lv.DIR.TOP:
-                print("MainScreen: UP gesture detected in MainScreen view, showing AppDrawer")
                 self.refresh_appdrawer_background()
                 self.show_appdrawer_simple()
-
-            else:
-                print(f"MainScreen: Ignoring non-UP gesture: {_dir}")
                 
     def show_appdrawer_simple(self):
         """显示AppDrawer，带layer2动画"""
+        global _animation_in_progress, _animation_start_time
+        
+        # 防止重复调用
+        if _animation_in_progress:
+            return
+            
+        # 检查操作频率
+        if not check_operation_frequency():
+            return
+            
+        if __debug__:
+            global _operation_count
+            print(f"MainScreen: Starting show_appdrawer (operation #{_operation_count})")
+        log_with_timestamp("MainScreen: === show_appdrawer_simple START ===")
+        
         if hasattr(self, 'apps') and self.apps:
             try:
+                _animation_in_progress = True
+                _animation_start_time = get_timestamp()
+                log_with_timestamp(f"MainScreen: Animation started, setting _animation_in_progress = True")
+                
                 from trezorui import Display
                 display = Display()
                 
@@ -504,9 +609,23 @@ class MainScreen(Screen):
                                 display_path = lockscreen_path
                         
                         if __debug__:
-                            print(f"MainScreen: Layer2 path conversion: {lockscreen_path} -> {display_path}")
-                        display.cover_background_load_jpeg(display_path)
-                        print("MainScreen: Layer2 background loaded")
+                            log_with_timestamp(f"MainScreen: Layer2 path conversion: {lockscreen_path} -> {display_path}")
+                        
+                        # 检查是否需要重新加载JPEG
+                        global _last_jpeg_loaded
+                        if _last_jpeg_loaded != display_path:
+                            # 尝试释放内存后再加载
+                            gc.collect()
+                            if __debug__:
+                                print(f"MainScreen: Memory before JPEG load: {get_memory_info()}")
+                            display.cover_background_load_jpeg(display_path)
+                            _last_jpeg_loaded = display_path
+                            if __debug__:
+                                print(f"MainScreen: Layer2 background loaded: {display_path}")
+                                print(f"MainScreen: Memory after JPEG load: {get_memory_info()}")
+                        else:
+                            if __debug__:
+                                print(f"MainScreen: Layer2 background already loaded, skipping: {display_path}")
                         
                     except Exception:
                         # 使用纯黑色背景作为备用
@@ -516,7 +635,7 @@ class MainScreen(Screen):
                             for i in range(len(black_image)):
                                 black_image[i] = 0x00
                             display.cover_background_set_image(bytes(black_image))
-                        print("MainScreen: Layer2 fallback to black background")
+                        log_with_timestamp("MainScreen: Layer2 fallback to black background")
                 
                 # 步骤2: 显示 layer2（初始位置在屏幕顶部）
                 if hasattr(display, 'cover_background_animate_to_y'):
@@ -526,7 +645,7 @@ class MainScreen(Screen):
                     if hasattr(display, 'cover_background_show'):
                         display.cover_background_show()  # 先显示，此时已正确配置
                     display.cover_background_move_to_y(0)  # 然后设置位置
-                    print("MainScreen: Layer2 shown at screen top")
+                    log_with_timestamp("MainScreen: Layer2 shown at screen top")
                     
                     # 步骤3: 立即显示 AppDrawer 并恢复其原始背景（此时被layer2覆盖）
                     def show_appdrawer_behind_layer2():
@@ -545,13 +664,14 @@ class MainScreen(Screen):
                         # 恢复 AppDrawer 的原始背景 (2222.png)
                         current_homescreen = storage_device.get_homescreen()
                         self.apps.add_style(
-                            StyleWrapper().bg_img_src(current_homescreen).border_width(0),
+                            get_cached_style(current_homescreen),
                             0,
                         )
-                        print("MainScreen: AppDrawer shown behind layer2")
+                        log_with_timestamp("MainScreen: AppDrawer shown behind layer2")
                     
                     # 立即显示 AppDrawer
                     show_appdrawer_behind_layer2()
+                    log_with_timestamp("MainScreen: AppDrawer display sequence completed")
                     
                     # 步骤4: 延迟后让 layer2 向上滑出到屏幕外
                     def start_layer2_animation():
@@ -561,8 +681,8 @@ class MainScreen(Screen):
                         except:
                             pass  # 如果方法不存在则忽略
                         
-                        display.cover_background_animate_to_y(-800, 300)  # 300ms 动画
-                        print("MainScreen: Layer2 started sliding up animation")
+                        display.cover_background_animate_to_y(-800, 200)  # 200ms 动画 (优化响应速度)
+                        log_with_timestamp("MainScreen: Layer2 started sliding up animation (200ms)")
                         
                         # 动画完成后恢复LVGL刷新
                         try:
@@ -572,9 +692,19 @@ class MainScreen(Screen):
                         
                         # 步骤5: 动画完成后隐藏 layer2
                         def on_slide_complete():
+                            global _animation_in_progress
+                            log_with_timestamp("MainScreen: === Animation complete callback ===")
                             if hasattr(display, 'cover_background_hide'):
                                 display.cover_background_hide()
-                                print("MainScreen: Layer2 hidden after slide up animation")
+                                log_with_timestamp("MainScreen: Layer2 hidden after slide up animation")
+                            _animation_in_progress = False
+                            elapsed = get_timestamp() - _animation_start_time
+                            log_with_timestamp(f"MainScreen: Animation completed, total time: {elapsed}ms, setting _animation_in_progress = False")
+                            # 清理定时器并强制内存清理
+                            cleanup_timers()
+                            force_memory_cleanup()
+                            if __debug__:
+                                print(f"MainScreen: Memory after animation complete: {get_memory_info()}")
                             
                             # 确保LVGL刷新已恢复
                             try:
@@ -585,16 +715,22 @@ class MainScreen(Screen):
                         # 动画完成后隐藏 layer2
                         completion_timer = lv.timer_create(
                             lambda t: on_slide_complete(),
-                            300, None  # 300ms 动画
+                            200, None  # 200ms 动画 (与动画时间匹配)
                         )
                         completion_timer.set_repeat_count(1)
+                        # 跟踪定时器
+                        global _active_timers
+                        _active_timers.append(completion_timer)
                     
-                    # 50ms 延迟后开始 layer2 向上滑动动画
+                    # 20ms 延迟后开始 layer2 向上滑动动画 (优化响应速度)
                     animation_timer = lv.timer_create(
                         lambda t: start_layer2_animation(),
-                        50, None
+                        20, None
                     )
                     animation_timer.set_repeat_count(1)
+                    # 跟踪定时器
+                    _active_timers.append(animation_timer)
+                    log_with_timestamp("MainScreen: Layer2 animation timer created (20ms delay)")
                     
             except Exception as e:
                 print(f"MainScreen: Error in show_appdrawer_simple: {e}")
@@ -682,7 +818,7 @@ class MainScreen(Screen):
                 
                 # 步骤4: 延迟后让 layer2 向上滑出到屏幕外
                 def start_layer2_animation():
-                    display.cover_background_animate_to_y(-800, 300)  # 300ms 动画
+                    display.cover_background_animate_to_y(-800, 200)  # 200ms 动画 (优化响应速度)
                     print("MainScreen: Layer2 started sliding up animation")
                     
                     # 步骤5: 动画完成后隐藏 layer2
@@ -698,10 +834,10 @@ class MainScreen(Screen):
                     )
                     completion_timer.set_repeat_count(1)
                 
-                # 150ms 延迟后开始 layer2 向上滑动动画
+                # 100ms 延迟后开始 layer2 向上滑动动画 (优化响应速度)
                 animation_timer = lv.timer_create(
                     lambda t: start_layer2_animation(),
-                    150, None  # 150ms 延迟
+                    100, None  # 100ms 延迟 (从150ms减少)
                 )
                 animation_timer.set_repeat_count(1)
                 
@@ -976,25 +1112,25 @@ class MainScreen(Screen):
                 # self.main_cont.set_y(val)
 
         def on_gesture(self, event_obj):
+            global _animation_in_progress
             code = event_obj.code
             is_hidden = self.has_flag(lv.obj.FLAG.HIDDEN)
-            print(f"AppDrawer: on_gesture called with code: {code}, visible: {self.visible}, hidden_flag: {is_hidden}") 
+            
+            if _animation_in_progress:
+                return
+                
             if code == lv.EVENT.GESTURE:
                 # 严格控制：AppDrawer可见时只允许DOWN手势
                 if is_hidden:
-                    print("AppDrawer: Hidden, ignoring all gestures")
                     return
                     
                 indev = lv.indev_get_act()
                 _dir = indev.get_gesture_dir()
-                print(f"AppDrawer: Gesture direction: {_dir} in visible AppDrawer")
                 
                 # 严格控制：只允许DOWN手势
                 if _dir == lv.DIR.BOTTOM:
-                    print("AppDrawer: DOWN gesture detected, hiding AppDrawer")
                     self.hide_to_mainscreen()
                 elif _dir == lv.DIR.TOP:
-                    print("AppDrawer: Ignoring UP gesture - not allowed when AppDrawer is visible")
                     return
                 else:
                     # 处理左右手势用于翻页
@@ -1002,7 +1138,26 @@ class MainScreen(Screen):
                     
         def hide_to_mainscreen(self):
             """隐藏AppDrawer并显示MainScreen，带layer2动画"""
+            global _animation_in_progress, _animation_start_time
+            
+            # 防止重复调用
+            if _animation_in_progress:
+                return
+                
+            # 检查操作频率
+            if not check_operation_frequency():
+                return
+                
+            if __debug__:
+                global _operation_count
+                print(f"AppDrawer: Starting hide_to_mainscreen (operation #{_operation_count})")
+            log_with_timestamp("AppDrawer: === hide_to_mainscreen START ===")
+            
             try:
+                _animation_in_progress = True
+                _animation_start_time = get_timestamp()
+                log_with_timestamp(f"AppDrawer: Animation started, setting _animation_in_progress = True")
+                
                 from trezorui import Display
                 display = Display()
                 
@@ -1034,9 +1189,23 @@ class MainScreen(Screen):
                                 display_path = lockscreen_path
                         
                         if __debug__:
-                            print(f"AppDrawer: Layer2 path conversion: {lockscreen_path} -> {display_path}")
-                        display.cover_background_load_jpeg(display_path)
-                        print("AppDrawer: Layer2 background loaded for DOWN gesture")
+                            log_with_timestamp(f"AppDrawer: Layer2 path conversion: {lockscreen_path} -> {display_path}")
+                        
+                        # 检查是否需要重新加载JPEG
+                        global _last_jpeg_loaded
+                        if _last_jpeg_loaded != display_path:
+                            # 尝试释放内存后再加载
+                            gc.collect()
+                            if __debug__:
+                                print(f"AppDrawer: Memory before JPEG load: {get_memory_info()}")
+                            display.cover_background_load_jpeg(display_path)
+                            _last_jpeg_loaded = display_path
+                            if __debug__:
+                                print(f"AppDrawer: Layer2 background loaded: {display_path}")
+                                print(f"AppDrawer: Memory after JPEG load: {get_memory_info()}")
+                        else:
+                            if __debug__:
+                                print(f"AppDrawer: Layer2 background already loaded, skipping: {display_path}")
                         
                     except Exception:
                         # 使用纯黑色背景作为备用
@@ -1046,19 +1215,13 @@ class MainScreen(Screen):
                             for i in range(len(black_image)):
                                 black_image[i] = 0x00
                             display.cover_background_set_image(bytes(black_image))
-                        print("AppDrawer: Layer2 fallback to black background")
+                        log_with_timestamp("AppDrawer: Layer2 fallback to black background")
                 
-                # 步骤2: DOWN手势：从顶部滑入动画
+                # 步骤2: DOWN手势：Layer2 从上方滑入填满屏幕，然后消失显示MainScreen
                 if hasattr(display, 'cover_background_animate_to_y'):
-                    print("AppDrawer: Starting slide down animation")
+                    log_with_timestamp("AppDrawer: Starting Layer2 slide down animation from top")
                     
-                    # 立即隐藏AppDrawer，避免在layer2动画期间看到应用图标
-                    self.add_flag(lv.obj.FLAG.HIDDEN)
-                    self.visible = False
-                    self.add_flag(lv.obj.FLAG.GESTURE_BUBBLE)
-                    print("AppDrawer: AppDrawer hidden immediately before animation")
-                    
-                    # 显示MainScreen元素
+                    # 显示MainScreen元素（但不立即隐藏AppDrawer，让动画自然进行）
                     self.parent.hidden_others(False)
                     if hasattr(self.parent, 'up_arrow'):
                         self.parent.up_arrow.clear_flag(lv.obj.FLAG.HIDDEN)
@@ -1066,44 +1229,95 @@ class MainScreen(Screen):
                         self.parent.bottom_tips.clear_flag(lv.obj.FLAG.HIDDEN)
                     if hasattr(self.parent, "dev_state"):
                         self.parent.dev_state.show()
-                    print("AppDrawer: MainScreen elements shown")
+                    log_with_timestamp("AppDrawer: MainScreen elements shown")
                     
-                    # 先将layer移动到屏幕上方
+                    # 步骤1: 先将Layer2移动到屏幕上方
                     display.cover_background_move_to_y(-800)
                     if hasattr(display, 'cover_background_set_visible'):
                         display.cover_background_set_visible(True)
+                    log_with_timestamp("AppDrawer: Layer2 positioned above screen")
                     
-                    # 流畅的从顶部滑入动画
-                    display.cover_background_animate_to_y(0, 250)
+                    # 步骤2: 从上方滑入到屏幕中心（y=0），正好填满屏幕
+                    display.cover_background_animate_to_y(0, 200)  # 滑动到屏幕中心，填满屏幕 (优化响应速度)
+                    log_with_timestamp("AppDrawer: Layer2 sliding down to fill screen (200ms)")
                     
-                    # 动画完成后隐藏layer2
+                    # 步骤3: 在Layer2覆盖屏幕后，准备MainScreen状态并隐藏AppDrawer
+                    def prepare_mainscreen_after_coverage():
+                        log_with_timestamp("AppDrawer: === prepare_mainscreen_after_coverage (50ms timer) ===")
+                        # 现在隐藏AppDrawer
+                        log_with_timestamp("AppDrawer: Hiding AppDrawer")
+                        self.add_flag(lv.obj.FLAG.HIDDEN)
+                        self.visible = False
+                        self.add_flag(lv.obj.FLAG.GESTURE_BUBBLE)
+                        log_with_timestamp(f"AppDrawer: Hidden flag set, visible={self.visible}")
+                        
+                        # 确保MainScreen背景是lockscreen
+                        from storage import device
+                        current_lockscreen = device.get_lockscreen()
+                        if current_lockscreen:
+                            self.parent.add_style(
+                                get_cached_style(current_lockscreen),
+                                0
+                            )
+                            log_with_timestamp(f"AppDrawer: MainScreen background set to lockscreen: {current_lockscreen}")
+                        
+                        # 强制LVGL渲染MainScreen
+                        lv.refr_now(None)
+                        # 释放内存
+                        gc.collect()
+                        if __debug__:
+                            print(f"AppDrawer: Memory after state preparation: {get_memory_info()}")
+                        log_with_timestamp("AppDrawer: MainScreen state prepared, AppDrawer hidden, LVGL refreshed, memory collected")
+                    
+                    # 30ms后Layer2已经开始覆盖屏幕，准备MainScreen状态 (优化响应速度)
+                    prepare_timer = lv.timer_create(
+                        lambda t: prepare_mainscreen_after_coverage(),
+                        30, None
+                    )
+                    prepare_timer.set_repeat_count(1)
+                    # 跟踪定时器
+                    global _active_timers
+                    _active_timers.append(prepare_timer)
+                    log_with_timestamp("AppDrawer: MainScreen prepare timer created (30ms delay)")
+                    
+                    # 步骤3: 动画完成后隐藏Layer2
                     def on_animation_complete():
-                        print("AppDrawer: Animation complete with hardware isolation")
+                        global _animation_in_progress
+                        log_with_timestamp("AppDrawer: === on_animation_complete (250ms timer) ===")
                         try:
-                            # 简单隐藏Layer2 - 硬件冲突已在C层解决
                             if hasattr(display, 'cover_background_hide'):
                                 display.cover_background_hide()
-                                print("AppDrawer: Layer2 hidden cleanly")
-                            
-                            # 不再需要复杂的LVGL重置 - JPEG状态已被保护
-                            print("AppDrawer: Hardware JPEG isolation successful - LVGL images unaffected")
-                            
+                                log_with_timestamp("AppDrawer: Layer2 successfully hidden, MainScreen fully visible")
+                            _animation_in_progress = False
+                            elapsed = get_timestamp() - _animation_start_time
+                            log_with_timestamp(f"AppDrawer: Animation completed, total time: {elapsed}ms, setting _animation_in_progress = False")
+                            # 清理定时器并强制内存清理
+                            cleanup_timers()
+                            force_memory_cleanup()
+                            if __debug__:
+                                print(f"AppDrawer: Memory after animation complete: {get_memory_info()}")
                         except Exception as error:
-                            print(f"AppDrawer: Error in simplified completion: {error}")
-                    # 动画完成时隐藏layer2（250ms 动画时间）
+                            log_with_timestamp(f"AppDrawer: Error hiding Layer2: {error}")
+                    
+                    # 等待动画完成后隐藏Layer2（200ms动画时间）
                     completion_timer = lv.timer_create(
                         lambda t: on_animation_complete(),
-                        250, None
+                        200, None  # 与动画时间匹配
                     )
                     completion_timer.set_repeat_count(1)
+                    # 跟踪定时器
+                    _active_timers.append(completion_timer)
                 else:
                     # 如果没有动画函数，直接切换
                     self.hide_to_mainscreen_fallback()
                     
             except Exception as e:
-                print(f"AppDrawer: Error in hide_to_mainscreen: {e}")
+                global _animation_in_progress
+                log_with_timestamp(f"AppDrawer: Error in hide_to_mainscreen: {e}")
                 # 出错时使用简单方式
                 self.hide_to_mainscreen_fallback()
+                _animation_in_progress = False
+                log_with_timestamp("AppDrawer: Fallback to simple hide, animation reset")
                 
         def hide_to_mainscreen_fallback(self):
             """备用的简单隐藏方法"""

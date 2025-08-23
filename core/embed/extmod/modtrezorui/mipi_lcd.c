@@ -1032,8 +1032,30 @@ __attribute__((used)) void lcd_cover_background_show(void) {
     return;
   }
   
-  // 关键改进：强制清理SDRAM缓存，确保LTDC读取到最新数据
-  // 清理Layer2内存区域的数据缓存，防止读取脏数据
+  // 关键改进：强制等待并稳定Layer状态，防止快速切换时的层级错乱
+  // 等待LTDC完全空闲
+  while (lcd_ltdc_busy()) {
+    HAL_Delay(1);
+  }
+  
+  hlcd_ltdc.Instance = LTDC;
+  
+  // 步骤0: 重置Layer1状态，防止快速切换导致的层级错乱
+  // 注意：不要操作Layer0，它是系统主显示层
+  
+  // 确保Layer1（Layer2覆盖层）初始为完全禁用和透明状态
+  __HAL_LTDC_LAYER_DISABLE(&hlcd_ltdc, 1);
+  HAL_LTDC_SetAlpha(&hlcd_ltdc, 0, 1);    // Layer1初始透明
+  
+  // 强制重载，确保禁用状态生效
+  __HAL_LTDC_RELOAD_CONFIG(&hlcd_ltdc);
+  
+  // 等待重置完成，确保硬件状态稳定
+  while (lcd_ltdc_busy()) {
+    HAL_Delay(1);
+  }
+  
+  // 清理SDRAM缓存，确保LTDC读取到最新数据
   SCB_CleanDCache_by_Addr((uint32_t*)LAYER2_MEMORY_BASE, 
                           lcd_params.hres * lcd_params.vres * lcd_params.bbp);
   
@@ -1041,19 +1063,12 @@ __attribute__((used)) void lcd_cover_background_show(void) {
   __DSB();
   __ISB();
   
-  // 预配置Layer2为完全禁用状态，先配置所有参数但不显示
+  // 预配置Layer2状态
   cover_bg_state.visible = true;
   cover_bg_state.y_offset = 0;
   cover_bg_state.opacity = 255;
   
-  // 等待LTDC空闲
-  while (lcd_ltdc_busy()) {
-    HAL_Delay(1);
-  }
-  
-  hlcd_ltdc.Instance = LTDC;
-  
-  // 步骤1: 先配置Layer2但保持完全透明状态
+  // 步骤1: 配置Layer2但保持完全透明状态
   LTDC_LAYERCONFIG config;
   config.x0 = 0;
   config.x1 = lcd_params.hres;
@@ -1062,7 +1077,7 @@ __attribute__((used)) void lcd_cover_background_show(void) {
   config.pixel_format = lcd_params.pixel_format_ltdc;
   config.address = LAYER2_MEMORY_BASE;
   
-  // 先配置Layer2但alpha设为0（完全透明）
+  // 配置Layer2但alpha设为0（完全透明）
   HAL_LTDC_SetAlpha(&hlcd_ltdc, 0, 1);
   ltdc_layer_config(&hlcd_ltdc, 1, &config);
   __HAL_LTDC_LAYER_ENABLE(&hlcd_ltdc, 1);
