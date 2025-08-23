@@ -520,11 +520,12 @@ class MainScreen(Screen):
                 
                 # 步骤2: 显示 layer2（初始位置在屏幕顶部）
                 if hasattr(display, 'cover_background_animate_to_y'):
-                    display.cover_background_move_to_y(0)
+                    # 关键修改：先显示Layer2再设置位置，避免提前启用未完全配置的Layer
                     if hasattr(display, 'cover_background_set_visible'):
                         display.cover_background_set_visible(True)
                     if hasattr(display, 'cover_background_show'):
-                        display.cover_background_show()
+                        display.cover_background_show()  # 先显示，此时已正确配置
+                    display.cover_background_move_to_y(0)  # 然后设置位置
                     print("MainScreen: Layer2 shown at screen top")
                     
                     # 步骤3: 立即显示 AppDrawer 并恢复其原始背景（此时被layer2覆盖）
@@ -647,12 +648,12 @@ class MainScreen(Screen):
             
             # 步骤2: 显示 layer2（初始位置在屏幕顶部，准备向下显示）
             if hasattr(display, 'cover_background_animate_to_y'):
-                # 将 layer2 初始位置设置在屏幕顶部
-                display.cover_background_move_to_y(0)
+                # 关键修改：先显示Layer2再设置位置，避免提前启用未完全配置的Layer
                 if hasattr(display, 'cover_background_set_visible'):
                     display.cover_background_set_visible(True)
                 if hasattr(display, 'cover_background_show'):
-                    display.cover_background_show()
+                    display.cover_background_show()  # 先显示，此时已正确配置
+                display.cover_background_move_to_y(0)  # 然后设置位置
                 print("MainScreen: Layer2 shown at screen top")
                 
                 # 步骤3: 立即显示 AppDrawer 并恢复其原始背景（此时被layer2覆盖）

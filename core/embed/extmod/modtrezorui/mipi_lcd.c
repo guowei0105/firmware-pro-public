@@ -1013,14 +1013,83 @@ void lcd_cover_background_init(void) { // 初始化CoverBackground内容
       total_non_black++;
     }
   }
-  // printf("[Layer2 Verify] Total Layer2 has %lu/%lu non-black pixels\n", total_non_black, buffer_size);
+  
+  // 预先配置Layer2，但保持禁用状态，避免初始化时闪烁
+  hlcd_ltdc.Instance = LTDC;
+  HAL_LTDC_SetAlpha(&hlcd_ltdc, 0, 1);  // 设置为完全透明
+  __HAL_LTDC_LAYER_DISABLE(&hlcd_ltdc, 1);  // 禁用Layer2
+  
+  // 现在Layer2内容已经准备好，等待show时才显示
 }
 
 
 
 
 // 显示 CoverBackground - 只在上滑手势时调用
-void lcd_cover_background_show(void) {
+// 优化后的无缝显示，避免闪烁
+__attribute__((used)) void lcd_cover_background_show(void) {
+  if (!g_layer2_initialized) {
+    return;
+  }
+  
+  // 关键改进：强制清理SDRAM缓存，确保LTDC读取到最新数据
+  // 清理Layer2内存区域的数据缓存，防止读取脏数据
+  SCB_CleanDCache_by_Addr((uint32_t*)LAYER2_MEMORY_BASE, 
+                          lcd_params.hres * lcd_params.vres * lcd_params.bbp);
+  
+  // 内存屏障，确保缓存操作完成
+  __DSB();
+  __ISB();
+  
+  // 预配置Layer2为完全禁用状态，先配置所有参数但不显示
+  cover_bg_state.visible = true;
+  cover_bg_state.y_offset = 0;
+  cover_bg_state.opacity = 255;
+  
+  // 等待LTDC空闲
+  while (lcd_ltdc_busy()) {
+    HAL_Delay(1);
+  }
+  
+  hlcd_ltdc.Instance = LTDC;
+  
+  // 步骤1: 先配置Layer2但保持完全透明状态
+  LTDC_LAYERCONFIG config;
+  config.x0 = 0;
+  config.x1 = lcd_params.hres;
+  config.y0 = 0;
+  config.y1 = lcd_params.vres;
+  config.pixel_format = lcd_params.pixel_format_ltdc;
+  config.address = LAYER2_MEMORY_BASE;
+  
+  // 先配置Layer2但alpha设为0（完全透明）
+  HAL_LTDC_SetAlpha(&hlcd_ltdc, 0, 1);
+  ltdc_layer_config(&hlcd_ltdc, 1, &config);
+  __HAL_LTDC_LAYER_ENABLE(&hlcd_ltdc, 1);
+  
+  // 重载配置，此时Layer2已配置但完全透明
+  __HAL_LTDC_RELOAD_CONFIG(&hlcd_ltdc);
+  
+  // 等待配置生效，确保透明状态已应用
+  while (lcd_ltdc_busy()) {
+    HAL_Delay(1);
+  }
+  
+  // 步骤2: 等待VSync信号，在垂直消隐期间仅修改Alpha值
+  volatile uint32_t timeout = 10000;
+  while (timeout-- > 0) {
+    if (hlcd_ltdc.Instance->CDSR & 0x01) {  // 检查VSync状态
+      break;
+    }
+  }
+  
+  // 在VSync期间仅修改Alpha值，从0到255，实现原子切换
+  HAL_LTDC_SetAlpha(&hlcd_ltdc, 255, 1);
+  __HAL_LTDC_RELOAD_CONFIG(&hlcd_ltdc);
+}
+
+// 隐藏 CoverBackground - 完全禁用Layer2
+__attribute__((used)) void lcd_cover_background_hide(void) {
   if (!g_layer2_initialized) {
     return;
   }
@@ -1028,28 +1097,6 @@ void lcd_cover_background_show(void) {
   // 等待LTDC空闲
   while (lcd_ltdc_busy()) {
     HAL_Delay(1);
-  }
-  
-  cover_bg_state.visible = true;
-  cover_bg_state.opacity = 255;
-  cover_bg_state.y_offset = 0;
-  
-  // 启用Layer2并设置为完全不透明
-  hlcd_ltdc.Instance = LTDC;
-  __HAL_LTDC_LAYER_ENABLE(&hlcd_ltdc, 1); // 启用Layer2
-  HAL_LTDC_SetAlpha(&hlcd_ltdc, 255, 1);
-  
-  // 移动layer到显示位置
-  lcd_cover_background_move_to_y(0);
-  
-  // 使用VSync重载确保同步
-  __HAL_LTDC_RELOAD_CONFIG(&hlcd_ltdc);
-}
-
-// 隐藏 CoverBackground - 完全禁用Layer2
-void lcd_cover_background_hide(void) {
-  if (!g_layer2_initialized) {
-    return;
   }
   
   cover_bg_state.visible = false;
@@ -1067,7 +1114,7 @@ void lcd_cover_background_hide(void) {
 
 
 // 设置 CoverBackground 可见性状态 - 不改变硬件，只更新状态
-void lcd_cover_background_set_visible(bool visible) {
+__attribute__((used)) void lcd_cover_background_set_visible(bool visible) {
   if (!g_layer2_initialized) {
     return;
   }
@@ -1076,7 +1123,7 @@ void lcd_cover_background_set_visible(bool visible) {
 }
 
 // 设置CoverBackground图片数据
-void lcd_cover_background_set_image(const void* image_data, uint32_t image_size) {
+__attribute__((used)) void lcd_cover_background_set_image(const void* image_data, uint32_t image_size) {
   if (!g_layer2_initialized) {
     // printf("ERROR: layer2 not initialized for image setting\n");
     return;
@@ -1098,7 +1145,7 @@ void lcd_cover_background_set_image(const void* image_data, uint32_t image_size)
 }
 
 // 加载JPEG图片到CoverBackground硬件层
-void lcd_cover_background_load_jpeg(const char* jpeg_path) {
+__attribute__((used)) void lcd_cover_background_load_jpeg(const char* jpeg_path) {
   if (!g_layer2_initialized) {
     // printf("ERROR: layer2 not initialized for JPEG loading\n");
     return;
@@ -1253,24 +1300,24 @@ void lcd_cover_background_move_to_y(int16_t y_position) {
     ltdc_layer_config(&hlcd_ltdc, 1, &config);
   }
   
-  // 优化：同步LTDC重载与动画帧，减少视觉不一致导致的闪烁
-  static uint32_t reload_counter = 0;
-  reload_counter++;
+  // 使用简化的重配置方法，减少闪动
+  LTDC_LAYERCONFIG config;
+  config.x0 = window_x0;
+  config.x1 = window_x1;
+  config.y0 = window_y0;
+  config.y1 = window_y1;
+  config.pixel_format = lcd_params.pixel_format_ltdc;
+  config.address = layer_address;
   
-  if (!g_animation_in_progress) {
-    // 非动画期间：立即重载确保响应性
-    __HAL_LTDC_RELOAD_CONFIG(&hlcd_ltdc);
-  } else {
-    // 动画期间：使用VSync同步重载，减少撕裂和闪烁
-    // 每6帧重载一次，与状态栏恢复错开时机
-    if (reload_counter % 6 == 0) {
-      __HAL_LTDC_RELOAD_IMMEDIATE_CONFIG(&hlcd_ltdc);  // 立即重载避免等待
-    }
-  }
+  // 使用优化的layer配置函数
+  ltdc_layer_config(&hlcd_ltdc, 1, &config);
+  
+  // 始终使用VSync重载确保稳定性
+  __HAL_LTDC_RELOAD_CONFIG(&hlcd_ltdc);
 }
 
 // 检查动画是否正在进行
-bool lcd_cover_background_is_animating(void) {
+__attribute__((used)) bool lcd_cover_background_is_animating(void) {
   return g_animation_in_progress;
 }
 
@@ -1303,14 +1350,14 @@ static void animation_systick_callback(uint32_t tick) {
 }
 
 // 初始化动画系统
-void lcd_animation_init(void) {
+__attribute__((used)) void lcd_animation_init(void) {
   // 注册systick回调用于动画更新
   systick_enable_dispatch(SYSTICK_DISPATCH_ANIMATION_UPDATE, animation_systick_callback);
   // printf("Animation system initialized with systick callback\n");
 }
 
 // 启动动画
-void lcd_cover_background_start_animation(int16_t target_y, uint16_t duration_ms) {
+__attribute__((used)) void lcd_cover_background_start_animation(int16_t target_y, uint16_t duration_ms) {
   if (!g_layer2_initialized) {
     // 静默返回，动画期间不输出错误日志
     return;
@@ -1352,7 +1399,7 @@ void lcd_cover_background_start_animation(int16_t target_y, uint16_t duration_ms
 }
 
 // 更新动画状态 - 需要定期调用
-bool lcd_cover_background_update_animation(void) {
+__attribute__((used)) bool lcd_cover_background_update_animation(void) {
   if (!g_animation_state.active) {
     return false;
   }
@@ -1419,12 +1466,12 @@ bool lcd_cover_background_update_animation(void) {
 
 
 // 检查是否有动画正在进行
-bool lcd_cover_background_has_active_animation(void) {
+__attribute__((used)) bool lcd_cover_background_has_active_animation(void) {
   return g_animation_state.active;
 }
 
 // 停止当前动画
-void lcd_cover_background_stop_animation(void) {
+__attribute__((used)) void lcd_cover_background_stop_animation(void) {
   if (g_animation_state.active) {
     // 动画期间不输出日志，静默停止
     g_animation_state.active = false;
@@ -1457,7 +1504,7 @@ void lcd_cover_background_stop_animation(void) {
  *
  * 注意：整个动画过程为阻塞式，期间不会输出调试日志，适合在UI线程或主循环中直接调用。
  */
-void lcd_cover_background_animate_to_y(int16_t target_y, uint16_t duration_ms) {
+__attribute__((used)) void lcd_cover_background_animate_to_y(int16_t target_y, uint16_t duration_ms) {
   if (!g_layer2_initialized) {
     // 静默返回，不输出错误日志
     return;
@@ -1556,19 +1603,19 @@ void lcd_cover_background_animate_to_y(int16_t target_y, uint16_t duration_ms) {
 
 
 // 获取当前透明度
-uint8_t lcd_cover_background_get_opacity(void) {
+__attribute__((used)) uint8_t lcd_cover_background_get_opacity(void) {
   return cover_bg_state.opacity;
 }
 
 // 检查是否可见
-bool lcd_cover_background_is_visible(void) {
+__attribute__((used)) bool lcd_cover_background_is_visible(void) {
   return cover_bg_state.visible && cover_bg_state.opacity > 0;
 }
 
 
 
 // Function to ensure second layer remains active
-void lcd_ensure_second_layer(void) {
+__attribute__((used)) void lcd_ensure_second_layer(void) {
   static bool layer_enabled = false;
   
   if (!g_layer2_initialized) {
