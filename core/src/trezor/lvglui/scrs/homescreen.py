@@ -51,7 +51,7 @@ GRID_CELL_SIZE_COLS = const(144)
 
 APP_DRAWER_UP_TIME = 10
 APP_DRAWER_DOWN_TIME = 50
-APP_DRAWER_UP_DELAY = 15
+APP_DRAWER_UP_DELAY = 0
 APP_DRAWER_DOWN_DELAY = 0
 if __debug__:
     PATH_OVER_SHOOT = lv.anim_t.path_overshoot
@@ -549,35 +549,49 @@ class MainScreen(Screen):
                         )
                         print("MainScreen: AppDrawer shown behind layer2")
                     
-                    # 短暂延迟后显示 AppDrawer
-                    show_timer = lv.timer_create(
-                        lambda t: show_appdrawer_behind_layer2(),
-                        50, None
-                    )
-                    show_timer.set_repeat_count(1)
+                    # 立即显示 AppDrawer
+                    show_appdrawer_behind_layer2()
                     
                     # 步骤4: 延迟后让 layer2 向上滑出到屏幕外
                     def start_layer2_animation():
+                        # 动画开始前禁用LVGL自动刷新，避免与Layer动画冲突
+                        try:
+                            lv.timer_handler_pause()
+                        except:
+                            pass  # 如果方法不存在则忽略
+                        
                         display.cover_background_animate_to_y(-800, 300)  # 300ms 动画
                         print("MainScreen: Layer2 started sliding up animation")
+                        
+                        # 动画完成后恢复LVGL刷新
+                        try:
+                            lv.timer_handler_resume()
+                        except:
+                            pass  # 如果方法不存在则忽略
                         
                         # 步骤5: 动画完成后隐藏 layer2
                         def on_slide_complete():
                             if hasattr(display, 'cover_background_hide'):
                                 display.cover_background_hide()
                                 print("MainScreen: Layer2 hidden after slide up animation")
+                            
+                            # 确保LVGL刷新已恢复
+                            try:
+                                lv.timer_handler_resume()
+                            except:
+                                pass  # 如果方法不存在或已经恢复则忽略
                         
                         # 动画完成后隐藏 layer2
                         completion_timer = lv.timer_create(
                             lambda t: on_slide_complete(),
-                            350, None  # 300ms 动画 + 50ms 缓冲
+                            300, None  # 300ms 动画
                         )
                         completion_timer.set_repeat_count(1)
                     
-                    # 150ms 延迟后开始 layer2 向上滑动动画
+                    # 50ms 延迟后开始 layer2 向上滑动动画
                     animation_timer = lv.timer_create(
                         lambda t: start_layer2_animation(),
-                        150, None
+                        50, None
                     )
                     animation_timer.set_repeat_count(1)
                     

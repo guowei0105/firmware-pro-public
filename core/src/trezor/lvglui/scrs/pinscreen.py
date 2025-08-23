@@ -161,7 +161,7 @@ class InputNum(FullSizeWindow):
             self.channel.publish(0)
 
         self.clean()
-        self.destroy(250)
+        self.destroy()
 
 
 class InputPin(FullSizeWindow):
@@ -343,7 +343,7 @@ class InputPin(FullSizeWindow):
             self.channel.publish(0)
 
         self.clean()
-        self.destroy(250)
+        self.destroy()
 
 
 class InputLitePin(FullSizeWindow):
@@ -475,7 +475,7 @@ class SetupComplete(FullSizeWindow):
             if target == self.btn_yes:
                 self.channel.publish(1)
                 self.destroy()
-                lv.scr_act().del_delayed(500)
+                lv.scr_act().del_delayed(100)
                 from apps.base import set_homescreen
 
                 set_homescreen()

@@ -978,27 +978,32 @@ void lcd_cover_background_init(void) { // 初始化CoverBackground内容
   // 复制Layer1当前显示内容到Layer2，确保背景一致
   // printf("CoverBackground: Copying Layer1 background to Layer2 for consistency\n"); // 打印复制信息
   
+  // 等待LTDC空闲，避免与正在进行的显示操作冲突
+  while (lcd_ltdc_busy()) {
+    HAL_Delay(1);
+  }
+  
+  // 等待DMA2D空闲，确保之前的操作已完成
+  while (HAL_DMA2D_GetState(&hlcd_dma2d) != HAL_DMA2D_STATE_READY) {
+    HAL_Delay(1);
+  }
+  
   // 使用DMA2D安全地复制当前Layer1显示内容
   if (g_current_display_addr != 0) { // 如果当前显示地址有效
-    // printf("CoverBackground: Using DMA2D to copy Layer1 background (addr=0x%08lx)\n", g_current_display_addr); // 打印地址信息
-    
     // 使用DMA2D复制整个Layer1内容到Layer2，确保背景一致
-    // printf("[Layer2 DMA2D] Copying from Layer1 (0x%08lX) to Layer2 (0x%08lX), size: %lu x %lu\n",
-    //        (uint32_t)g_current_display_addr, (uint32_t)LAYER2_MEMORY_BASE, 
-    //        lcd_params.hres, lcd_params.vres);
     dma2d_copy_buffer((uint32_t*)g_current_display_addr, 
                       (uint32_t*)LAYER2_MEMORY_BASE,
                       0, 0, lcd_params.hres, lcd_params.vres); // DMA2D拷贝
-    
-    // printf("CoverBackground: Layer1 background copied to Layer2 successfully\n"); // 打印成功信息
   } else {
     // 如果没有Layer1内容，使用默认Layer1帧缓冲区
-    // printf("CoverBackground: Using default Layer1 framebuffer for background consistency\n"); // 打印默认信息
-    // printf("[Layer2 DMA2D] Copying default framebuffer from 0x%08lX to Layer2 (0x%08lX)\n",
-    //        (uint32_t)FMC_SDRAM_LTDC_BUFFER_ADDRESS, (uint32_t)LAYER2_MEMORY_BASE);
     dma2d_copy_buffer((uint32_t*)FMC_SDRAM_LTDC_BUFFER_ADDRESS, 
                       (uint32_t*)LAYER2_MEMORY_BASE,
                       0, 0, lcd_params.hres, lcd_params.vres); // DMA2D拷贝
+  }
+  
+  // 等待DMA2D拷贝完成，确保Layer2内容准备就绪
+  while (HAL_DMA2D_GetState(&hlcd_dma2d) != HAL_DMA2D_STATE_READY) {
+    HAL_Delay(1);
   }
   
   // 验证初始化后Layer2内容
@@ -1020,6 +1025,11 @@ void lcd_cover_background_show(void) {
     return;
   }
   
+  // 等待LTDC空闲
+  while (lcd_ltdc_busy()) {
+    HAL_Delay(1);
+  }
+  
   cover_bg_state.visible = true;
   cover_bg_state.opacity = 255;
   cover_bg_state.y_offset = 0;
@@ -1032,7 +1042,8 @@ void lcd_cover_background_show(void) {
   // 移动layer到显示位置
   lcd_cover_background_move_to_y(0);
   
-  __HAL_LTDC_RELOAD_IMMEDIATE_CONFIG(&hlcd_ltdc);
+  // 使用VSync重载确保同步
+  __HAL_LTDC_RELOAD_CONFIG(&hlcd_ltdc);
 }
 
 // 隐藏 CoverBackground - 完全禁用Layer2
@@ -1363,12 +1374,13 @@ bool lcd_cover_background_update_animation(void) {
     g_animation_state.active = false;
     g_animation_in_progress = false;
     
-    // 动画完成后重新稳定Layer1状态，确保没有闪烁残留
-    HAL_LTDC_SetAlpha(&hlcd_ltdc, 255, 1);  // Layer1完全不透明
-    __HAL_LTDC_LAYER_ENABLE(&hlcd_ltdc, 1); // 确保Layer1启用
+    // 等待LTDC空闲后再进行最终配置
+    while (lcd_ltdc_busy()) {
+      HAL_Delay(1);
+    }
     
-    // 强制重载所有配置，确保最终状态稳定
-    __HAL_LTDC_RELOAD_IMMEDIATE_CONFIG(&hlcd_ltdc);
+    // 使用VSync重载确保最终状态稳定
+    __HAL_LTDC_RELOAD_CONFIG(&hlcd_ltdc);
     
     // 动画完成后才输出统计信息
     // uint32_t avg_fps = (g_animation_state.frame_count * 1000) / elapsed_time;
@@ -1458,16 +1470,22 @@ void lcd_cover_background_animate_to_y(int16_t target_y, uint16_t duration_ms) {
     return;
   }
   
-  // 完全禁用动画开始时的日志输出
-  
   // 设置动画标志
   g_animation_in_progress = true;
   
-  // 确保Layer1正确配置
+  // 等待LTDC空闲，确保前面的操作完成
+  while (lcd_ltdc_busy()) {
+    HAL_Delay(1);
+  }
+  
+  // 确保Layer1正确配置，只设置一次
   hlcd_ltdc.Instance = LTDC;
   __HAL_LTDC_LAYER_ENABLE(&hlcd_ltdc, 1);
   HAL_LTDC_SetAlpha(&hlcd_ltdc, 255, 1);
   cover_bg_state.opacity = 255;
+  
+  // 统一使用VSync重载，确保同步
+  __HAL_LTDC_RELOAD_CONFIG(&hlcd_ltdc);
   
   uint32_t start_time = HAL_GetTick();
   uint32_t frame_count = 0;
@@ -1504,23 +1522,30 @@ void lcd_cover_background_animate_to_y(int16_t target_y, uint16_t duration_ms) {
     // 更新位置
     lcd_cover_background_move_to_y(current_y);
     
-    frame_count++;
+    // 每帧后等待LTDC空闲，确保配置生效
+    while (lcd_ltdc_busy()) {
+      HAL_Delay(1);
+    }
     
-    // 动画期间完全禁用帧调试日志
+    // 统一使用VSync重载，确保Layer1和Layer2同步
+    __HAL_LTDC_RELOAD_CONFIG(&hlcd_ltdc);
+    
+    frame_count++;
     
     // 16ms延时，约60fps
     HAL_Delay(16);
   }
   
+  // 等待最后一次更新完成
+  while (lcd_ltdc_busy()) {
+    HAL_Delay(1);
+  }
+  
+  // 动画完成后，使用VSync重载确保最终状态稳定
+  __HAL_LTDC_RELOAD_CONFIG(&hlcd_ltdc);
+  
   // 清除动画标志
   g_animation_in_progress = false;
-  
-  // 动画完成后重新稳定Layer1状态，确保没有闪烁残留
-  HAL_LTDC_SetAlpha(&hlcd_ltdc, 255, 1);  // Layer1完全不透明
-  __HAL_LTDC_LAYER_ENABLE(&hlcd_ltdc, 1); // 确保Layer1启用
-  
-  // 动画完成后强制重载，确保最终位置准确显示且状态稳定
-  __HAL_LTDC_RELOAD_IMMEDIATE_CONFIG(&hlcd_ltdc);
   
   // 动画完成后才输出统计信息
   uint32_t total_time = HAL_GetTick() - start_time;

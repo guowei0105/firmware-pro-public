@@ -724,11 +724,9 @@ async def handle_GetPassphraseState(
     if session_id is None or session_id == b"":
         session_id = storage.cache.start_session()
 
-    import utime
     from apps.bitcoin.get_address import get_address as btc_get_address
 
     try:
-        utime.sleep_ms(500)
         fixed_path = "m/44'/1'/0'/0/0"
         address_msg = messages.GetAddress(
             address_n=paths.parse_path(fixed_path),
