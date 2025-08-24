@@ -524,12 +524,29 @@ class MainScreen(Screen):
                 self.bottom_tips.clear_flag(lv.obj.FLAG.HIDDEN)
                 self.bottom_tips.set_text(_(i18n_keys.BUTTON__PROCESSING))
         else:
-            # 立即显示AppDrawer，无动画
-            self.apps.clear_flag(lv.obj.FLAG.HIDDEN)
-            self.apps.clear_flag(lv.obj.FLAG.GESTURE_BUBBLE)
-            self.apps.visible = True
-            self.apps._showing = False
-            print("MainScreen: Default to AppDrawer view")
+            # Check if device is locked before showing AppDrawer
+            from trezor import config
+            from . import fingerprints
+            
+            if not config.is_unlocked() or not fingerprints.is_unlocked():
+                # Device is locked, keep MainScreen visible without showing AppDrawer
+                if hasattr(self, 'title') and self.title:
+                    self.title.clear_flag(lv.obj.FLAG.HIDDEN)
+                if hasattr(self, 'subtitle') and self.subtitle:
+                    self.subtitle.clear_flag(lv.obj.FLAG.HIDDEN)
+                if hasattr(self, 'up_arrow'):
+                    self.up_arrow.add_flag(lv.obj.FLAG.HIDDEN)
+                if hasattr(self, 'bottom_tips'):
+                    self.bottom_tips.clear_flag(lv.obj.FLAG.HIDDEN)
+                    self.bottom_tips.set_text("")  # Clear processing text
+                print("MainScreen: Device locked, staying in MainScreen view")
+            else:
+                # Device is unlocked, show AppDrawer
+                self.apps.clear_flag(lv.obj.FLAG.HIDDEN)
+                self.apps.clear_flag(lv.obj.FLAG.GESTURE_BUBBLE)
+                self.apps.visible = True
+                self.apps._showing = False
+                print("MainScreen: Default to AppDrawer view")
         
         # 为 MainScreen 添加手势处理
         self.add_event_cb(self.on_main_gesture, lv.EVENT.GESTURE, None)
