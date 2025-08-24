@@ -285,24 +285,70 @@ class ImgGridItem(lv.img):
     ):
         super().__init__(parent)
         self.set_grid_cell(
-            lv.GRID_ALIGN.CENTER, col_num, 1, lv.GRID_ALIGN.CENTER, row_num, 1
+            lv.GRID_ALIGN.CENTER, col_num, 1, lv.GRID_ALIGN.START, row_num, 1
         )
         self.is_internal = is_internal
         self.file_name = file_name
         self.zoom_path = path_dir + file_name
+        # Debug: Log image path for troubleshooting
+        if __debug__:
+            print(f"ImgGridItem: Creating wallpaper preview for {self.zoom_path}")
+        
+        # Set up the container first before loading image
+        self._setup_styles()
+        
+        # Set image source after styles are applied
         self.set_src(self.zoom_path)
-        self.set_style_radius(40, 0)
-        self.set_style_clip_corner(True, 0)
+        
+        # Force a refresh to ensure proper initial rendering
+        self.invalidate()
+        
         self.img_path = self.zoom_path.replace("zoom-", "")
+        
         # Keep A:1:/res/wallpapers/ path for custom wallpapers (don't convert it)
         if __debug__ and "A:1:/res/wallpapers/" in self.img_path:
             print(f"ImgGridItem: Custom wallpaper path (keeping A:1: prefix): {self.img_path}")
+        
+        # Create checkmark overlay
         self.check = lv.img(self)
         self.check.set_src(img_path_other)
         self.check.center()
         self.set_checked(False)
         self.add_flag(lv.obj.FLAG.CLICKABLE)
         self.add_flag(lv.obj.FLAG.EVENT_BUBBLE)
+        
+    def _setup_styles(self):
+        """Set up all styles before loading the image"""
+        # Keep original size as specified
+        # The grid cell is 144x240 so we don't set explicit size to let it use the full cell
+        
+        # Apply radius and clipping with improved rendering
+        # Try smaller radius to reduce edge artifacts
+        self.set_style_radius(36, 0)  # Slightly smaller radius 
+        self.set_style_clip_corner(True, 0)
+        
+        # Try alternative approaches to reduce jagged edges
+        self.set_style_pad_all(1, 0)  # Small padding to push content away from edges
+        
+        # Add a subtle border to smooth edges (optional - can be removed if not helpful)
+        self.set_style_border_width(1, 0)
+        self.set_style_border_color(lv.color_hex(0x333333), 0)  # Dark gray border
+        self.set_style_border_opa(lv.OPA._50, 0)  # Semi-transparent
+        
+        # Set background to match potential edge pixels
+        self.set_style_bg_opa(lv.OPA.COVER, 0)
+        self.set_style_bg_color(lv.color_hex(0x000000), 0)  # Black background
+        
+        # Image rendering optimizations
+        self.set_style_img_opa(lv.OPA.COVER, 0)
+        
+        # Try to use smoother rendering if available
+        try:
+            # Some LVGL builds support these for smoother rendering
+            if hasattr(self, 'set_style_transform_angle'):
+                self.set_style_transform_angle(0, 0)  # Ensure no rotation artifacts
+        except (AttributeError, TypeError):
+            pass
 
     def set_checked(self, checked: bool):
         if checked:

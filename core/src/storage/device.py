@@ -1,10 +1,11 @@
 from micropython import const
 from typing import TYPE_CHECKING
 from ubinascii import hexlify
+import re
 
 import storage.cache
 from storage import common
-from trezor import config, utils
+from trezor import config, utils, io
 
 if TYPE_CHECKING:
     from trezor.enums import BackupType
@@ -993,18 +994,42 @@ def set_homescreen(full_path: str) -> None:
     _HOMESCREEN_VALUE = full_path
 
 
-def get_lockscreen() -> str | None:
+def get_appdrawer_background() -> str | None:
     global _LOCKSCREEN_VALUE
 
     if _LOCKSCREEN_VALUE is None:
         lockscreen = common.get(_NAMESPACE, _LOCKSCREEN, public=True)
-        _LOCKSCREEN_VALUE = (
-            lockscreen.decode() if lockscreen else utils.get_default_wallpaper()
-        )
+        if lockscreen:
+            _LOCKSCREEN_VALUE = lockscreen.decode()
+        else:
+            # If appdrawer background is empty, check homescreen value
+            homescreen = get_homescreen()
+            if homescreen:
+                # Check if homescreen starts with "wallpaper-" followed by a digit
+                match = re.match(r'^(.*wallpaper-)(\d+)(\.jpg)?$', homescreen)
+                if match and 1 <= int(match.group(2)) <= 6:
+                    # Generate corresponding blur wallpaper path
+                    prefix = match.group(1)
+                    number = match.group(2)
+                    blur_path = f"{prefix}{number}-blur.jpg"
+                    
+                    # Check if the blur file exists
+                    try:
+                        # Remove "A:" prefix if present for fatfs.stat
+                        check_path = blur_path[2:] if blur_path.startswith("A:") else blur_path
+                        io.fatfs.stat(check_path)
+                        _LOCKSCREEN_VALUE = blur_path
+                    except (io.fatfs.FatFSError, OSError):
+                        # File doesn't exist, use black background
+                        _LOCKSCREEN_VALUE = ""  # Empty string will result in black background
+                else:
+                    _LOCKSCREEN_VALUE = utils.get_default_wallpaper()
+            else:
+                _LOCKSCREEN_VALUE = utils.get_default_wallpaper()
     return _LOCKSCREEN_VALUE
 
 
-def set_lockscreen(full_path: str) -> None:
+def set_appdrawer_background(full_path: str) -> None:
     if len(full_path.encode("utf-8")) > LOCKSCREEN_PATH_MAXSIZE:
         raise ValueError  # lockscreen path too large
     global _LOCKSCREEN_VALUE
