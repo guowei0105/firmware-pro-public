@@ -446,6 +446,7 @@ class MessageType(IntEnum):
     SEMessageSignature = 10013
     ResourceUpload = 10018
     ZoomRequest = 10019
+    BlurRequest = 10032
     ResourceRequest = 10020
     ResourceAck = 10021
     ResourceUpdate = 10022
@@ -5370,6 +5371,7 @@ class ResourceUpload(protobuf.MessageType):
         4: protobuf.Field("nft_meta_data", "bytes", repeated=False, required=False),
         5: protobuf.Field("zoom_data_length", "uint32", repeated=False, required=True),
         6: protobuf.Field("file_name_no_ext", "string", repeated=False, required=False),
+        7: protobuf.Field("blur_data_length", "uint32", repeated=False, required=False),
     }
 
     def __init__(
@@ -5381,6 +5383,7 @@ class ResourceUpload(protobuf.MessageType):
         zoom_data_length: "int",
         nft_meta_data: Optional["bytes"] = None,
         file_name_no_ext: Optional["str"] = None,
+        blur_data_length: Optional["int"] = None,
     ) -> None:
         self.extension = extension
         self.data_length = data_length
@@ -5388,10 +5391,28 @@ class ResourceUpload(protobuf.MessageType):
         self.zoom_data_length = zoom_data_length
         self.nft_meta_data = nft_meta_data
         self.file_name_no_ext = file_name_no_ext
+        self.blur_data_length = blur_data_length
 
 
 class ZoomRequest(protobuf.MessageType):
     MESSAGE_WIRE_TYPE = 10019
+    FIELDS = {
+        1: protobuf.Field("offset", "uint32", repeated=False, required=False),
+        2: protobuf.Field("data_length", "uint32", repeated=False, required=True),
+    }
+
+    def __init__(
+        self,
+        *,
+        data_length: "int",
+        offset: Optional["int"] = None,
+    ) -> None:
+        self.data_length = data_length
+        self.offset = offset
+
+
+class BlurRequest(protobuf.MessageType):
+    MESSAGE_WIRE_TYPE = 10032
     FIELDS = {
         1: protobuf.Field("offset", "uint32", repeated=False, required=False),
         2: protobuf.Field("data_length", "uint32", repeated=False, required=True),

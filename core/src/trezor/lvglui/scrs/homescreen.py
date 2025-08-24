@@ -2334,6 +2334,7 @@ class NftGallery(Screen):
                         file_name,
                         path_dir,
                         is_internal=False,
+                        style_type="nft",  # Use NFT style - no clipping, full image display
                     )
                     self.nfts.append(current_nft)
 
@@ -4872,8 +4873,8 @@ class DisplayScreen(AnimScreen):
                 # Go directly to auto-lock specific settings
                 AutoLockSetting(self)
             elif target == self.shutdown:
-                # Go directly to shutdown specific settings
-                ShutdownSetting(self)
+                # Go directly to shutdown time selection
+                AutoShutDownSetting(self)
             # Note: model_name_bt_id switch changes are handled by on_switch_change method
 
 
@@ -4952,7 +4953,7 @@ class AppdrawerBackgroundSetting(AnimScreen):
             targets.append(self.container)
         return targets
 
-    def __init__(self, prev_scr=None, selected_wallpaper=None):
+    def __init__(self, prev_scr=None, selected_wallpaper=None, return_from_wallpaper=False):
         if not hasattr(self, "_init"):
             self._init = True
         else:
@@ -4975,6 +4976,16 @@ class AppdrawerBackgroundSetting(AnimScreen):
             nav_back=True,
             rti_path="A:/res/checkmark.png"
         )
+        
+        # Handle return animation from wallpaper selection
+        if return_from_wallpaper:
+            # Trigger return animation
+            from .common import apply_animations
+            try:
+                apply_animations(self.collect_animation_targets(), back=True)
+            except Exception as e:
+                if __debug__:
+                    print(f"[AppdrawerBackgroundSetting] Return animation error: {e}")
         
         if __debug__:
             print("LockScreenSetting initialized")
@@ -5119,7 +5130,7 @@ class AppdrawerBackgroundSetting(AnimScreen):
 
         # Add event handler for button_icon: click to go to HomeScreenSetting
         def _on_button_icon_clicked(e):
-            self.load_screen(WallperChange(self), destroy_self=True)
+            WallperChange(self)
         self.button_icon.add_flag(lv.obj.FLAG.CLICKABLE)
         self.button_icon.add_event_cb(_on_button_icon_clicked, lv.EVENT.CLICKED, None)
 
@@ -5252,21 +5263,39 @@ class AppdrawerBackgroundSetting(AnimScreen):
 class WallperChange(AnimScreen):
     def collect_animation_targets(self) -> list:
         targets = []
-        if hasattr(self, "container") and self.container:
-            targets.append(self.container)
-        if hasattr(self, "wps"):
-            for wp in self.wps:
-                targets.append(wp)
+        # if hasattr(self, "container") and self.container:
+        #     targets.append(self.container)
+        # if hasattr(self, "wps"):
+        #     for wp in self.wps:
+        #         targets.append(wp)
         return targets
 
     def __init__(self, prev_scr=None):
+        if __debug__:
+            print(f"[WallperChange.__init__] Called with prev_scr: {prev_scr}")
+            print(f"[WallperChange.__init__] Has _init attribute: {hasattr(self, '_init')}")
         if not hasattr(self, "_init"):
+            if __debug__:
+                print("[WallperChange.__init__] First time initialization")
             self._init = True
             super().__init__(
                 prev_scr=prev_scr, title=_(i18n_keys.TITLE__CHANGE_WALLPAPER), nav_back=True
             )
         else:
-            self.container.delete()
+            if __debug__:
+                print("[WallperChange.__init__] Already initialized - refreshing container")
+                print(f"[WallperChange.__init__] Has container: {hasattr(self, 'container')}")
+            # Already initialized - refresh the container and recreate content
+            if hasattr(self, 'container'):
+                if __debug__:
+                    print("[WallperChange.__init__] Deleting existing container")
+                self.container.delete()
+            # Update prev_scr if provided
+            if prev_scr is not None:
+                self.prev_scr = prev_scr
+                if __debug__:
+                    print(f"[WallperChange.__init__] Updated prev_scr to: {prev_scr}")
+            # Don't return early - continue with full initialization to recreate content
         
         # Initialize edit mode state
         self.edit_mode = False
@@ -5276,92 +5305,32 @@ class WallperChange(AnimScreen):
         file_name_list = []
         if not utils.EMULATOR:
             if __debug__:
-                print("WallpaperChange: Scanning for custom wallpapers in 1:/res/wallpapers")
+                print("[WallpaperChange] Starting wallpaper scan: 1:/res/wallpapers")
+                # Test io.fatfs availability
+                print(f"[WallpaperChange] io module: {io}")
+                print(f"[WallpaperChange] io.fatfs available: {hasattr(io, 'fatfs')}")
             try:
-                file_count = 0
-                zoom_count = 0
-                all_files = []
-                
+                scan_count = 0
                 for size, _attrs, name in io.fatfs.listdir("1:/res/wallpapers"):
-                    file_count += 1
-                    all_files.append(name + " (size:" + str(size) + ")")
-                    
+                    scan_count += 1
                     if __debug__:
-                        print("WallpaperChange: Found file:", name, "size:", size)
-                        print(f"WallpaperChange: File analysis - starts with zoom-: {name.startswith('zoom-')}, starts with wp-: {name.startswith('wp-')}, ends with blur: {name.endswith('-blur.jpeg') or name.endswith('-blur.jpg')}")
-                    
-                    if size > 0 and (name.startswith("zoom-") or (name.startswith("wp-") and not name.endswith("-blur.jpeg") and not name.endswith("-blur.jpg"))):
-                        zoom_count += 1
+                        print(f"[WallpaperChange] Found file: {name}, size: {size}")
+                    # Optimized scanning - only collect valid wallpapers
+                    if size > 0 and name.startswith("wp-") and not name.endswith("-blur.jpeg") and not name.endswith("-blur.jpg"):
                         file_name_list.append(name)
                         if __debug__:
-                            if name.startswith("zoom-"):
-                                print("WallpaperChange: Added zoom file:", name)
-                            else:
-                                print("WallpaperChange: Added wp file:", name)
-                    elif __debug__ and name.startswith("wp-"):
-                        print(f"WallpaperChange: Skipped wp file (likely blur version): {name}")
-                
+                            print(f"[WallpaperChange] Added to list: {name}")
                 if __debug__:
-                    print("WallpaperChange: Directory scan results:")
-                    print("  - Total files found:", file_count)
-                    print("  - Zoom files added:", zoom_count)
-                    print("  - All files:", all_files)
-                    
+                    print(f"[WallpaperChange] Scan completed. Found {scan_count} files total, {len(file_name_list)} valid wallpapers")
+                        
             except Exception as e:
-                if __debug__:
-                    print("WallpaperChange: Error accessing 1:/res/wallpapers:", e)
-                    print("WallpaperChange: Exception type:", type(e))
-            
-            # Also check alternative paths and file patterns
-            if __debug__ and len(file_name_list) == 0:
-                print("WallpaperChange: No zoom files found, checking alternative locations and patterns...")
-                
-                # Check other common paths
-                for alt_path in ["0:/res/wallpapers", "A:/res/wallpapers", "1:/res", "A:/res"]:
-                    try:
-                        alt_files = list(io.fatfs.listdir(alt_path))
-                        if len(alt_files) > 0:
-                            print("WallpaperChange: Found", len(alt_files), "files in", alt_path, ":", alt_files)
-                            # Check if any files match wallpaper patterns
-                            wallpaper_files = []
-                            for f in alt_files:
-                                if 'wallpaper' in f.lower() or 'zoom' in f.lower() or '.jpg' in f.lower() or '.png' in f.lower():
-                                    wallpaper_files.append(f)
-                            if wallpaper_files:
-                                print("WallpaperChange: Potential wallpaper files in", alt_path, ":", wallpaper_files)
-                    except:
-                        pass
-                
-                # Also try scanning 1:/res/wallpapers with different patterns
-                try:
-                    all_wallpaper_files = list(io.fatfs.listdir("1:/res/wallpapers"))
-                    print("WallpaperChange: All files in 1:/res/wallpapers:", all_wallpaper_files)
-                    if all_wallpaper_files:
-                        # Try different naming patterns
-                        zoom_patterns = ['zoom', 'wallpaper', '.jpg', '.png']
-                        for pattern in zoom_patterns:
-                            matching = []
-                            for f in all_wallpaper_files:
-                                if pattern in f.lower():
-                                    matching.append(f)
-                            if matching:
-                                print("WallpaperChange: Files matching", pattern, ":", matching)
-                except:
-                    pass
-        else:
-            if __debug__:
-                print("WallpaperChange: Emulator mode - skipping custom wallpaper scan")
+                if __debug__:  # Enable error logging for debugging
+                    print(f"[WallpaperChange] Error accessing wallpapers: {e}")
+                    print(f"[WallpaperChange] Trying to scan: 1:/res/wallpapers")
         
-        if __debug__:
-            print("WallpaperChange: Total custom wallpapers found:", len(file_name_list))
-            print("WallpaperChange: Custom wallpaper list:", file_name_list)
-            print("WallpaperChange: Current wp_cnts:", storage_device.get_wp_cnts())
-            
-            # If we found custom wallpapers but wp_cnts is 0, update the count to prevent deletion
-            if len(file_name_list) > 0 and storage_device.get_wp_cnts() == 0:
-                storage_device.increase_wp_cnts()
-                if __debug__:
-                    print("WallpaperChange: Updated wp_cnts to prevent file deletion:", storage_device.get_wp_cnts())
+        # If we found custom wallpapers but wp_cnts is 0, update the count to prevent deletion
+        if len(file_name_list) > 0 and storage_device.get_wp_cnts() == 0:
+            storage_device.increase_wp_cnts()
         
         def safe_extract_timestamp(name):
             try:
@@ -5392,9 +5361,11 @@ class WallperChange(AnimScreen):
         row_dsc = [60]  # Custom header
         if custom_rows > 0:
             row_dsc.extend([GRID_CELL_SIZE_ROWS] * custom_rows)  # Custom images
+            # When custom wallpapers exist, increase spacing to 32px for Collection section
+            row_dsc.append(92)  # Pro header with increased spacing (60 + 32 extra)
         else:
             row_dsc.append(178)  # Empty state text container (with 56px spacing to Collection)
-        row_dsc.append(60)  # Pro header  
+            row_dsc.append(60)  # Pro header with normal spacing when no custom wallpapers
         row_dsc.extend([GRID_CELL_SIZE_ROWS] * pro_rows)  # Pro images
         row_dsc.append(lv.GRID_TEMPLATE.LAST)
         
@@ -5464,16 +5435,38 @@ class WallperChange(AnimScreen):
         self.wps = []
         self.custom_wps = []  # Track custom wallpapers separately
         if file_name_list:
+            if __debug__:
+                print(f"[WallperChange] Creating {len(file_name_list)} custom wallpapers")
             for i, file_name in enumerate(file_name_list):
                 path_dir = "A:1:/res/wallpapers/"
+                # Use zoom- prefix like Collection wallpapers
+                zoom_file_name = f"zoom-{file_name}"
                 current_wp = ImgGridItem(
                     self.container,
                     i % 3,
                     current_row + (i // 3),
-                    file_name,
+                    zoom_file_name,  # Use zoom- prefix for thumbnails
                     path_dir,
-                    is_internal=True,
+                    is_internal=True,  # Try setting back to True like Collection wallpapers
                 )
+                
+                # Success: Using zoom- prefix files works correctly!
+                if __debug__:
+                    print(f"[WallperChange] Custom wallpaper created:")
+                    print(f"  - LVGL path: {current_wp.zoom_path}")
+                    print(f"  - Image path: {current_wp.img_path}")
+                    # Test both path formats
+                    print(f"[WallperChange] Testing LVGL path access: {current_wp.zoom_path}")
+                    try:
+                        # Test the LVGL path (should work now)
+                        if current_wp.zoom_path.startswith('A:1:/'):
+                            lvgl_file_path = current_wp.zoom_path[2:]  # Remove "A:" prefix for file system access
+                        else:
+                            lvgl_file_path = current_wp.zoom_path
+                        stat_result = io.fatfs.stat(lvgl_file_path)
+                        print(f"[WallperChange] LVGL path OK, size: {stat_result[6] if len(stat_result) > 6 else 'unknown'}")
+                    except Exception as e:
+                        print(f"[WallperChange] LVGL path access error: {e}")
                 self.wps.append(current_wp)
                 self.custom_wps.append(current_wp)
                 
@@ -5507,9 +5500,7 @@ class WallperChange(AnimScreen):
                 # Store remove icon reference in the wallpaper object
                 current_wp.remove_icon = remove_icon
                 
-                if __debug__:
-                    print(f"WallperChange: Added custom wp {i}: {current_wp}, img_path: {current_wp.img_path}")
-                    print(f"WallperChange: Created remove_icon {remove_icon} for wp {i}")
+                # Debug output disabled for performance when many wallpapers are present
             current_row += custom_rows
         else:
             # No custom wallpapers - show instructional text
@@ -5580,8 +5571,7 @@ class WallperChange(AnimScreen):
                 is_internal=True,
             )
             self.wps.append(current_wp)
-            if __debug__:
-                print(f"WallperChange: Added pro wp {i}: {current_wp}, img_path: {current_wp.img_path}")
+            # Debug output disabled for performance
             
         self.container.add_event_cb(self.on_click, lv.EVENT.CLICKED, None)
         
@@ -5610,15 +5600,16 @@ class WallperChange(AnimScreen):
 
     def _refresh_previews_immediate(self):
         """Force refresh all preview images to fix rendering artifacts"""
-        if __debug__:
-            print("WallperChange: Refreshing all preview images to fix initial rendering")
+        # Performance: Minimal logging during refresh
         
         if hasattr(self, 'wps'):
             for wp in self.wps:
                 try:
+                    # Simple invalidate without risky source reloading
                     wp.invalidate()
-                except:
-                    pass
+                except Exception as e:
+                    if __debug__:
+                        print(f"[WallperChange] Error refreshing wp: {e}")
         
         # Also refresh the container
         if hasattr(self, 'container'):
@@ -5630,61 +5621,37 @@ class WallperChange(AnimScreen):
     def on_click(self, event_obj):
         code = event_obj.code
         target = event_obj.get_target()
-        if __debug__:
-            print(f"WallperChange: on_click called, code: {code}, target: {target}")
-            print(f"WallperChange: prev_scr: {self.prev_scr}")
-            print(f"WallperChange: prev_scr.__class__: {self.prev_scr.__class__ if hasattr(self.prev_scr, '__class__') else 'No class'}")
-            print(f"WallperChange: prev_scr.__class__.__name__: {self.prev_scr.__class__.__name__ if hasattr(self.prev_scr, '__class__') else 'No name'}")
+        # Debug output disabled for click performance
         if code == lv.EVENT.CLICKED:
             if utils.lcd_resume():
                 return
                 
             # Check if clicked target is a remove icon
             if self.edit_mode and hasattr(self, 'custom_wps'):
-                if __debug__:
-                    print(f"WallperChange: Edit mode active, checking remove icons. Target: {target}")
                 for i, wp in enumerate(self.custom_wps):
                     if hasattr(wp, 'remove_icon'):
-                        if __debug__:
-                            print(f"WallperChange: Checking wp[{i}] remove_icon: {wp.remove_icon}, target: {target}, match: {target == wp.remove_icon}")
                         # Check if target is the button or its child label
                         if target == wp.remove_icon or (hasattr(wp.remove_icon, 'get_child') and target == wp.remove_icon.get_child(0)):
-                            if __debug__:
-                                print(f"WallperChange: Remove icon clicked for {wp.img_path}")
                             self.on_remove_icon_clicked(event_obj, wp)
                             return
-                    else:
-                        if __debug__:
-                            print(f"WallperChange: wp[{i}] has no remove_icon attribute")
             
-            if __debug__:
-                print(f"WallperChange: Checking if target in wps, target: {target}")
-                print(f"WallperChange: wps length: {len(self.wps) if hasattr(self, 'wps') else 'No wps'}")
-                if hasattr(self, 'wps'):
-                    for i, wp in enumerate(self.wps):
-                        print(f"WallperChange: wps[{i}]: {wp}")
             # Skip wallpaper selection if in edit mode
             if self.edit_mode:
                 return
                 
-            if target not in self.wps:
-                if __debug__:
-                    print("WallperChange: target not in wps, returning")
+            # Check if target is a wallpaper
+            if not hasattr(self, 'wps') or target not in self.wps:
                 return
             for wp in self.wps:
                 if target == wp:
-                    if __debug__:
-                        print(f"WallperChange: Found matching wp, img_path: {wp.img_path}")
-                        print(f"WallperChange: prev_scr type: {self.prev_scr.__class__.__name__ if hasattr(self.prev_scr, '__class__') else 'Unknown'}")
+                    # Performance: Skip debug output for wallpaper selection
                     # Navigate back to the original setting screen and update wallpaper
                     if hasattr(self.prev_scr, '__class__'):
                         if self.prev_scr.__class__.__name__ == "HomeScreenSetting":
-                            if __debug__:
-                                print("WallperChange: Navigating to HomeScreenSetting")
+                            # Performance: Skip navigation debug
                             # Preserve blur state when switching wallpapers
                             current_blur_state = getattr(self.prev_scr, 'is_blur_active', False)
-                            if __debug__:
-                                print(f"WallperChange: Preserving blur state: {current_blur_state}")
+                            # Performance: Skip blur state debug
                             # Check if we're selecting the same wallpaper and can reuse the existing screen
                             current_wallpaper = getattr(self.prev_scr, 'current_wallpaper_path', '')
                             selected_wallpaper_base = wp.img_path.replace('zoom-', '').replace('A:/res/', '').replace('A:1:/res/', '')
@@ -5694,58 +5661,26 @@ class WallperChange(AnimScreen):
                                 print(f"WallperChange: Comparing wallpapers - selected_base: {selected_wallpaper_base}, current_base: {current_wallpaper_base}")
                             
                             if selected_wallpaper_base == current_wallpaper_base:
-                                # Same wallpaper selected, just go back to existing screen
+                                # Same wallpaper selected, just close WallperChange without changing anything
                                 if __debug__:
-                                    print("WallperChange: Same wallpaper selected, returning to existing screen")
-                                    print(f"WallperChange: Current prev_scr: {self.prev_scr}")
-                                    print(f"WallperChange: prev_scr type: {type(self.prev_scr)}")
-                                    print(f"WallperChange: prev_scr class name: {self.prev_scr.__class__.__name__ if hasattr(self.prev_scr, '__class__') else 'Unknown'}")
-                                    if hasattr(self.prev_scr, 'prev_scr'):
-                                        print(f"WallperChange: HomeScreenSetting.prev_scr is: {self.prev_scr.prev_scr}")
-                                        print(f"WallperChange: HomeScreenSetting.prev_scr type: {type(self.prev_scr.prev_scr)}")
-                                    else:
-                                        print("WallperChange: prev_scr has no prev_scr attribute")
-                                        
-                                # Make sure the navigation chain is preserved
-                                # The issue might be that prev_scr gets corrupted during navigation
+                                    print("WallperChange: Same wallpaper selected, closing wallpaper selection")
+                                
+                                # Simply load the previous screen directly using LVGL
                                 try:
-                                    # Use direct LVGL loading instead of load_screen with destroy_self=True
                                     lv.scr_load(self.prev_scr)
-                                    # Clean up singleton instance properly
-                                    try:
+                                    # Clean up WallperChange singleton
+                                    if hasattr(self.__class__, '_instance'):
                                         del self.__class__._instance
-                                    except AttributeError:
-                                        pass
                                     self.del_delayed(100)
                                 except Exception as nav_error:
                                     if __debug__:
-                                        print(f"WallperChange: Failed to navigate back to same screen: {nav_error}")
-                                    # Fallback: Try to create a new HomeScreenSetting with correct navigation
-                                    try:
-                                        # Get the original parent screen (should be WallpaperScreen)
-                                        original_parent = getattr(self.prev_scr, 'prev_scr', None)
-                                        if original_parent:
-                                            new_screen = HomeScreenSetting(original_parent)
-                                            lv.scr_load(new_screen)
-                                            # Clean up singleton instance properly
-                                            try:
-                                                del self.__class__._instance
-                                            except AttributeError:
-                                                pass
-                                            self.del_delayed(100)
-                                        else:
-                                            # Final fallback
-                                            fallback_screen = WallpaperScreen()
-                                            lv.scr_load(fallback_screen)
-                                            # Clean up singleton instance properly
-                                            try:
-                                                del self.__class__._instance
-                                            except AttributeError:
-                                                pass
-                                            self.del_delayed(100)
-                                    except Exception as fallback_error:
-                                        if __debug__:
-                                            print(f"WallperChange: All fallbacks failed: {fallback_error}")
+                                        print(f"WallperChange: Direct navigation failed: {nav_error}")
+                                    # Simple fallback to WallpaperScreen
+                                    fallback_screen = WallpaperScreen()
+                                    lv.scr_load(fallback_screen)
+                                    if hasattr(self.__class__, '_instance'):
+                                        del self.__class__._instance
+                                    self.del_delayed(100)
                             else:
                                 # Different wallpaper selected, create new screen
                                 if __debug__:
@@ -5754,26 +5689,53 @@ class WallperChange(AnimScreen):
                                     print(f"  - prev_scr: {self.prev_scr.prev_scr}")
                                     print(f"  - selected_wallpaper: {wp.img_path}")
                                     print(f"  - preserve_blur_state: {current_blur_state}")
-                                new_screen = HomeScreenSetting(self.prev_scr.prev_scr, selected_wallpaper=wp.img_path, preserve_blur_state=current_blur_state)
-                                lv.scr_load(new_screen)
-                                # Clean up singleton instance properly
+                                # Create new HomeScreenSetting with the selected wallpaper
                                 try:
-                                    del self.__class__._instance
-                                except AttributeError:
-                                    pass
-                                self.del_delayed(100)
+                                    # Reset HomeScreenSetting singleton if it exists
+                                    if hasattr(HomeScreenSetting, '_instance'):
+                                        del HomeScreenSetting._instance
+                                    
+                                    new_screen = HomeScreenSetting(self.prev_scr.prev_scr, selected_wallpaper=wp.img_path, preserve_blur_state=current_blur_state, return_from_wallpaper=True)
+                                    lv.scr_load(new_screen)
+                                    
+                                    # Clean up WallperChange singleton
+                                    if hasattr(self.__class__, '_instance'):
+                                        del self.__class__._instance
+                                    self.del_delayed(100)
+                                except Exception as e:
+                                    if __debug__:
+                                        print(f"WallperChange: Failed to create HomeScreenSetting: {e}")
+                                    # Fallback to WallpaperScreen
+                                    fallback_screen = WallpaperScreen()
+                                    lv.scr_load(fallback_screen)
+                                    if hasattr(self.__class__, '_instance'):
+                                        del self.__class__._instance
+                                    self.del_delayed(100)
                         else:  # AppdrawerBackgroundSetting
                             if __debug__:
                                 print("WallperChange: Navigating to AppdrawerBackgroundSetting")
                                 print(f"WallperChange: Passing img_path to AppdrawerBackgroundSetting: {wp.img_path}")
-                            new_screen = AppdrawerBackgroundSetting(self.prev_scr.prev_scr, selected_wallpaper=wp.img_path)
-                            lv.scr_load(new_screen)
-                            # Clean up singleton instance properly
                             try:
-                                del self.__class__._instance
-                            except AttributeError:
-                                pass
-                            self.del_delayed(100)
+                                # Reset AppdrawerBackgroundSetting singleton if it exists
+                                if hasattr(AppdrawerBackgroundSetting, '_instance'):
+                                    del AppdrawerBackgroundSetting._instance
+                                
+                                new_screen = AppdrawerBackgroundSetting(self.prev_scr.prev_scr, selected_wallpaper=wp.img_path, return_from_wallpaper=True)
+                                lv.scr_load(new_screen)
+                                
+                                # Clean up WallperChange singleton
+                                if hasattr(self.__class__, '_instance'):
+                                    del self.__class__._instance
+                                self.del_delayed(100)
+                            except Exception as e:
+                                if __debug__:
+                                    print(f"WallperChange: Failed to create AppdrawerBackgroundSetting: {e}")
+                                # Fallback to WallpaperScreen
+                                fallback_screen = WallpaperScreen()
+                                lv.scr_load(fallback_screen)
+                                if hasattr(self.__class__, '_instance'):
+                                    del self.__class__._instance
+                                self.del_delayed(100)
 
     def on_select_clicked(self, event_obj):
         """Handle select button click - open wallpaper selection"""
@@ -5855,8 +5817,7 @@ class WallperChange(AnimScreen):
     
     def on_remove_icon_clicked(self, event_obj, wallpaper):
         """Handle remove icon click"""
-        if __debug__:
-            print(f"WallpaperChange: Remove icon clicked for {wallpaper.img_path}")
+        # Performance: Skip debug output for remove icon
             
         # Mark wallpaper for deletion and hide it immediately
         self.marked_for_deletion.add(wallpaper)
@@ -5868,9 +5829,7 @@ class WallperChange(AnimScreen):
         if hasattr(wallpaper, 'remove_icon'):
             wallpaper.remove_icon.add_flag(lv.obj.FLAG.HIDDEN)
         
-        if __debug__:
-            print(f"WallpaperChange: Marked {wallpaper.img_path} for deletion, total marked: {len(self.marked_for_deletion)}")
-            print(f"WallpaperChange: Wallpaper {wallpaper.img_path} hidden immediately")
+        # Performance: Skip debug output for deletion marking
     
     def delete_marked_files(self):
         """Delete files marked for deletion"""
@@ -5985,82 +5944,20 @@ class WallperChange(AnimScreen):
                     if __debug__:
                         print("WallperChange: Back button clicked - navigating to previous screen")
                     if self.prev_scr is not None:
-                        # Get the class name for creating a proper fallback
-                        prev_class_name = self.prev_scr.__class__.__name__ if hasattr(self.prev_scr, '__class__') else 'Unknown'
-                        
-                        # Use a different approach - avoid destroy_self=True to prevent singleton issues
+                        # Simplified navigation logic
                         try:
+                            self.load_screen(self.prev_scr, destroy_self=True)
+                        except Exception as e:
                             if __debug__:
-                                print(f"WallperChange: Attempting safe navigation to {prev_class_name}")
-                            
-                            # Instead of using load_screen with destroy_self=True, 
-                            # use direct screen loading without singleton conflicts
-                            if prev_class_name == "HomeScreenSetting":
-                                # Get the grandparent (should be WallpaperScreen)
-                                grandparent = getattr(self.prev_scr, 'prev_scr', None)
-                                if __debug__:
-                                    print(f"WallperChange: Creating new HomeScreenSetting with grandparent: {grandparent}")
-                                new_screen = HomeScreenSetting(grandparent)
-                                # Use direct LVGL screen loading instead of load_screen
-                                lv.scr_load(new_screen)
-                                # Clean up this screen manually with singleton cleanup
-                                try:
-                                    del self.__class__._instance
-                                except AttributeError:
-                                    pass
-                                self.del_delayed(100)
-                            elif prev_class_name == "AppdrawerBackgroundSetting":
-                                # Get the grandparent (should be WallpaperScreen) 
-                                grandparent = getattr(self.prev_scr, 'prev_scr', None)
-                                if __debug__:
-                                    print(f"WallperChange: Creating new AppdrawerBackgroundSetting with grandparent: {grandparent}")
-                                new_screen = AppdrawerBackgroundSetting(grandparent)
-                                # Use direct LVGL screen loading instead of load_screen
-                                lv.scr_load(new_screen)
-                                # Clean up this screen manually with singleton cleanup
-                                try:
-                                    del self.__class__._instance
-                                except AttributeError:
-                                    pass
-                                self.del_delayed(100)
-                            else:
-                                # Unknown previous screen type, use WallpaperScreen as safe fallback
-                                if __debug__:
-                                    print("WallperChange: Unknown prev_scr type, using WallpaperScreen as fallback")
+                                print(f"WallperChange: Navigation failed: {e}")
+                            # Create a fresh WallpaperScreen as fallback
+                            try:
                                 fallback_screen = WallpaperScreen()
                                 lv.scr_load(fallback_screen)
-                                # Clean up this screen manually with singleton cleanup
-                                try:
-                                    del self.__class__._instance
-                                except AttributeError:
-                                    pass
                                 self.del_delayed(100)
-                            return
-                        except Exception as fallback_error:
-                            if __debug__:
-                                print(f"WallperChange: Safe navigation failed: {fallback_error}")
-                        
-                        # Final fallback: just try to go back to WallpaperScreen using direct LVGL
-                        try:
-                            if __debug__:
-                                print("WallperChange: Using final fallback - direct WallpaperScreen creation")
-                            fallback_screen = WallpaperScreen()
-                            lv.scr_load(fallback_screen)
-                            # Clean up this screen manually with singleton cleanup
-                            try:
-                                del self.__class__._instance
-                            except AttributeError:
-                                pass
-                            self.del_delayed(100)
-                        except Exception as final_error:
-                            if __debug__:
-                                print(f"WallperChange: All fallbacks failed: {final_error}")
-                            # Last resort: just destroy this screen with singleton cleanup
-                            try:
-                                del self.__class__._instance
-                            except AttributeError:
-                                pass
-                            self.del_delayed(100)
+                            except Exception as fallback_e:
+                                if __debug__:
+                                    print(f"WallperChange: Fallback failed: {fallback_e}")
                     return
                 elif hasattr(self, "rti_btn") and target == self.rti_btn:
                     self.on_click_ext(target)
@@ -6137,8 +6034,8 @@ class ShutdownSetting(AnimScreen):
             if utils.lcd_resume():
                 return
             if target == self.auto_shutdown:
-                # Use the original auto-lock setting screen
-                Autolock_and_ShutingDown(self)
+                # Use the direct auto-shutdown setting screen
+                AutoShutDownSetting(self)
 
 
 def get_autolock_delay_str() -> str:
@@ -6785,6 +6682,10 @@ class AutoShutDownSetting(AnimScreen):
         super().__init__(
             prev_scr=prev_scr, title=_(i18n_keys.TITLE__SHUTDOWN), nav_back=True
         )
+        
+        # Get current shutdown delay and format it
+        cur_delay_ms = storage_device.get_autoshutdown_delay_ms()
+        cur_shutdown_str = get_autoshutdown_delay_str()
 
         self.container = ContainerFlexCol(self.content_area, self.title, padding_row=2)
         self.setting_items = [1, 2, 5, 10, "Never", None]
@@ -6810,7 +6711,7 @@ class AutoShutDownSetting(AnimScreen):
             #     StyleWrapper().text_font(font_GeistRegular30), 0
             # )
             self.btns[index].add_check_img()
-            if item == Autolock_and_ShutingDown.cur_auto_shutdown:
+            if item == cur_shutdown_str:
                 has_custom = False
                 self.btns[index].set_checked()
                 self.checked_index = index
@@ -6819,7 +6720,7 @@ class AutoShutDownSetting(AnimScreen):
             self.custom = storage_device.get_autoshutdown_delay_ms()
             self.btns[-1] = ListItemBtn(
                 self.container,
-                f"{Autolock_and_ShutingDown.cur_auto_shutdown}({_(i18n_keys.OPTION__CUSTOM__INSERT)})",
+                f"{cur_shutdown_str}({_(i18n_keys.OPTION__CUSTOM__INSERT)})",
                 has_next=False,
                 has_bgcolor=False,
             )
@@ -6855,7 +6756,7 @@ class AutoShutDownSetting(AnimScreen):
         else:
             self.tips.set_text(
                 _(i18n_keys.CONTENT__SETTINGS_GENERAL_SHUTDOWN_ON_HINT).format(
-                    item_text or Autolock_and_ShutingDown.cur_auto_shutdown[:1]
+                    item_text
                 )
             )
 
@@ -7496,7 +7397,7 @@ class HomeScreenSetting(AnimScreen):
             targets.append(self.container)
         return targets
 
-    def __init__(self, prev_scr=None, selected_wallpaper=None, preserve_blur_state=None):
+    def __init__(self, prev_scr=None, selected_wallpaper=None, preserve_blur_state=None, return_from_wallpaper=False):
         if __debug__:
             print(f"[HomeScreenSetting.__init__] called, prev_scr={prev_scr}, selected_wallpaper={selected_wallpaper}, preserve_blur_state={preserve_blur_state}")
             print(f"[HomeScreenSetting.__init__] Current stored homescreen: {storage_device.get_homescreen()}")
@@ -7567,6 +7468,16 @@ class HomeScreenSetting(AnimScreen):
             nav_back=True,
             rti_path="A:/res/checkmark.png"
         )
+        
+        # Handle return animation from wallpaper selection
+        if return_from_wallpaper:
+            # Trigger return animation
+            from .common import apply_animations
+            try:
+                apply_animations(self.collect_animation_targets(), back=True)
+            except Exception as e:
+                if __debug__:
+                    print(f"[HomeScreenSetting] Return animation error: {e}")
 
         # Disable scrollbar for this screen
         self.content_area.set_scrollbar_mode(lv.SCROLLBAR_MODE.OFF)
@@ -7864,6 +7775,7 @@ class HomeScreenSetting(AnimScreen):
         """Handle Change button click - navigate to wallpaper selection"""
         if __debug__:
             print("[HomeScreenSetting.on_select_clicked] Change button clicked - navigating to wallpaper selection")
+            print(f"[HomeScreenSetting.on_select_clicked] About to create WallperChange with prev_scr: {self}")
         # Navigate to WallperChange for wallpaper selection - pass self as prev_scr
         WallperChange(prev_scr=self)
 

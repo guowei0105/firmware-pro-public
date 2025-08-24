@@ -5,8 +5,7 @@ from storage import device
 from trezor import io, wire
 from trezor.crypto.hashlib import blake2s
 from trezor.enums import ResourceType
-from trezor.messages import ResourceAck, ResourceRequest, Success, ZoomRequest
-from trezor.ui.layouts import confirm_collect_nft, confirm_set_homescreen
+from trezor.messages import ResourceAck, ResourceRequest, Success, ZoomRequest, BlurRequest
 
 import ujson as json
 import ure as re  # type: ignore[Import "ure" could not be resolved]
@@ -59,6 +58,7 @@ async def upload_res(ctx: wire.Context, msg: ResourceUpload) -> Success:
     res_ext = msg.extension
     res_size = msg.data_length
     res_zoom_size = msg.zoom_data_length
+    res_blur_size = msg.blur_data_length or 0
     if res_ext not in SUPPORTED_EXTS[res_type]:
         raise wire.DataError("Not supported resource extension")
     elif res_size >= SUPPORTED_MAX_RESOURCE_SIZE[res_ext]:
@@ -113,21 +113,18 @@ async def upload_res(ctx: wire.Context, msg: ResourceUpload) -> Success:
                 new_path_zoom = f"1:/res/wallpapers/zoom-{file_name}.{res_ext}"
                 io.fatfs.rename(old_path, new_path)
                 io.fatfs.rename(old_path_zoom, new_path_zoom)
-                await confirm_set_homescreen(ctx, False)
-                device.set_homescreen(f"A:{new_path}")
                 return Success(message="Success")
             else:
                 raise wire.DataError("File already exists")
-    # ask user for confirm
-    if res_type == ResourceType.WallPaper:
-        await confirm_set_homescreen(ctx, replace)
-    elif res_type == ResourceType.Nft:
-        await confirm_collect_nft(ctx, replace)
+    # directly upload without confirmation
 
     config_path = ""
+    blur_path = ""
     if res_type == ResourceType.WallPaper:
         file_full_path = f"1:/res/wallpapers/{file_name}.{res_ext}"
         zoom_path = f"1:/res/wallpapers/zoom-{file_name}.{res_ext}"
+        if res_blur_size > 0:
+            blur_path = f"1:/res/wallpapers/{file_name}-blur.{res_ext}"
     else:
         file_full_path = f"1:/res/nfts/imgs/{file_name}.{res_ext}"
         zoom_path = f"1:/res/nfts/zooms/zoom-{file_name}.{res_ext}"
@@ -168,20 +165,59 @@ async def upload_res(ctx: wire.Context, msg: ResourceUpload) -> Success:
                 data_left -= REQUEST_CHUNK_SIZE
             # force refresh to disk
             f.sync()
+        
+        # Handle blur data for wallpapers
+        if res_type == ResourceType.WallPaper and blur_path and res_blur_size > 0:
+            with io.fatfs.open(blur_path, "w") as f:
+                data_left = res_blur_size
+                offset = 0
+                while data_left > 0:
+                    request = BlurRequest(data_length=REQUEST_CHUNK_SIZE, offset=offset)
+                    ack: ResourceAck = await ctx.call(request, ResourceAck)
+                    data = ack.data_chunk
+                    digest = blake2s(data).digest()
+                    if digest != ack.hash:
+                        raise wire.DataError("Date digest is inconsistent")
+                    f.write(data)
+                    offset += (
+                        REQUEST_CHUNK_SIZE if data_left > REQUEST_CHUNK_SIZE else data_left
+                    )
+                    data_left -= REQUEST_CHUNK_SIZE
+                # force refresh to disk
+                f.sync()
+        
         if res_type == ResourceType.Nft and config_path:
             with io.fatfs.open(config_path, "w") as f:
                 assert msg.nft_meta_data
                 f.write(msg.nft_meta_data)
                 f.sync()
         if replace:
-            name_list.sort(
-                key=lambda name: int(name[5:].split("-")[-1][: -(len(res_ext) + 1)])
-            )
+            def safe_extract_timestamp(name):
+                try:
+                    parts = name[5:].split("-")  # Remove "zoom-" prefix
+                    if len(parts) >= 2:
+                        # Get the timestamp part (second to last part for regular files)
+                        timestamp_part = parts[-2] if "-blur" in name else parts[-1]
+                        # Remove file extension
+                        if "." in timestamp_part:
+                            timestamp_part = timestamp_part.split(".")[0]
+                        return int(timestamp_part)
+                    return 0
+                except (ValueError, IndexError):
+                    return 0
+            
+            name_list.sort(key=safe_extract_timestamp)
             zoom_file = name_list[0]
             file_name = zoom_file[5:]
             if res_type == ResourceType.WallPaper:
                 io.fatfs.unlink(f"1:/res/wallpapers/{zoom_file}")
                 io.fatfs.unlink(f"1:/res/wallpapers/{file_name}")
+                # Also remove blur file if it exists
+                blur_file_name = file_name[: -(len(res_ext) + 1)] + f"-blur.{res_ext}"
+                try:
+                    io.fatfs.unlink(f"1:/res/wallpapers/{blur_file_name}")
+                except:
+                    pass  # blur file might not exist
             else:
                 io.fatfs.unlink(f"1:/res/nfts/zooms/{zoom_file}")
                 io.fatfs.unlink(f"1:/res/nfts/imgs/{file_name}")
@@ -192,6 +228,4 @@ async def upload_res(ctx: wire.Context, msg: ResourceUpload) -> Success:
 
     except BaseException as e:
         raise wire.FirmwareError(f"Failed to write file with error code {e}")
-    if res_type == ResourceType.WallPaper:
-        device.set_homescreen(f"A:{file_full_path}")
     return Success(message="Success")
