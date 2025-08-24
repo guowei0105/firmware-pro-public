@@ -5363,12 +5363,22 @@ class WallperChange(AnimScreen):
                 if __debug__:
                     print("WallpaperChange: Updated wp_cnts to prevent file deletion:", storage_device.get_wp_cnts())
         
+        def safe_extract_timestamp(name):
+            try:
+                parts = name[5:].split("-")  # Remove "zoom-" prefix  
+                if len(parts) >= 2:
+                    # Get the timestamp part (second to last part for blur files)
+                    timestamp_part = parts[-2] if "-blur" in name else parts[-1]
+                    # Remove file extension
+                    if "." in timestamp_part:
+                        timestamp_part = timestamp_part.split(".")[0]
+                    return int(timestamp_part)
+                return 0
+            except (ValueError, IndexError):
+                return 0
+
         if file_name_list:
-            file_name_list.sort(
-                key=lambda name: int(
-                    name[5:].split("-")[-1][: -(len(name.split(".")[1]) + 1)]
-                )
-            )
+            file_name_list.sort(key=safe_extract_timestamp)
 
         # Calculate grid layout
         internal_wp_nums = 7
@@ -6682,7 +6692,7 @@ class TouchSetting(AnimScreen):
         else:
             return
         super().__init__(
-            prev_scr=prev_scr, title=_(i18n_keys.TITLE__LOCK_SCREEN), nav_back=True
+            prev_scr=prev_scr, title=_(i18n_keys.TITLE__TOUCH), nav_back=True
         )
 
         # First container for keyboard haptic
