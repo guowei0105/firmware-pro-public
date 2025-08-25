@@ -69,7 +69,7 @@ async def lite_card_lock_workflow():
         SearchDeviceScreen,
         TransferDataScreen,
     )
-    from trezor.ui.layouts import show_success, show_warning
+    from trezor.ui.layouts import show_success, show_warning, confirm_action
     from trezorio import nfc
     
     # 创建context
@@ -272,12 +272,14 @@ async def lite_card_lock_workflow():
                 return
             
             # 用户选择锁定，显示警告
-        confirm = await show_warning(
+        confirm = await confirm_action(
                 ctx,
-                "锁定卡片警告",
-                "开启卡锁定后，PIN尝试次数用尽将导致卡片作废。确定要锁定吗？",
-                button="确认锁定",
-                danger_button=_(i18n_keys.BUTTON__CANCEL),
+                "lock_card",
+                title="锁定卡片警告",
+                description="开启卡锁定后，PIN尝试次数用尽将导致卡片作废。确定要锁定吗？",
+                verb="确认锁定",
+                verb_cancel=_(i18n_keys.BUTTON__CANCEL),
+                hold_danger=True,
             )
         print("confirm confirm confirm",confirm)
             
@@ -2333,10 +2335,17 @@ class BackupWallet(Screen):
                 elif target == self.keytag:
                     utils.set_backup_keytag()
                     # 使用固定的助记词进行备份测试
-                from trezor.ui.layouts.lvgl.lite import backup_with_lite
-                test_mnemonics = b"abound abound abound abound abound abound abound abound abound abound abound about"
+                # from trezor.ui.layouts.lvgl.lite import backup_with_lite
+                # test_mnemonics = b"abound abound abound abound abound abound abound abound abound abound abound about"
+                # workflow.spawn(
+                #         backup_with_lite(DUMMY_CONTEXT, test_mnemonics)
+                # )
+
                 workflow.spawn(
-                        backup_with_lite(DUMMY_CONTEXT, test_mnemonics)
+                    recovery_device(
+                        DUMMY_CONTEXT,
+                        RecoveryDevice(dry_run=True, enforce_wordlist=True),
+                    )
                 )
 
     def _load_scr(self, scr: "Screen", back: bool = False) -> None:
