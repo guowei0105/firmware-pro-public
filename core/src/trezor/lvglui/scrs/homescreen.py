@@ -158,7 +158,6 @@ _busy_debounce_ms = 1000  # 1 second debounce time
 _cleanup_task = None
 
 def _get_persistent_busy_state():
-    """Get busy state from storage cache"""
     try:
         import storage.cache
         return storage.cache.get_int(storage.cache.APP_COMMON_BUSY_STATE, 0)
@@ -214,25 +213,45 @@ async def _delayed_cleanup():
     current_time = utime.ticks_ms()
     time_since_last_busy = utime.ticks_diff(current_time, _last_busy_time)
     
-    if _busy_state_counter == 0 and time_since_last_busy >= _busy_debounce_ms:
+    if time_since_last_busy >= _busy_debounce_ms:
         if __debug__:
-            print(f"[CLEANUP] Restoring non-busy state after debounce")
+            print(f"[CLEANUP] Restoring non-busy state after debounce - counter: {_busy_state_counter}, time_diff: {time_since_last_busy}ms")
         
-        # Clear persistent state now that debounce is complete
+        # Clear persistent state and counter
+        global _busy_state_counter
+        _busy_state_counter = 0
         _set_persistent_busy_state(0)
+        _set_persistent_busy_time(0)
         
         if hasattr(MainScreen, "_instance") and MainScreen._instance:
-            # Ensure AppDrawer stays hidden
-            if hasattr(MainScreen._instance, 'apps') and MainScreen._instance.apps:
-                if not MainScreen._instance.apps.has_flag(lv.obj.FLAG.HIDDEN):
-                    MainScreen._instance.apps.hide_to_mainscreen_fallback()
-            
             if __debug__:
                 print(f"[CLEANUP] Calling MainScreen.change_state(False) to restore normal state")
             MainScreen._instance.change_state(False)
             
+            # Show AppDrawer after restoring normal state (without animation)
+            if hasattr(MainScreen._instance, 'apps') and MainScreen._instance.apps:
+                if MainScreen._instance.apps.has_flag(lv.obj.FLAG.HIDDEN):
+                    if __debug__:
+                        print(f"[CLEANUP] Showing AppDrawer after debounce (no animation)")
+                    MainScreen._instance.refresh_appdrawer_background()
+                    # Show AppDrawer directly without animation - ensure complete state setup
+                    MainScreen._instance.hidden_others(True)
+                    if hasattr(MainScreen._instance, 'up_arrow') and MainScreen._instance.up_arrow:
+                        MainScreen._instance.up_arrow.add_flag(lv.obj.FLAG.HIDDEN)
+                    if hasattr(MainScreen._instance, 'bottom_tips') and MainScreen._instance.bottom_tips:
+                        MainScreen._instance.bottom_tips.add_flag(lv.obj.FLAG.HIDDEN)
+                    MainScreen._instance.apps.clear_flag(lv.obj.FLAG.HIDDEN)
+                    MainScreen._instance.apps.clear_flag(lv.obj.FLAG.GESTURE_BUBBLE)
+                    MainScreen._instance.apps.visible = True
+                    MainScreen._instance.apps._showing = False
+                    if __debug__:
+                        print(f"[CLEANUP] AppDrawer state set: hidden={MainScreen._instance.apps.has_flag(lv.obj.FLAG.HIDDEN)}, visible={MainScreen._instance.apps.visible}")
+            
             if __debug__:
-                print(f"[CLEANUP] MainScreen state restored - should show up arrow and normal text")
+                print(f"[CLEANUP] MainScreen state restored - AppDrawer shown")
+    else:
+        if __debug__:
+            print(f"[CLEANUP] Not yet ready for cleanup - counter: {_busy_state_counter}, time_diff: {time_since_last_busy}ms, threshold: {_busy_debounce_ms}ms")
     
     _cleanup_task = None
 
@@ -309,12 +328,31 @@ def change_state(is_busy: bool = False):
                         print(f"[CHANGE_STATE] Hiding AppDrawer to show MainScreen")
                     MainScreen._instance.apps.hide_to_mainscreen_fallback()
         else:
-            # When restoring from busy state, ensure AppDrawer stays hidden
+            # When restoring from busy state, show AppDrawer
             if hasattr(MainScreen._instance, 'apps') and MainScreen._instance.apps:
-                if not MainScreen._instance.apps.has_flag(lv.obj.FLAG.HIDDEN):
+                if MainScreen._instance.apps.has_flag(lv.obj.FLAG.HIDDEN):
                     if __debug__:
-                        print(f"[CHANGE_STATE] Ensuring AppDrawer stays hidden after communication")
-                    MainScreen._instance.apps.hide_to_mainscreen_fallback()
+                        print(f"[CHANGE_STATE] Showing AppDrawer after communication complete (no animation)")
+                    MainScreen._instance.refresh_appdrawer_background()
+                    # Show AppDrawer directly without animation - ensure complete state setup
+                    MainScreen._instance.hidden_others(True)
+                    if hasattr(MainScreen._instance, 'up_arrow') and MainScreen._instance.up_arrow:
+                        MainScreen._instance.up_arrow.add_flag(lv.obj.FLAG.HIDDEN)
+                    if hasattr(MainScreen._instance, 'bottom_tips') and MainScreen._instance.bottom_tips:
+                        MainScreen._instance.bottom_tips.add_flag(lv.obj.FLAG.HIDDEN)
+                    MainScreen._instance.apps.clear_flag(lv.obj.FLAG.HIDDEN)
+                    MainScreen._instance.apps.clear_flag(lv.obj.FLAG.GESTURE_BUBBLE)
+                    MainScreen._instance.apps.visible = True
+                    MainScreen._instance.apps._showing = False
+                    # Set flag to prevent gesture handler from immediately triggering
+                    MainScreen._instance._just_restored_from_busy = True
+                    # Clear persistent state completely since we've successfully restored
+                    _set_persistent_busy_state(0)
+                    _set_persistent_busy_time(0)
+                    if __debug__:
+                        print(f"[CHANGE_STATE] AppDrawer state set: hidden={MainScreen._instance.apps.has_flag(lv.obj.FLAG.HIDDEN)}, visible={MainScreen._instance.apps.visible}")
+                        print(f"[CHANGE_STATE] Set _just_restored_from_busy flag to prevent gesture handler")
+                        print(f"[CHANGE_STATE] Cleared persistent busy state completely")
         
         MainScreen._instance.change_state(is_busy)
     elif is_busy:
@@ -327,6 +365,7 @@ def change_state(is_busy: bool = False):
 
 class MainScreen(Screen):
     def __init__(self, device_name=None, ble_name=None, dev_state=None):
+        import storage.device as storage_device
         # homescreen = storage_device.get_homescreen()
         lockscreen = storage_device.get_homescreen()
         if not hasattr(self, "_init"):
@@ -487,8 +526,10 @@ class MainScreen(Screen):
         # Check if we should clear old busy state (no active communication for a while)
         import utime
         current_time = utime.ticks_ms()
+        should_show_appdrawer = False  # Initialize flag
         
         # If we have a saved busy state, check if it's too old
+        # BUT be extra careful during session restarts - only clear if very old
         if _busy_state_counter > 0:
             last_busy_time = _get_persistent_busy_time()
             time_since_last_busy = utime.ticks_diff(current_time, last_busy_time)
@@ -496,15 +537,28 @@ class MainScreen(Screen):
             if __debug__:
                 print(f"MainScreen: Checking busy state age - current: {current_time}, last_busy: {last_busy_time}, diff: {time_since_last_busy}ms")
             
-            # If more than 3 seconds have passed since last busy activity, clear it
-            if time_since_last_busy > 3000:  # 3 seconds
+            # Use much more conservative threshold during MainScreen initialization
+            # because session restarts can happen during normal operations
+            threshold_ms = 15000  # 15 seconds - only clear truly stale states
+            
+            # For very recent activity (less than 3 seconds), never clear during initialization
+            # This prevents clearing states during normal multi-step operations with session restarts
+            if time_since_last_busy < 3000:
                 if __debug__:
-                    print(f"MainScreen: Clearing old busy state (last activity {time_since_last_busy}ms ago)")
+                    print(f"MainScreen: Recent activity detected ({time_since_last_busy}ms ago), preserving busy state during initialization")
+                # Don't clear - this is likely an ongoing operation
+            elif time_since_last_busy > 5000:  # Reduce threshold to 5 seconds
+                if __debug__:
+                    print(f"MainScreen: Communication likely finished ({time_since_last_busy}ms ago), clearing busy state and showing AppDrawer")
                 _busy_state_counter = 0
                 _set_persistent_busy_state(0)
+                # Clear the persistent busy time as well since communication is done
+                _set_persistent_busy_time(0)
+                # Force show AppDrawer after clearing busy state
+                should_show_appdrawer = True
             else:
                 if __debug__:
-                    print(f"MainScreen: Keeping busy state (activity only {time_since_last_busy}ms ago)")
+                    print(f"MainScreen: Keeping potentially active busy state (activity {time_since_last_busy}ms ago, waiting for 5s threshold)")
         
         if _busy_state_counter > 0:
             # Keep AppDrawer hidden during busy state
@@ -541,12 +595,24 @@ class MainScreen(Screen):
                     self.bottom_tips.set_text("")  # Clear processing text
                 print("MainScreen: Device locked, staying in MainScreen view")
             else:
-                # Device is unlocked, show AppDrawer
-                self.apps.clear_flag(lv.obj.FLAG.HIDDEN)
-                self.apps.clear_flag(lv.obj.FLAG.GESTURE_BUBBLE)
-                self.apps.visible = True
-                self.apps._showing = False
-                print("MainScreen: Default to AppDrawer view")
+                # Device is unlocked, check if we should show AppDrawer
+                if should_show_appdrawer:
+                    # Communication finished, show AppDrawer without animation
+                    print("MainScreen: Communication finished, showing AppDrawer (no animation)")
+                    self.refresh_appdrawer_background()
+                    # Show AppDrawer directly without animation
+                    self.hidden_others(True)
+                    self.apps.clear_flag(lv.obj.FLAG.HIDDEN)
+                    self.apps.clear_flag(lv.obj.FLAG.GESTURE_BUBBLE)
+                    self.apps.visible = True
+                    self.apps._showing = False
+                else:
+                    # Default to showing AppDrawer
+                    self.apps.clear_flag(lv.obj.FLAG.HIDDEN)
+                    self.apps.clear_flag(lv.obj.FLAG.GESTURE_BUBBLE)
+                    self.apps.visible = True
+                    self.apps._showing = False
+                    print("MainScreen: Default to AppDrawer view")
         
         # 为 MainScreen 添加手势处理
         self.add_event_cb(self.on_main_gesture, lv.EVENT.GESTURE, None)
@@ -561,23 +627,47 @@ class MainScreen(Screen):
         if code == lv.EVENT.GESTURE:
             # 如果动画正在进行，忽略手势
             if _animation_in_progress:
+                if __debug__:
+                    print("[GESTURE] Ignored: Animation in progress")
                 return
             
             # 检查AppDrawer是否可见
             if hasattr(self, 'apps') and self.apps:
                 is_app_drawer_hidden = self.apps.has_flag(lv.obj.FLAG.HIDDEN)
+                is_showing = getattr(self.apps, '_showing', False)
+                
+                if __debug__:
+                    print(f"[GESTURE] AppDrawer state - hidden: {is_app_drawer_hidden}, showing: {is_showing}, visible: {getattr(self.apps, 'visible', None)}")
+                
                 if not is_app_drawer_hidden:
                     # AppDrawer可见时，MainScreen不处理任何手势
+                    if __debug__:
+                        print("[GESTURE] Ignored: AppDrawer is visible")
+                    return
+                
+                # 检查是否刚刚完成通信恢复（防止意外触发）
+                if hasattr(self, '_just_restored_from_busy'):
+                    if __debug__:
+                        print("[GESTURE] Ignored: Just restored from busy state, preventing accidental gesture")
+                    delattr(self, '_just_restored_from_busy')
                     return
                 
             # 只有AppDrawer隐藏时（MainScreen可见），才允许UP手势
             indev = lv.indev_get_act()
             _dir = indev.get_gesture_dir()
             
+            if __debug__:
+                print(f"[GESTURE] Direction: {_dir} (TOP={lv.DIR.TOP})")
+            
             # 严格控制：只允许UP手势
             if _dir == lv.DIR.TOP:
+                if __debug__:
+                    print("[GESTURE] Processing UP gesture - showing AppDrawer with animation")
                 self.refresh_appdrawer_background()
                 self.show_appdrawer_simple()
+            else:
+                if __debug__:
+                    print(f"[GESTURE] Ignored: Not UP gesture (was {_dir})")
                 
     def show_appdrawer_simple(self):
         """显示AppDrawer，带layer2动画"""
@@ -1331,7 +1421,6 @@ class MainScreen(Screen):
                     self.hide_to_mainscreen_fallback()
                     
             except Exception as e:
-                global _animation_in_progress
                 log_with_timestamp(f"AppDrawer: Error in hide_to_mainscreen: {e}")
                 # 出错时使用简单方式
                 self.hide_to_mainscreen_fallback()
@@ -4633,8 +4722,10 @@ class DisplayScreen(AnimScreen):
 
         # 主容器
         self.container = ContainerFlexCol(
-            self.content_area, self.title, padding_row=2, pos=(0, 40)
+            self.content_area, self.title, padding_row=2
         )
+        # Enable event bubbling for gesture detection
+        self.container.add_flag(lv.obj.FLAG.EVENT_BUBBLE)
         
         # 亮度控制
         self.backlight = ListItemBtn(
@@ -4648,6 +4739,8 @@ class DisplayScreen(AnimScreen):
             self.content_area, None, padding_row=2
         )
         self.auto_container.align_to(self.container, lv.ALIGN.OUT_BOTTOM_MID, 0, 12)
+        # Enable event bubbling for gesture detection
+        self.auto_container.add_flag(lv.obj.FLAG.EVENT_BUBBLE)
         
         self.autolock = ListItemBtn(
             self.auto_container,
@@ -4666,6 +4759,8 @@ class DisplayScreen(AnimScreen):
             self.content_area, None, padding_row=2
         )
         self.device_info_container.align_to(self.auto_container, lv.ALIGN.OUT_BOTTOM_MID, 0, 12)
+        # Enable event bubbling for gesture detection
+        self.device_info_container.add_flag(lv.obj.FLAG.EVENT_BUBBLE)
         
         self.model_name_bt_id = ListItemBtnWithSwitch(
             self.device_info_container,
@@ -4700,8 +4795,12 @@ class DisplayScreen(AnimScreen):
         self.device_name_description.set_text(_(i18n_keys.BUTTON__MODEL_NAME_BLUETOOTH_ID_DESC),)
         self.device_name_description.align_to(self.device_info_container, lv.ALIGN.OUT_BOTTOM_LEFT, 16, 8)
         
-        # Disable elastic scrolling to match other pages
+        # Disable elastic scrolling and scrollbar to match other pages
         self.content_area.clear_flag(lv.obj.FLAG.SCROLL_ELASTIC)
+        self.content_area.set_scrollbar_mode(lv.SCROLLBAR_MODE.OFF)
+        
+        # Enable horizontal scrolling for gesture detection
+        self.content_area.set_scroll_dir(lv.DIR.ALL)
         
         self.container.add_event_cb(self.on_click, lv.EVENT.CLICKED, None)
         self.auto_container.add_event_cb(self.on_click, lv.EVENT.CLICKED, None)
@@ -4709,25 +4808,140 @@ class DisplayScreen(AnimScreen):
         # Also listen for switch value changes to handle direct switch clicks
         self.model_name_bt_id.switch.add_event_cb(self.on_switch_change, lv.EVENT.VALUE_CHANGED, None)
         
-        # Add debug for gesture detection
-        if __debug__:
-            print(f"[DISPLAY] DisplayScreen initialized with nav_back: {hasattr(self, 'nav_back')}")
-            if hasattr(self, 'nav_back'):
-                print(f"[DISPLAY] nav_back button exists: {self.nav_back.nav_btn}")
-            # Add debug gesture handler
-            self.add_event_cb(self.debug_gesture, lv.EVENT.GESTURE, None)
+        # Add manual swipe detection for right swipe navigation
+        self.add_event_cb(self.on_manual_swipe_detection, lv.EVENT.ALL, None)
         
         self.load_screen(self)
         gc.collect()
 
-    def debug_gesture(self, event_obj):
-        """Debug gesture handler to see if gestures are being received"""
+    def on_manual_swipe_detection(self, event_obj):
+        """Manual swipe detection for right swipe navigation"""
+        code = event_obj.code
+        
+        # Handle GESTURE events if they work
+        if code == lv.EVENT.GESTURE:
+            _dir = lv.indev_get_act().get_gesture_dir()
+            if _dir == lv.DIR.RIGHT:
+                if hasattr(self, 'nav_back') and hasattr(self.nav_back, 'nav_btn'):
+                    lv.event_send(self.nav_back.nav_btn, lv.EVENT.CLICKED, None)
+                return
+        
+        # Manual swipe detection from SCROLL events
+        elif code == lv.EVENT.SCROLL_BEGIN:
+            try:
+                indev = lv.indev_get_act()
+                if indev:
+                    point = lv.point_t()
+                    indev.get_point(point)
+                    self._swipe_start = {'x': point.x, 'y': point.y}
+            except:
+                pass
+                
+        elif code == lv.EVENT.SCROLL_END:
+            try:
+                if hasattr(self, '_swipe_start'):
+                    indev = lv.indev_get_act()
+                    if indev:
+                        point = lv.point_t()
+                        indev.get_point(point)
+                        
+                        dx = point.x - self._swipe_start['x']
+                        dy = point.y - self._swipe_start['y']
+                        
+                        # Right swipe detection: dx > 50px and mostly horizontal
+                        if dx > 50 and abs(dy) < abs(dx) // 2:
+                            if hasattr(self, 'nav_back') and hasattr(self.nav_back, 'nav_btn'):
+                                lv.event_send(self.nav_back.nav_btn, lv.EVENT.CLICKED, None)
+                    
+                    delattr(self, '_swipe_start')
+            except:
+                pass
+
+    def debug_simple_gesture(self, event_obj):
+        """Simple gesture debug handler"""
         if __debug__:
             code = event_obj.code
             if code == lv.EVENT.GESTURE:
                 _dir = lv.indev_get_act().get_gesture_dir()
-                print(f"[DISPLAY] Gesture detected: {_dir} (RIGHT={lv.DIR.RIGHT})")
+                print(f"[DISPLAY] GESTURE: direction={_dir}, RIGHT={lv.DIR.RIGHT}")
                 
+                # If right swipe, try direct navigation
+                if _dir == lv.DIR.RIGHT and hasattr(self, 'nav_back'):
+                    print(f"[DISPLAY] RIGHT swipe detected, triggering navigation")
+                    try:
+                        lv.event_send(self.nav_back.nav_btn, lv.EVENT.CLICKED, None)
+                    except Exception as e:
+                        print(f"[DISPLAY] Navigation failed: {e}")
+            else:
+                print(f"[DISPLAY] Event: {code}")
+
+    def debug_all_events_simplified(self, event_obj):
+        """Monitor all events and simulate gesture detection"""
+        if __debug__:
+            code = event_obj.code
+            # Monitor touch events and simulate gesture detection
+            if code in [lv.EVENT.GESTURE, lv.EVENT.PRESSED, lv.EVENT.RELEASED]:
+                target = event_obj.get_target()
+                target_type = type(target).__name__
+                print(f"[DISPLAY] AllEvents: code={code}, target={target_type}")
+                
+                # Special handling for gesture events
+                if code == lv.EVENT.GESTURE:
+                    try:
+                        _dir = lv.indev_get_act().get_gesture_dir()
+                        print(f"[DISPLAY] AllEvents: GESTURE direction={_dir}")
+                    except Exception as e:
+                        print(f"[DISPLAY] AllEvents: Error getting gesture direction: {e}")
+                
+                # Simulate gesture detection using touch coordinates
+                elif code == lv.EVENT.PRESSED:
+                    # Store press position for gesture simulation
+                    try:
+                        indev = lv.indev_get_act()
+                        if indev:
+                            point = lv.point_t()
+                            indev.get_point(point)
+                            self.press_start_x = point.x
+                            self.press_start_y = point.y
+                            self.press_time = get_timestamp() if hasattr(__builtins__, 'get_timestamp') else 0
+                            print(f"[DISPLAY] PRESSED at ({point.x}, {point.y})")
+                    except Exception as e:
+                        print(f"[DISPLAY] Error getting press coordinates: {e}")
+                        
+                elif code == lv.EVENT.RELEASED:
+                    # Check for swipe gesture on release
+                    try:
+                        indev = lv.indev_get_act()
+                        if indev and hasattr(self, 'press_start_x'):
+                            point = lv.point_t()
+                            indev.get_point(point)
+                            release_x = point.x
+                            release_y = point.y
+                            
+                            # Calculate swipe distance and direction
+                            dx = release_x - self.press_start_x
+                            dy = release_y - self.press_start_y
+                            distance = (dx*dx + dy*dy)**0.5
+                            
+                            print(f"[DISPLAY] RELEASED at ({release_x}, {release_y})")
+                            print(f"[DISPLAY] Swipe: dx={dx}, dy={dy}, distance={distance}")
+                            
+                            # Check for right swipe (dx > 50 and mostly horizontal)
+                            if dx > 50 and abs(dy) < abs(dx) and distance > 50:
+                                print(f"[DISPLAY] RIGHT SWIPE DETECTED! Triggering navigation...")
+                                if hasattr(self, 'nav_back'):
+                                    try:
+                                        lv.event_send(self.nav_back.nav_btn, lv.EVENT.CLICKED, None)
+                                        print(f"[DISPLAY] Navigation triggered successfully")
+                                    except Exception as e:
+                                        print(f"[DISPLAY] Navigation failed: {e}")
+                                        
+                            # Clean up
+                            del self.press_start_x
+                            del self.press_start_y
+                    except Exception as e:
+                        print(f"[DISPLAY] Error processing release: {e}")
+
     def refresh_text(self):
         self.title.set_text(_(i18n_keys.TITLE__DISPLAY))
         if hasattr(self, 'backlight'):
@@ -6041,27 +6255,42 @@ class ShutdownSetting(AnimScreen):
 def get_autolock_delay_str() -> str:
     """Get auto-lock delay as formatted string"""
     delay_ms = storage_device.get_autolock_delay_ms()
+    if __debug__:
+        print(f"[get_autolock_delay_str] Input delay_ms: {delay_ms}")
+    
     if delay_ms == 0:
-        return "从不"
+        result = _(i18n_keys.OPTION__NEVER)
     elif delay_ms < 60000:
-        return f"{delay_ms // 1000}秒"
+        seconds = delay_ms // 1000
+        # Use direct index 200 for "{} 秒" since OPTION__STR_SECONDS points to wrong index
+        result = _("{} 秒").format(seconds)
     elif delay_ms < 3600000:
-        return f"{delay_ms // 60000}分钟"
+        minutes = delay_ms // 60000
+        # Use direct index 146 for "{} 分钟"
+        result = _("{} 分钟").format(minutes) 
     else:
-        return f"{delay_ms // 3600000}小时"
+        hours = delay_ms // 3600000
+        result = _(i18n_keys.OPTION__STR_HOURS).format(hours)
+    
+    if __debug__:
+        print(f"[get_autolock_delay_str] Formatted result: '{result}'")
+    return result
 
 
 def get_autoshutdown_delay_str() -> str:
     """Get auto-shutdown delay as formatted string"""
     delay_ms = storage_device.get_autoshutdown_delay_ms()
     if delay_ms == 0:
-        return "从不"
+        return _(i18n_keys.OPTION__NEVER)
     elif delay_ms < 60000:
-        return f"{delay_ms // 1000}秒"
+        seconds = delay_ms // 1000
+        return _("{} 秒").format(seconds)
     elif delay_ms < 3600000:
-        return f"{delay_ms // 60000}分钟"
+        minutes = delay_ms // 60000
+        return _("{} 分钟").format(minutes)
     else:
-        return f"{delay_ms // 3600000}小时"
+        hours = delay_ms // 3600000
+        return _(i18n_keys.OPTION__STR_HOURS).format(hours)
 
 
 class Animations(AnimScreen):
@@ -6132,6 +6361,10 @@ class Autolock_and_ShutingDown(AnimScreen):
         Autolock_and_ShutingDown.cur_auto_shutdown = self.get_str_from_ms(
             Autolock_and_ShutingDown.cur_auto_shutdown_ms
         )
+        
+        if __debug__:
+            print(f"[Autolock_and_ShutingDown.__init__] cur_auto_lock_ms: {Autolock_and_ShutingDown.cur_auto_lock_ms}")
+            print(f"[Autolock_and_ShutingDown.__init__] cur_auto_lock formatted: '{Autolock_and_ShutingDown.cur_auto_lock}'")
 
         if not hasattr(self, "_init"):
             self._init = True
@@ -6169,26 +6402,34 @@ class Autolock_and_ShutingDown(AnimScreen):
         self.auto_shutdown.label_left.set_text(_(i18n_keys.ITEM__SHUTDOWN))
 
     def get_str_from_ms(self, time_ms) -> str:
+        if __debug__:
+            print(f"[Autolock_and_ShutingDown.get_str_from_ms] Input time_ms: {time_ms}")
+            print(f"[Autolock_and_ShutingDown.get_str_from_ms] AUTOLOCK_DELAY_MAXIMUM: {storage_device.AUTOLOCK_DELAY_MAXIMUM}")
+        
         if time_ms == storage_device.AUTOLOCK_DELAY_MAXIMUM:
-            return _(i18n_keys.ITEM__STATUS__NEVER)
-        auto_lock_time = time_ms / 1000 // 60
-        if auto_lock_time > 60:
-            value = str(auto_lock_time // 60).split(".")[0]
-            text = _(
-                i18n_keys.OPTION__STR_HOUR
-                if value == "1"
-                else i18n_keys.OPTION__STR_HOURS
-            ).format(value)
-        elif auto_lock_time < 1:
-            value = str(time_ms // 1000).split(".")[0]
-            text = _(i18n_keys.OPTION__STR_SECONDS).format(value)
+            text = _(i18n_keys.ITEM__STATUS__NEVER)
         else:
-            value = str(auto_lock_time).split(".")[0]
-            text = _(
-                i18n_keys.OPTION__STR_MINUTE
-                if value == "1"
-                else i18n_keys.OPTION__STR_MINUTES
-            ).format(value)
+            auto_lock_time = time_ms / 1000 // 60
+            if auto_lock_time > 60:
+                value = str(auto_lock_time // 60).split(".")[0]
+                text = _(
+                    i18n_keys.OPTION__STR_HOUR
+                    if value == "1"
+                    else i18n_keys.OPTION__STR_HOURS
+                ).format(value)
+            elif auto_lock_time < 1:
+                value = str(time_ms // 1000).split(".")[0]
+                text = _(i18n_keys.OPTION__STR_SECONDS).format(value)
+            else:
+                value = str(auto_lock_time).split(".")[0]
+                text = _(
+                    i18n_keys.OPTION__STR_MINUTE
+                    if value == "1"
+                    else i18n_keys.OPTION__STR_MINUTES
+                ).format(value)
+        
+        if __debug__:
+            print(f"[Autolock_and_ShutingDown.get_str_from_ms] Formatted result: '{text}'")
         return text
 
     def on_click(self, event_obj):
@@ -6217,6 +6458,17 @@ class AutoLockSetting(AnimScreen):
 
     # TODO: i18n
     def __init__(self, prev_scr=None):
+        # Initialize the class variables first
+        Autolock_and_ShutingDown.cur_auto_lock_ms = storage_device.get_autolock_delay_ms()
+        # Create a temporary instance to use get_str_from_ms method
+        temp_instance = Autolock_and_ShutingDown.__new__(Autolock_and_ShutingDown)
+        Autolock_and_ShutingDown.cur_auto_lock = temp_instance.get_str_from_ms(Autolock_and_ShutingDown.cur_auto_lock_ms)
+        
+        if __debug__:
+            print(f"[AutoLockSetting.__init__] Starting initialization")
+            print(f"[AutoLockSetting.__init__] Current autolock delay ms: {storage_device.get_autolock_delay_ms()}")
+            print(f"[AutoLockSetting.__init__] Autolock_and_ShutingDown.cur_auto_lock: '{Autolock_and_ShutingDown.cur_auto_lock}'")
+            
         if not hasattr(self, "_init"):
             self._init = True
         else:
@@ -6230,9 +6482,14 @@ class AutoLockSetting(AnimScreen):
         has_custom = True
         self.checked_index = 0
         self.btns: [ListItemBtn] = [None] * (len(self.setting_items))
+        
+        if __debug__:
+            print(f"[AutoLockSetting] Processing {len(self.setting_items)} setting items")
+        
         for index, item in enumerate(self.setting_items):
             if item is None:
                 break
+            original_item = item  # Keep original for comparison
             if not item == "Never":  # last item
                 if item == 0.5:
                     item = _(i18n_keys.OPTION__STR_SECONDS).format(int(item * 60))
@@ -6244,6 +6501,10 @@ class AutoLockSetting(AnimScreen):
                     ).format(item)
             else:
                 item = _(i18n_keys.ITEM__STATUS__NEVER)
+            
+            if __debug__:
+                print(f"[AutoLockSetting] Item {index}: original='{original_item}', formatted='{item}'")
+                
             self.btns[index] = ListItemBtn(
                 self.container, item, has_next=False, use_transition=False
             )
@@ -6251,13 +6512,25 @@ class AutoLockSetting(AnimScreen):
             #     StyleWrapper().text_font(font_GeistRegular30), 0
             # )
             self.btns[index].add_check_img()
+            
+            # This is the key comparison logic
+            if __debug__:
+                print(f"[AutoLockSetting] Comparing formatted item '{item}' with cur_auto_lock '{Autolock_and_ShutingDown.cur_auto_lock}'")
+                
             if item == Autolock_and_ShutingDown.cur_auto_lock:
                 has_custom = False
                 self.btns[index].set_checked()
                 self.checked_index = index
+                if __debug__:
+                    print(f"[AutoLockSetting] Found match at index {index}, has_custom set to False")
 
         if has_custom:
             self.custom = storage_device.get_autolock_delay_ms()
+            if __debug__:
+                print(f"[AutoLockSetting] Creating custom option because no match found")
+                print(f"[AutoLockSetting] Custom delay ms: {self.custom}")
+                print(f"[AutoLockSetting] Custom text will be: '{Autolock_and_ShutingDown.cur_auto_lock}({_(i18n_keys.OPTION__CUSTOM__INSERT)})'")
+            
             self.btns[-1] = ListItemBtn(
                 self.container,
                 f"{Autolock_and_ShutingDown.cur_auto_lock}({_(i18n_keys.OPTION__CUSTOM__INSERT)})",
@@ -6270,6 +6543,9 @@ class AutoLockSetting(AnimScreen):
                 StyleWrapper().text_font(font_GeistRegular30), 0
             )
             self.checked_index = -1
+        else:
+            if __debug__:
+                print(f"[AutoLockSetting] No custom option needed - found match in predefined values")
         self.container.add_event_cb(self.on_click, lv.EVENT.CLICKED, None)
         self.tips = lv.label(self.content_area)
         self.tips.align_to(self.container, lv.ALIGN.OUT_BOTTOM_LEFT, 8, 0)
@@ -6683,9 +6959,11 @@ class AutoShutDownSetting(AnimScreen):
             prev_scr=prev_scr, title=_(i18n_keys.TITLE__SHUTDOWN), nav_back=True
         )
         
-        # Get current shutdown delay and format it
+        # Get current shutdown delay
         cur_delay_ms = storage_device.get_autoshutdown_delay_ms()
-        cur_shutdown_str = get_autoshutdown_delay_str()
+        
+        if __debug__:
+            print(f"[AutoShutDownSetting] Current shutdown delay ms: {cur_delay_ms}")
 
         self.container = ContainerFlexCol(self.content_area, self.title, padding_row=2)
         self.setting_items = [1, 2, 5, 10, "Never", None]
@@ -6696,6 +6974,7 @@ class AutoShutDownSetting(AnimScreen):
         for index, item in enumerate(self.setting_items):
             if item is None:
                 break
+            original_item = item  # Keep original for comparison
             if not item == "Never":  # last item
                 item = _(
                     i18n_keys.ITEM__STATUS__STR_MINUTES
@@ -6704,6 +6983,10 @@ class AutoShutDownSetting(AnimScreen):
                 ).format(item)
             else:
                 item = _(i18n_keys.ITEM__STATUS__NEVER)
+            
+            if __debug__:
+                print(f"[AutoShutDownSetting] Item {index}: original='{original_item}', formatted='{item}'")
+                
             self.btns[index] = ListItemBtn(
                 self.container, item, has_next=False, use_transition=False
             )
@@ -6711,13 +6994,30 @@ class AutoShutDownSetting(AnimScreen):
             #     StyleWrapper().text_font(font_GeistRegular30), 0
             # )
             self.btns[index].add_check_img()
-            if item == cur_shutdown_str:
+            
+            # Compare based on delay_ms instead of string formatting
+            expected_delay_ms = 0
+            if original_item == "Never":
+                expected_delay_ms = 0
+            else:
+                expected_delay_ms = original_item * 60 * 1000  # Convert minutes to milliseconds
+            
+            if __debug__:
+                print(f"[AutoShutDownSetting] Comparing cur_delay_ms={cur_delay_ms} with expected={expected_delay_ms}")
+                
+            if cur_delay_ms == expected_delay_ms:
                 has_custom = False
                 self.btns[index].set_checked()
                 self.checked_index = index
+                if __debug__:
+                    print(f"[AutoShutDownSetting] Found match at index {index}, has_custom set to False")
 
         if has_custom:
             self.custom = storage_device.get_autoshutdown_delay_ms()
+            # Use get_autoshutdown_delay_str() for display
+            cur_shutdown_str = get_autoshutdown_delay_str()
+            if __debug__:
+                print(f"[AutoShutDownSetting] Creating custom option with text: '{cur_shutdown_str}'")
             self.btns[-1] = ListItemBtn(
                 self.container,
                 f"{cur_shutdown_str}({_(i18n_keys.OPTION__CUSTOM__INSERT)})",
@@ -6727,6 +7027,9 @@ class AutoShutDownSetting(AnimScreen):
             self.btns[-1].add_check_img()
             self.btns[-1].set_checked()
             self.checked_index = -1
+        else:
+            if __debug__:
+                print(f"[AutoShutDownSetting] No custom option needed - found match in predefined values")
         # pyright: on
         self.container.add_event_cb(self.on_click, lv.EVENT.CLICKED, None)
         self.tips = lv.label(self.content_area)
