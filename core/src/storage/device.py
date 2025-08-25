@@ -726,15 +726,19 @@ def set_turbomode_enable(enable: bool) -> None:
 def is_device_name_display_enabled() -> bool:
     global _DEVICE_NAME_DISPLAY_ENABLED_VALUE
     if _DEVICE_NAME_DISPLAY_ENABLED_VALUE is None:
-        _DEVICE_NAME_DISPLAY_ENABLED_VALUE = common.get_bool(_NAMESPACE, _DEVICE_NAME_DISPLAY_ENABLED, public=True)
-        # Default to False if not set (don't show device names by default)
-        if _DEVICE_NAME_DISPLAY_ENABLED_VALUE is None:
-            _DEVICE_NAME_DISPLAY_ENABLED_VALUE = False
+        # Check if the key exists in storage first
+        stored_value = common.get(_NAMESPACE, _DEVICE_NAME_DISPLAY_ENABLED, public=True)
+        if stored_value is not None:
+            # Key exists, get the boolean value
+            _DEVICE_NAME_DISPLAY_ENABLED_VALUE = stored_value == common._TRUE_BYTE
+        else:
+            # Key doesn't exist, use default True (show device names by default)
+            _DEVICE_NAME_DISPLAY_ENABLED_VALUE = True
             # Save the default value to storage directly
             common.set_bool(
                 _NAMESPACE,
                 _DEVICE_NAME_DISPLAY_ENABLED,
-                False,
+                True,
                 public=True,
             )
     return _DEVICE_NAME_DISPLAY_ENABLED_VALUE

@@ -36,6 +36,7 @@ APP_COMMON_CLIENT_CONTAINS_ATTACH = 5 | _SESSIONLESS_FLAG
 APP_COMMON_PASSPHRASE_PIN_ENABLED = 6 | _SESSIONLESS_FLAG
 APP_COMMON_BUSY_STATE = 7 | _SESSIONLESS_FLAG
 APP_COMMON_BUSY_TIME = 8 | _SESSIONLESS_FLAG
+APP_COMMON_OPERATION_TIMES = 9 | _SESSIONLESS_FLAG
 
 SESSION_DIRIVE_CARDANO = False
 
@@ -150,6 +151,7 @@ class SessionlessCache(DataCache):
             1,  # APP_COMMON_PASSPHRASE_PIN_ENABLED
             4,  # APP_COMMON_BUSY_STATE
             8,  # APP_COMMON_BUSY_TIME
+            200,  # APP_COMMON_OPERATION_TIMES (string storage for comma-separated timestamps)
         )
         super().__init__()
 
@@ -313,6 +315,22 @@ def get_int(key: int, default: T | None = None) -> int | T | None:  # noqa: F811
         return default
     else:
         return int.from_bytes(encoded, "big")
+
+
+def get_str(key: int, default: T | None = None) -> str | T | None:  # noqa: F811
+    """Get string value for key from cache"""
+    encoded = get(key)
+    if encoded is None:
+        return default
+    else:
+        # Strip null bytes and decode to string
+        return encoded.rstrip(b'\x00').decode('utf-8')
+
+
+def set_str(key: int, value: str) -> None:
+    """Set string value for key in cache"""
+    encoded = value.encode('utf-8')
+    set(key, encoded)
 
 
 def is_set(key: int) -> bool:

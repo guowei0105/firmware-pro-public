@@ -1175,13 +1175,16 @@ async def show_popup(
     from trezor import loop
 
     # If this is "One moment..." popup (in any language), use mainscreen busy state instead
-    if title == "One moment..." or title == "稍等..." or "moment" in title.lower() or "wait" in title.lower():
+    if (title == "One moment..." or title == "稍等..." or "moment" in title.lower() or "wait" in title.lower() or 
+        "请稍等" in title or "稍等" in title or "璇风◢绛" in title or len(title) < 10):
         if __debug__:
-            print(f"[POPUP] Intercepted '{title}' popup, switching to MainScreen busy state")
-        from trezor.lvglui.scrs.homescreen import change_state
-        change_state(True)
+            print(f"[POPUP] Intercepted '{title}' popup - just sleeping without changing state")
+        # Don't change any state - just sleep for the timeout
+        # The workflow should already have set the busy state before calling show_popup
+        # This prevents double-counting in the busy state counter
         await loop.sleep(timeout_ms)
-        change_state(False)
+        if __debug__:
+            print(f"[POPUP] Popup timeout completed, letting workflow manage final state")
         return
 
     if description and description_param:
@@ -1201,12 +1204,13 @@ def draw_simple_text(
 ) -> None:
     from trezor.lvglui.scrs.common import FullSizeWindow
 
-    # If this is "One moment..." text (in any language), use mainscreen busy state instead
-    if title == "One moment..." or title == "稍等..." or "moment" in title.lower() or "wait" in title.lower():
+    # If this is "One moment..." text (in any language), don't do anything special
+    if (title == "One moment..." or title == "稍等..." or "moment" in title.lower() or "wait" in title.lower() or 
+        "请稍等" in title or "稍等" in title or "璇风◢绛" in title or len(title) < 10):
         if __debug__:
-            print(f"[DRAW_TEXT] Intercepted '{title}' text, switching to MainScreen busy state")
-        from trezor.lvglui.scrs.homescreen import change_state
-        change_state(True)
+            print(f"[DRAW_TEXT] Intercepted '{title}' text - no state change needed")
+        # Don't change any state - the workflow should already have set the busy state
+        # Just return without doing anything to avoid state conflicts
         return
 
     FullSizeWindow(

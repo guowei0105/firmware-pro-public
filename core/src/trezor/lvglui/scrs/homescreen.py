@@ -194,6 +194,16 @@ def _set_persistent_busy_state(counter):
     except:
         pass
 
+def _set_persistent_busy_time(time_ms):
+    """Set busy time to storage cache"""
+    try:
+        import storage.cache
+        storage.cache.set_int(storage.cache.APP_COMMON_BUSY_TIME, time_ms)
+        if __debug__:
+            print(f"[PERSISTENT] Saved busy time: {time_ms}")
+    except:
+        pass
+
 async def _delayed_cleanup():
     """Delayed cleanup task to restore non-busy state after debounce time"""
     global _busy_state_counter, _cleanup_task
@@ -4775,8 +4785,8 @@ class DisplayScreen(AnimScreen):
         # Set initial switch state based on storage setting
         # ListItemBtnWithSwitch defaults to CHECKED, so we need to handle both cases
         current_setting = storage_device.is_device_name_display_enabled()
-        if current_setting:
-            # Keep it checked (already default)
+        if current_setting is None or current_setting:
+            # Keep it checked (default when not set or enabled)
             pass
         else:
             # Clear the default checked state
@@ -4947,8 +4957,7 @@ class DisplayScreen(AnimScreen):
         if hasattr(self, 'backlight'):
             self.backlight.label_left.set_text(_(i18n_keys.ITEM__BRIGHTNESS))
         if hasattr(self, 'autolock'):
-            self.autolock.label_left.set_text(_(i18n_keys.TITLE__AUTO_LOCK),
-)
+            self.autolock.label_left.set_text(_(i18n_keys.TITLE__AUTO_LOCK))
         if hasattr(self, 'shutdown'):
             self.shutdown.label_left.set_text(_(i18n_keys.ITEM__SHUTDOWN))
         # Note: ListItemBtnWithSwitch doesn't expose label_left as an attribute
@@ -4987,11 +4996,11 @@ class DisplayScreen(AnimScreen):
                     if hasattr(main_screen, 'title') and main_screen.title:
                         main_screen.title.set_text(real_device_name)
                         main_screen.title.clear_flag(lv.obj.FLAG.HIDDEN)
+                        # Ensure centered alignment
+                        main_screen.title.add_style(StyleWrapper().text_align_center(), 0)
                     if hasattr(main_screen, 'subtitle') and main_screen.subtitle:
                         main_screen.subtitle.set_text(real_ble_name)
                         main_screen.subtitle.clear_flag(lv.obj.FLAG.HIDDEN)
-                        # Ensure centered alignment
-                        main_screen.title.add_style(StyleWrapper().text_align_center(), 0)
                         main_screen.subtitle.add_style(
                             StyleWrapper().text_align_center().text_color(lv_colors.WHITE), 0
                         )
@@ -6258,19 +6267,25 @@ def get_autolock_delay_str() -> str:
     if __debug__:
         print(f"[get_autolock_delay_str] Input delay_ms: {delay_ms}")
     
-    if delay_ms == 0:
+    if delay_ms == 0 or delay_ms == storage_device.AUTOLOCK_DELAY_MAXIMUM:
         result = _(i18n_keys.OPTION__NEVER)
     elif delay_ms < 60000:
         seconds = delay_ms // 1000
-        # Use direct index 200 for "{} 秒" since OPTION__STR_SECONDS points to wrong index
-        result = _("{} 秒").format(seconds)
+        result = _(i18n_keys.OPTION__STR_SECONDS).format(seconds)
     elif delay_ms < 3600000:
         minutes = delay_ms // 60000
-        # Use direct index 146 for "{} 分钟"
-        result = _("{} 分钟").format(minutes) 
+        result = _(
+            i18n_keys.OPTION__STR_MINUTE
+            if minutes == 1
+            else i18n_keys.OPTION__STR_MINUTES
+        ).format(minutes)
     else:
         hours = delay_ms // 3600000
-        result = _(i18n_keys.OPTION__STR_HOURS).format(hours)
+        result = _(
+            i18n_keys.OPTION__STR_HOUR
+            if hours == 1
+            else i18n_keys.OPTION__STR_HOURS
+        ).format(hours)
     
     if __debug__:
         print(f"[get_autolock_delay_str] Formatted result: '{result}'")
@@ -6284,13 +6299,21 @@ def get_autoshutdown_delay_str() -> str:
         return _(i18n_keys.OPTION__NEVER)
     elif delay_ms < 60000:
         seconds = delay_ms // 1000
-        return _("{} 秒").format(seconds)
+        return _(i18n_keys.OPTION__STR_SECONDS).format(seconds)
     elif delay_ms < 3600000:
         minutes = delay_ms // 60000
-        return _("{} 分钟").format(minutes)
+        return _(
+            i18n_keys.OPTION__STR_MINUTE
+            if minutes == 1
+            else i18n_keys.OPTION__STR_MINUTES
+        ).format(minutes)
     else:
         hours = delay_ms // 3600000
-        return _(i18n_keys.OPTION__STR_HOURS).format(hours)
+        return _(
+            i18n_keys.OPTION__STR_HOUR
+            if hours == 1
+            else i18n_keys.OPTION__STR_HOURS
+        ).format(hours)
 
 
 class Animations(AnimScreen):
@@ -6495,10 +6518,10 @@ class AutoLockSetting(AnimScreen):
                     item = _(i18n_keys.OPTION__STR_SECONDS).format(int(item * 60))
                 else:
                     item = _(
-                        i18n_keys.ITEM__STATUS__STR_MINUTES
-                        if item != 1
-                        else i18n_keys.OPTION__STR_MINUTE
-                    ).format(item)
+                        i18n_keys.OPTION__STR_MINUTE
+                        if item == 1
+                        else i18n_keys.OPTION__STR_MINUTES
+                    ).format(int(item))
             else:
                 item = _(i18n_keys.ITEM__STATUS__NEVER)
             
@@ -6977,10 +7000,10 @@ class AutoShutDownSetting(AnimScreen):
             original_item = item  # Keep original for comparison
             if not item == "Never":  # last item
                 item = _(
-                    i18n_keys.ITEM__STATUS__STR_MINUTES
-                    if item != 1
-                    else i18n_keys.OPTION__STR_MINUTE
-                ).format(item)
+                    i18n_keys.OPTION__STR_MINUTE
+                    if item == 1
+                    else i18n_keys.OPTION__STR_MINUTES
+                ).format(int(item))
             else:
                 item = _(i18n_keys.ITEM__STATUS__NEVER)
             
