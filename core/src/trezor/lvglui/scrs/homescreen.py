@@ -10,6 +10,7 @@ from trezor.enums import SafetyCheckLevel
 from trezor.langs import langs, langs_keys
 from trezor.lvglui.i18n import gettext as _, i18n_refresh, keys as i18n_keys
 from trezor.lvglui.lv_colors import lv_colors
+from trezor.lvglui.lv_symbols import LV_SYMBOLS
 from trezor.lvglui.scrs.components.pageable import Indicator
 from trezor.qr import (
     close_camera,
