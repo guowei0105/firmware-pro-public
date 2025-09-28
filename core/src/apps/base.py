@@ -519,7 +519,7 @@ def set_homescreen(show_app_guide: bool = False) -> None:
     #     try:
     #         from trezorui import Display
     #         display = Display()
-    #         # 简化处理：移除了透明状态栏功能，Layer2现在始终显示完整内容
+    #         # Simplified processing: removed transparent status bar, Layer2 now always shows full content
     #         print("set_homescreen: Transparent statusbar functionality has been removed")
     #     except Exception as e:
     #         print(f"set_homescreen: Error accessing display: {e}")

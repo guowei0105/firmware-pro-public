@@ -1175,8 +1175,8 @@ async def show_popup(
     from trezor import loop
 
     # If this is "One moment..." popup (in any language), use mainscreen busy state instead
-    if (title == "One moment..." or title == "稍等..." or "moment" in title.lower() or "wait" in title.lower() or 
-        "请稍等" in title or "稍等" in title or "璇风◢绛" in title or len(title) < 10):
+    if (title == "One moment..." or "moment" in title.lower() or "wait" in title.lower() or 
+        len(title) < 10):
         if __debug__:
             print(f"[POPUP] Intercepted '{title}' popup - just sleeping without changing state")
         # Don't change any state - just sleep for the timeout
@@ -1205,8 +1205,8 @@ def draw_simple_text(
     from trezor.lvglui.scrs.common import FullSizeWindow
 
     # If this is "One moment..." text (in any language), don't do anything special
-    if (title == "One moment..." or title == "稍等..." or "moment" in title.lower() or "wait" in title.lower() or 
-        "请稍等" in title or "稍等" in title or "璇风◢绛" in title or len(title) < 10):
+    if (title == "One moment..." or "moment" in title.lower() or "wait" in title.lower() or 
+        len(title) < 10):
         if __debug__:
             print(f"[DRAW_TEXT] Intercepted '{title}' text - no state change needed")
         # Don't change any state - the workflow should already have set the busy state
