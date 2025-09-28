@@ -1042,7 +1042,7 @@ class MainScreen(Screen):
 
     class AppDrawer(lv.obj):
         PAGE_SIZE = 2
-        PAGE_SLIDE_TIME = 200
+        PAGE_SLIDE_TIME = 140
 
         def __init__(self, parent):
             super().__init__(parent)
