@@ -952,7 +952,6 @@ class MainScreen(Screen):
                     )
                     completion_timer.set_repeat_count(1)
                 
-                # 100ms 延迟后开始 layer2 向上滑动动画 (优化响应速度)
                 animation_timer = lv.timer_create(
                     lambda t: start_layer2_animation(),
                     100, None  # 100ms 延迟 (从150ms减少)
@@ -1042,12 +1041,12 @@ class MainScreen(Screen):
 
     class AppDrawer(lv.obj):
         PAGE_SIZE = 2
-        PAGE_SLIDE_TIME = 140
+        PAGE_SLIDE_TIME = 160
 
         def __init__(self, parent):
             super().__init__(parent)
             self.parent = parent
-            self.visible = False  # 简化状态管理，只保留必要的标志
+            self.visible = False  
             self.text_label = {}
             self.init_ui()
             self.init_items()
@@ -1270,20 +1269,17 @@ class MainScreen(Screen):
                 return
                 
             if code == lv.EVENT.GESTURE:
-                # 严格控制：AppDrawer可见时只允许DOWN手势
                 if is_hidden:
                     return
                     
                 indev = lv.indev_get_act()
                 _dir = indev.get_gesture_dir()
                 
-                # 严格控制：只允许DOWN手势
                 if _dir == lv.DIR.BOTTOM:
                     self.hide_to_mainscreen()
                 elif _dir == lv.DIR.TOP:
                     return
                 else:
-                    # 处理左右手势用于翻页
                     self.handle_page_gesture(_dir)
                     
         def hide_to_mainscreen(self):
@@ -1314,7 +1310,6 @@ class MainScreen(Screen):
 
                 from storage import device
                 # lockscreen_path = device.get_homescreen()
-                # # 步骤1: 加载layer2背景
                 # self.add_style(
                 #     StyleWrapper().bg_img_src(lockscreen_path).border_width(0),
                 #     0,
@@ -1367,11 +1362,9 @@ class MainScreen(Screen):
                             display.cover_background_set_image(bytes(black_image))
                         log_with_timestamp("AppDrawer: Layer2 fallback to black background")
                 
-                # 步骤2: DOWN手势：Layer2 从上方滑入填满屏幕，然后消失显示MainScreen
                 if hasattr(display, 'cover_background_animate_to_y'):
                     log_with_timestamp("AppDrawer: Starting Layer2 slide down animation from top")
                     
-                    # 显示MainScreen元素（但不立即隐藏AppDrawer，让动画自然进行）
                     self.parent.hidden_others(False)
                     if hasattr(self.parent, 'up_arrow'):
                         self.parent.up_arrow.clear_flag(lv.obj.FLAG.HIDDEN)
@@ -1381,27 +1374,22 @@ class MainScreen(Screen):
                         self.parent.dev_state.show()
                     log_with_timestamp("AppDrawer: MainScreen elements shown")
                     
-                    # 步骤1: 先将Layer2移动到屏幕上方
                     display.cover_background_move_to_y(-800)
                     if hasattr(display, 'cover_background_set_visible'):
                         display.cover_background_set_visible(True)
                     log_with_timestamp("AppDrawer: Layer2 positioned above screen")
                     
-                    # 步骤2: 从上方滑入到屏幕中心（y=0），正好填满屏幕
                     display.cover_background_animate_to_y(0, 200)  # 滑动到屏幕中心，填满屏幕 (优化响应速度)
                     log_with_timestamp("AppDrawer: Layer2 sliding down to fill screen (200ms)")
                     
-                    # 步骤3: 在Layer2覆盖屏幕后，准备MainScreen状态并隐藏AppDrawer
                     def prepare_mainscreen_after_coverage():
                         log_with_timestamp("AppDrawer: === prepare_mainscreen_after_coverage (50ms timer) ===")
-                        # 现在隐藏AppDrawer
                         log_with_timestamp("AppDrawer: Hiding AppDrawer")
                         self.add_flag(lv.obj.FLAG.HIDDEN)
                         self.visible = False
                         self.add_flag(lv.obj.FLAG.GESTURE_BUBBLE)
                         log_with_timestamp(f"AppDrawer: Hidden flag set, visible={self.visible}")
                         
-                        # 确保MainScreen背景是lockscreen
                         from storage import device
                         current_lockscreen = device.get_homescreen()
                         if current_lockscreen:
@@ -1411,15 +1399,12 @@ class MainScreen(Screen):
                             )
                             log_with_timestamp(f"AppDrawer: MainScreen background set to lockscreen: {current_lockscreen}")
                         
-                        # 强制LVGL渲染MainScreen
                         lv.refr_now(None)
-                        # 释放内存
                         gc.collect()
                         if __debug__:
                             print(f"AppDrawer: Memory after state preparation: {get_memory_info()}")
                         log_with_timestamp("AppDrawer: MainScreen state prepared, AppDrawer hidden, LVGL refreshed, memory collected")
                     
-                    # 30ms后Layer2已经开始覆盖屏幕，准备MainScreen状态 (优化响应速度)
                     prepare_timer = lv.timer_create(
                         lambda t: prepare_mainscreen_after_coverage(),
                         30, None
@@ -1430,7 +1415,6 @@ class MainScreen(Screen):
                     _active_timers.append(prepare_timer)
                     log_with_timestamp("AppDrawer: MainScreen prepare timer created (30ms delay)")
                     
-                    # 步骤3: 动画完成后隐藏Layer2
                     def on_animation_complete():
                         global _animation_in_progress
                         log_with_timestamp("AppDrawer: === on_animation_complete (250ms timer) ===")
@@ -1449,21 +1433,18 @@ class MainScreen(Screen):
                         except Exception as error:
                             log_with_timestamp(f"AppDrawer: Error hiding Layer2: {error}")
                     
-                    # 等待动画完成后隐藏Layer2（200ms动画时间）
                     completion_timer = lv.timer_create(
                         lambda t: on_animation_complete(),
-                        200, None  # 与动画时间匹配
+                        200, None  
                     )
                     completion_timer.set_repeat_count(1)
                     # Track timer
                     _active_timers.append(completion_timer)
                 else:
-                    # 如果没有动画函数，直接切换
                     self.hide_to_mainscreen_fallback()
                     
             except Exception as e:
                 log_with_timestamp(f"AppDrawer: Error in hide_to_mainscreen: {e}")
-                # 出错时使用简单方式
                 self.hide_to_mainscreen_fallback()
                 _animation_in_progress = False
                 log_with_timestamp("AppDrawer: Fallback to simple hide, animation reset")
@@ -1474,7 +1455,6 @@ class MainScreen(Screen):
             self.add_flag(lv.obj.FLAG.GESTURE_BUBBLE)
             self.visible = False
             
-            # 显示MainScreen元素
             self.parent.hidden_others(False)
             if hasattr(self.parent, 'up_arrow'):
                 self.parent.up_arrow.clear_flag(lv.obj.FLAG.HIDDEN)
@@ -1563,20 +1543,20 @@ class MainScreen(Screen):
             new_cont.clear_flag(lv.obj.FLAG.HIDDEN)
 
             anim_time = self.PAGE_SLIDE_TIME
-            path_cb = lv.anim_t.path_ease_in_out
 
-            def animate_x(target_obj, start_x, end_x):
+            def animate_x(target_obj, start_x, end_x, easing_cb):
                 anim = lv.anim_t()
                 anim.init()
                 anim.set_var(target_obj)
                 anim.set_values(start_x, end_x)
                 anim.set_time(anim_time)
-                anim.set_path_cb(path_cb)
+                anim.set_path_cb(easing_cb)
                 anim.set_custom_exec_cb(lambda _a, val, obj=target_obj: obj.set_x(int(val)))
                 return anim
 
-            anim_out = animate_x(old_cont, old_cont.get_x(), -offset)
-            anim_in = animate_x(new_cont, offset, 0)
+            easing_cb = lv.anim_t.path_ease_out
+            anim_out = animate_x(old_cont, old_cont.get_x(), -offset, easing_cb)
+            anim_in = animate_x(new_cont, offset, 0, easing_cb)
             anim_in.set_ready_cb(
                 lambda _a, self=self, old_index=old_index, target_index=target_index: self._on_page_anim_ready(
                     old_index, target_index
