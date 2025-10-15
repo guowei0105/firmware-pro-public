@@ -197,6 +197,8 @@ trezor.lvglui.scrs.app_guide
 import trezor.lvglui.scrs.app_guide
 trezor.lvglui.scrs.app_passkeys
 import trezor.lvglui.scrs.app_passkeys
+trezor.lvglui.scrs.appdrawer_prerender
+import trezor.lvglui.scrs.appdrawer_prerender
 trezor.lvglui.scrs.bip39_dotmap
 import trezor.lvglui.scrs.bip39_dotmap
 trezor.lvglui.scrs.ble
@@ -269,6 +271,10 @@ trezor.lvglui.scrs.reset_device
 import trezor.lvglui.scrs.reset_device
 trezor.lvglui.scrs.template
 import trezor.lvglui.scrs.template
+trezor.lvglui.scrs.test_appdrawer_optimization
+import trezor.lvglui.scrs.test_appdrawer_optimization
+trezor.lvglui.scrs.test_prerender
+import trezor.lvglui.scrs.test_prerender
 trezor.lvglui.scrs.widgets
 import trezor.lvglui.scrs.widgets
 trezor.lvglui.scrs.widgets.button

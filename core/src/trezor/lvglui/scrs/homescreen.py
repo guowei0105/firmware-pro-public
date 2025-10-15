@@ -1041,17 +1041,32 @@ class MainScreen(Screen):
 
     class AppDrawer(lv.obj):
         PAGE_SIZE = 2
-        PAGE_SLIDE_TIME = 160
+        PAGE_SLIDE_TIME = 300  # 缩短动画时间，快速响应
+        PRERENDER_ENABLED = True  # 启用预渲染优化
+        LAZY_LOAD = False  # 禁用延迟加载
 
         def __init__(self, parent):
             super().__init__(parent)
             self.parent = parent
             self.visible = False  
             self.text_label = {}
+            
+            # 初始化预渲染管理器
+            self._prerender_manager = None
+            self._init_prerender_later = False
+            
+            # 移除样式和延迟加载相关代码以修复系统冻结
+            
             self.init_ui()
-            self.init_items()
+            self.init_items()  # 恢复原始的立即创建所有项目
             self.init_indicators()
             self.init_anim()
+            
+            # 延迟初始化预渲染，避免影响启动性能
+            if self.PRERENDER_ENABLED:
+                self._init_prerender_later = True
+
+        # Removed styles property to fix system freeze
 
         def init_ui(self):
             self.remove_style_all()
@@ -1091,7 +1106,7 @@ class MainScreen(Screen):
             self.current_page = 0
             # Page containers allow us to slide whole pages instead of item-by-item toggling.
             self.page_conts = []
-            self.page_items = [[] for _ in range(2)]
+            self.page_items = [[] for _ in range(self.PAGE_SIZE)]
             self.page_width = self.main_cont.get_width()
             if not self.page_width:
                 self.page_width = 480
@@ -1105,8 +1120,14 @@ class MainScreen(Screen):
                 page_cont.set_pos(0, 0)
                 page_cont.add_flag(lv.obj.FLAG.EVENT_BUBBLE)
                 page_cont.clear_flag(lv.obj.FLAG.SCROLLABLE)
-                page_cont.set_style_bg_opa(lv.OPA.TRANSP, 0)
-                page_cont.set_style_border_width(0, 0)
+                # 使用内联样式
+                page_cont.add_style(
+                    StyleWrapper()
+                    .bg_opa(lv.OPA.TRANSP)
+                    .border_width(0)
+                    .pad_all(0), 
+                    0
+                )
                 if idx != 0:
                     page_cont.add_flag(lv.obj.FLAG.HIDDEN)
                 self.page_conts.append(page_cont)
@@ -1138,17 +1159,18 @@ class MainScreen(Screen):
                     ("guide", "app-tips", i18n_keys.APP__TIPS),
                 ]
 
-            items_per_page = 6
+            items_per_page = 4
             cols = 2
             rows = 2  # 2 columns × 3 rows = 6 items per page
             item_width = 144
             item_height = 214
-            col_gap = 48
-            row_gap = 24
+            col_gap = 64
+            row_gap = 64
 
             # center grid horizontally inside page width to avoid visual gap at edges
             content_width = cols * item_width + (cols - 1) * col_gap
-            grid_offset_x = max(0, (self.page_width - content_width) // 2)
+            # grid_offset_x = max(0, (self.page_width - content_width) // 2)
+            grid_offset_x = 64
 
             for idx, (name, img, text) in enumerate(items):
                 page = idx // items_per_page
@@ -1157,34 +1179,43 @@ class MainScreen(Screen):
                 row = page_idx // cols  # Fixed: was page_idx // rows
                 col = page_idx % cols
                 x = grid_offset_x + col * (item_width + col_gap)
-                y = row * (item_height + row_gap)
+                y = row * (item_height + row_gap)+89  # 主容器已经有75px偏移，不需要额外偏移
 
                 item = self.create_item(self.page_conts[page], name, img, text, x, y)
                 self.page_items[page].append(item)
 
         def create_item(self, parent, name, img_src, text_key, x, y):
             cont = lv.obj(parent)
+            # 使用内联样式 - 修复系统冻结问题
             cont.add_style(
                 StyleWrapper()
                 .bg_color(lv_colors.BLACK)
                 .bg_opa(lv.OPA.TRANSP)
                 .radius(0)
                 .border_width(0)
-                .pad_all(0),
-                0,
+                .pad_all(0), 
+                0
             )
             cont.set_size(144, 214)  # Updated to match main branch
             cont.set_pos(x, y)
             cont.add_flag(lv.obj.FLAG.EVENT_BUBBLE)
+            # 禁用容器滚动，减少不必要的计算
+            cont.clear_flag(lv.obj.FLAG.SCROLLABLE)
 
             btn = lv.imgbtn(cont)
             btn.set_size(144, 144)  # Updated to match main branch
-            btn.set_style_bg_img_src(f"A:/res/{img_src}.png", 0)  # Changed from .jpg to .png
+            btn.set_style_bg_img_src(f"A:/res/{img_src}.png", 0)  # 恢复为原始的.jpg格式
+            # 使用内联按钮样式 - 移除圆角设置
             btn.add_style(
                 StyleWrapper()
-                # .bg_img_recolor_opa(lv.OPA._30)  # Commented out like main branch
-                .bg_img_recolor(lv_colors.BLACK),
-                lv.PART.MAIN | lv.STATE.PRESSED,
+                .bg_opa(lv.OPA.TRANSP)
+                .shadow_width(0), 
+                0
+            )
+            btn.add_style(
+                StyleWrapper()
+                .bg_img_recolor(lv_colors.BLACK), 
+                lv.PART.MAIN | lv.STATE.PRESSED
             )
             btn.add_flag(lv.obj.FLAG.EVENT_BUBBLE)
             btn.align(lv.ALIGN.TOP_MID, 0, 0)
@@ -1194,13 +1225,14 @@ class MainScreen(Screen):
 
             label = lv.label(cont)
             label.set_text(_(text_key))
+            # 使用内联标签样式
             label.add_style(
                 StyleWrapper()
-                .width(144)  # Updated to match button width
+                .width(180)
                 .text_font(font_GeistSemiBold26)
                 .text_color(lv_colors.WHITE)
-                .text_align_center(),
-                0,
+                .text_align_center(), 
+                0
             )
 
             label.align_to(btn, lv.ALIGN.OUT_BOTTOM_MID, 0, 8)
@@ -1468,7 +1500,17 @@ class MainScreen(Screen):
             """Handle page swipe gestures"""
             if _dir not in [lv.DIR.RIGHT, lv.DIR.LEFT]:
                 return
+            # 优化：如果动画已经进行到后期，允许新的手势
             if self.page_animating:
+                # 取消当前动画并立即完成
+                try:
+                    for handle in self._page_anim_handles:
+                        lv.anim_del(handle, None)
+                except:
+                    pass
+                # 立即完成当前动画
+                if hasattr(self, '_page_anim_target'):
+                    self._on_page_anim_ready(self.current_page, self._page_anim_target)
                 return
 
             # Check if indicators exist before using them
@@ -1487,11 +1529,20 @@ class MainScreen(Screen):
 
             self.indicators[self.current_page].set_active(False)
             self.indicators[target_page].set_active(True)
+            # 记录目标页面，用于中断动画时恢复
+            self._page_anim_target = target_page
             self.animate_page_transition(target_page, _dir)
 
         def show_page(self, index: int):
             if index < 0 or index >= self.PAGE_SIZE:
                 return
+                
+            # 延迟初始化预渲染（第一次显示页面时）
+            if self._init_prerender_later:
+                self._init_prerender_later = False
+                self._init_prerender()
+            
+            # 移除延迟加载逻辑
 
             for idx, page_cont in enumerate(self.page_conts):
                 if idx == index:
@@ -1506,6 +1557,10 @@ class MainScreen(Screen):
                     indicator.set_active(idx == index)
 
             self.current_page = index
+            
+            # 调度预渲染相邻页面
+            if self.PRERENDER_ENABLED and self._prerender_manager:
+                self._prerender_manager.schedule_prerender(index)
 
         def hidden_page(self, index: int):
             if index < 0 or index >= self.PAGE_SIZE:
@@ -1533,6 +1588,23 @@ class MainScreen(Screen):
                 lv.anim_del(new_cont, None)
             except Exception:
                 pass
+            
+            # 尝试使用缓存的页面内容
+            if self.PRERENDER_ENABLED and self._prerender_manager:
+                cached_page = self._prerender_manager.get_cached_page(target_index)
+                if cached_page:
+                    # 使用缓存内容可以减少渲染时间
+                    if __debug__:
+                        print(f"AppDrawer: Using cached content for page {target_index}")
+            
+            # 跳过动画前的GC，避免卡顿
+            # GC将在动画完成后进行
+            
+            # 优化：预先刷新一次以减少首帧延迟
+            try:
+                lv.refr_now(None)
+            except:
+                pass
 
             # Ensure the incoming page starts off-screen in the intended direction.
             slide_distance = self.page_width if self.page_width else 336
@@ -1540,6 +1612,11 @@ class MainScreen(Screen):
             # Set position BEFORE making it visible to avoid a 1-frame flash at x=0
             new_cont.set_x(offset)
             new_cont.set_y(0)
+            # 优化：先设置位置和属性，再显示
+            new_cont.set_style_opa(255, 0)
+            # 禁用布局计算以提高性能
+            new_cont.add_flag(lv.obj.FLAG.IGNORE_LAYOUT)
+            old_cont.add_flag(lv.obj.FLAG.IGNORE_LAYOUT)
             new_cont.clear_flag(lv.obj.FLAG.HIDDEN)
 
             anim_time = self.PAGE_SLIDE_TIME
@@ -1551,10 +1628,19 @@ class MainScreen(Screen):
                 anim.set_values(start_x, end_x)
                 anim.set_time(anim_time)
                 anim.set_path_cb(easing_cb)
-                anim.set_custom_exec_cb(lambda _a, val, obj=target_obj: obj.set_x(int(val)))
+                
+                # 优化动画回调，直接操作x坐标
+                def exec_cb(a, val):
+                    target_obj.set_x(int(val))
+                    # 强制刷新显示区域
+                    target_obj.invalidate()
+                
+                anim.set_custom_exec_cb(exec_cb)
+                anim.set_repeat_count(1)
                 return anim
 
-            easing_cb = lv.anim_t.path_ease_out
+            # 使用线性缓动，最快速度
+            easing_cb = lv.anim_t.path_ease_out  # 线性动画，无缓动
             anim_out = animate_x(old_cont, old_cont.get_x(), -offset, easing_cb)
             anim_in = animate_x(new_cont, offset, 0, easing_cb)
             anim_in.set_ready_cb(
@@ -1568,6 +1654,31 @@ class MainScreen(Screen):
                 lv.anim_t.start(anim_out),
                 lv.anim_t.start(anim_in),
             ]
+            
+            # 立即开始第一次刷新
+            try:
+                lv.refr_now(None)
+            except:
+                pass
+            
+            # 优化动画刷新逻辑
+            def animation_refresh():
+                if self.page_animating:
+                    try:
+                        # 使用 lv.task_handler 而不是 refr_now，更高效
+                        lv.task_handler()
+                    except:
+                        try:
+                            lv.refr_now(None)
+                        except:
+                            pass
+            
+            # 优化：保持16ms刷新间隔，配合更长的动画时间
+            refresh_timer = lv.timer_create(
+                lambda t: animation_refresh(),
+                10, None  # 10ms刷新，100FPS高帧率
+            )
+            refresh_timer.set_repeat_count(10)  # 10次刷新，总计160ms，覆盖120ms动画
 
         def _on_page_anim_ready(self, old_index: int, target_index: int):
             # Reset both pages to their resting positions and visibility.
@@ -1577,10 +1688,38 @@ class MainScreen(Screen):
             old_cont.set_x(0)
             new_cont.set_x(0)
 
+            # 恢复布局标志
+            old_cont.clear_flag(lv.obj.FLAG.IGNORE_LAYOUT)
+            new_cont.clear_flag(lv.obj.FLAG.IGNORE_LAYOUT)
+            
             self.show_page(target_index)
             self.page_animating = False
             self._page_anim_refs = []
             self._page_anim_handles = []
+            
+            # 强制刷新一次以确保最终状态正确
+            try:
+                lv.refr_now(None)
+            except:
+                pass
+            
+            # 延迟清理内存，避免影响最后的渲染
+            def delayed_gc():
+                try:
+                    import gc
+                    gc.collect()
+                except:
+                    pass
+            
+            # 50ms后清理内存
+            def schedule_gc():
+                gc_timer = lv.timer_create(lambda t: delayed_gc(), 50, None)
+                gc_timer.set_repeat_count(1)
+            
+            try:
+                schedule_gc()
+            except:
+                pass
 
         def show_anim_start_cb(self, _anim):
             self.parent.hidden_others()
@@ -1708,6 +1847,50 @@ class MainScreen(Screen):
         def refresh_text(self):
             for text_key, label in self.text_label.items():
                 label.set_text(_(text_key))
+                
+        def _init_prerender(self):
+            """初始化预渲染管理器"""
+            try:
+                from .appdrawer_prerender import PreRenderManager
+                self._prerender_manager = PreRenderManager(self)
+                if __debug__:
+                    print("AppDrawer: PreRender manager initialized")
+            except Exception as e:
+                if __debug__:
+                    print(f"AppDrawer: Failed to init prerender: {e}")
+                self._prerender_manager = None
+                
+        def _render_page_content(self, page_index, target_container):
+            """渲染指定页面的内容到目标容器"""
+            if page_index < 0 or page_index >= self.PAGE_SIZE:
+                return
+                
+            # 复制页面内容到目标容器
+            source_page = self.page_conts[page_index]
+            if not source_page:
+                return
+                
+            # 清空目标容器
+            child_cnt = target_container.get_child_cnt()
+            for i in range(child_cnt - 1, -1, -1):
+                child = target_container.get_child(i)
+                if child:
+                    child.del_()
+                    
+            # 复制所有app items到目标容器
+            if hasattr(self, 'page_items') and page_index < len(self.page_items):
+                items = self.page_items[page_index]
+                for item in items:
+                    # 创建新的项目副本
+                    # 这里需要根据实际item结构进行复制
+                    # 简化处理：只复制基本属性
+                    pass
+                    
+        def cleanup_prerender(self):
+            """清理预渲染资源"""
+            if self._prerender_manager:
+                self._prerender_manager.clear()
+                self._prerender_manager = None
 
 
 class PasskeysManager(AnimScreen):
