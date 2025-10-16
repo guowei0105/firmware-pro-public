@@ -1225,15 +1225,17 @@ class MainScreen(Screen):
 
             label = lv.label(cont)
             label.set_text(_(text_key))
-            # 使用内联标签样式
             label.add_style(
                 StyleWrapper()
-                .width(180)
+                .width(144)
                 .text_font(font_GeistSemiBold26)
                 .text_color(lv_colors.WHITE)
                 .text_align_center(), 
                 0
             )
+            label.set_style_text_letter_space(-1, 0)
+            label.set_long_mode(lv.label.LONG.DOT)
+            label.set_style_max_height(52, 0)  # 26px * 2 = 52px for 2 lines
 
             label.align_to(btn, lv.ALIGN.OUT_BOTTOM_MID, 0, 8)
 
@@ -1520,9 +1522,13 @@ class MainScreen(Screen):
 
             target_page = self.current_page
             if _dir == lv.DIR.LEFT:
-                target_page = (self.current_page + 1) % self.PAGE_SIZE
+                if self.current_page >= self.PAGE_SIZE - 1:
+                    return
+                target_page = self.current_page + 1
             elif _dir == lv.DIR.RIGHT:
-                target_page = (self.current_page - 1 + self.PAGE_SIZE) % self.PAGE_SIZE
+                if self.current_page <= 0:
+                    return
+                target_page = self.current_page - 1
 
             if target_page == self.current_page:
                 return
