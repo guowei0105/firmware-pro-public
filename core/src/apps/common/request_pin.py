@@ -207,7 +207,7 @@ async def verify_user_pin(
         pin_rem = config.get_pin_rem()
         try:
 
-            pin = await request_pin_on_device(  # type: ignore ["request_pin_on_device" is possibly unbound]  # 再次请求PIN码
+            pin = await request_pin_on_device(  # type: ignore ["request_pin_on_device" is possibly unbound]  # Request PIN again
                 ctx,
                 # _(i18n_keys.TITLE__ENTER_PIN),
                 prompt,
@@ -370,7 +370,7 @@ async def passphrase_pin_used(ctx: wire.Context):
 #         ctx,
 #         "warning_wrong_pin",
 #         header=_(i18n_keys.PASSPHRASE__PIN_USED),
-#         content=_(i18n_keys.PASSPHRASE__PIN_USED_DESC),  #i18n待更改
+#         content=_(i18n_keys.PASSPHRASE__PIN_USED_DESC),  #i18n to be updated
 #         red=True,
 #         exc=wire.PinInvalid,
 #     )

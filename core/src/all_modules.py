@@ -197,6 +197,8 @@ trezor.lvglui.scrs.app_guide
 import trezor.lvglui.scrs.app_guide
 trezor.lvglui.scrs.app_passkeys
 import trezor.lvglui.scrs.app_passkeys
+trezor.lvglui.scrs.appdrawer_prerender
+import trezor.lvglui.scrs.appdrawer_prerender
 trezor.lvglui.scrs.bip39_dotmap
 import trezor.lvglui.scrs.bip39_dotmap
 trezor.lvglui.scrs.ble

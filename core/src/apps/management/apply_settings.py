@@ -62,8 +62,8 @@ async def apply_settings(ctx: wire.Context, msg: ApplySettings) -> Success:
 
     if msg.homescreen is not None:
         validate_homescreen(msg.homescreen)
-        await confirm_set_homescreen(ctx)
-        storage.device.set_homescreen(f"A:/res/{msg.homescreen.decode()}")
+        # await confirm_set_homescreen(ctx)
+        # storage.device.set_homescreen(f"A:/res/{msg.homescreen.decode()}")
 
     if msg.label is not None:
         if len(msg.label.encode("utf-8")) > storage.device.LABEL_MAXLENGTH:

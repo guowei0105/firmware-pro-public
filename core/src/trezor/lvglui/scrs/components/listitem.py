@@ -282,24 +282,95 @@ class ImgGridItem(lv.img):
         path_dir: str,
         img_path_other: str = "A:/res/checked-solid.png",
         is_internal: bool = False,
+        style_type: str = "wallpaper",  # "wallpaper" or "nft"
     ):
         super().__init__(parent)
         self.set_grid_cell(
-            lv.GRID_ALIGN.CENTER, col_num, 1, lv.GRID_ALIGN.CENTER, row_num, 1
+            lv.GRID_ALIGN.CENTER, col_num, 1, lv.GRID_ALIGN.START, row_num, 1
         )
         self.is_internal = is_internal
         self.file_name = file_name
         self.zoom_path = path_dir + file_name
+        self.style_type = style_type
+
+        # Set up the container first before loading image
+        self._setup_styles()
+
+        # Set image source after styles are applied
         self.set_src(self.zoom_path)
-        self.set_style_radius(40, 0)
-        # self.set_style_clip_corner(True, 0)
+
+        # Ensure consistent image scaling and positioning
+        self.set_style_img_recolor_opa(lv.OPA.TRANSP, 0)  # No color overlay
+
+        # Ensure consistent image rendering
+        try:
+            # Set default zoom and opacity for proper display
+            self.set_zoom(256)  # Default zoom (256 = 100%)
+            self.set_style_img_opa(lv.OPA.COVER, 0)  # Ensure image is fully opaque
+        except (AttributeError, TypeError):
+            pass
+
+        # Force a refresh to ensure proper initial rendering
+        self.invalidate()
+
         self.img_path = self.zoom_path.replace("zoom-", "")
+
+        # Keep A:1:/res/wallpapers/ path for custom wallpapers (don't convert it)
+
+        # Create checkmark overlay
         self.check = lv.img(self)
         self.check.set_src(img_path_other)
         self.check.center()
         self.set_checked(False)
         self.add_flag(lv.obj.FLAG.CLICKABLE)
         self.add_flag(lv.obj.FLAG.EVENT_BUBBLE)
+
+    def _setup_styles(self):
+        """Set up all styles before loading the image"""
+        if self.style_type == "nft":
+            # NFT Gallery style - no clipping, show full image
+            self.set_size(238, 238)  # Square format for NFTs
+
+            # Minimal styling for NFTs - no radius clipping
+            self.set_style_radius(8, 0)  # Small radius for aesthetics
+            self.set_style_clip_corner(False, 0)  # No clipping for full image display
+
+            # Minimal border and padding
+            self.set_style_pad_all(0, 0)  # No padding
+            self.set_style_border_width(1, 0)  # Thin border
+            self.set_style_border_color(lv.color_hex(0x666666), 0)  # Light gray border
+            self.set_style_border_opa(lv.OPA._30, 0)  # Very subtle
+
+        else:  # wallpaper style (default)
+            # Wallpaper style - with rounded corners and clipping
+            self.set_size(144, 240)  # 144x240px - match Collection area exactly
+
+            # Apply radius and clipping for wallpapers
+            self.set_style_radius(48, 0)  # More rounded radius for custom wallpapers
+            self.set_style_clip_corner(True, 0)
+
+            # Consistent padding and border for wallpapers
+            self.set_style_pad_all(1, 0)  # 1px padding
+            self.set_style_border_width(1, 0)  # 1px border
+            self.set_style_border_color(lv.color_hex(0x333333), 0)  # Dark gray border
+            self.set_style_border_opa(lv.OPA._50, 0)  # Semi-transparent
+
+        # Common styles for both types
+        self.set_style_bg_opa(lv.OPA.COVER, 0)
+        self.set_style_bg_color(lv.color_hex(0x000000), 0)  # Black background
+
+        # Image rendering optimizations
+        self.set_style_img_opa(lv.OPA.COVER, 0)
+
+        # Ensure image scaling and positioning consistency
+        self.set_style_img_recolor_opa(lv.OPA.TRANSP, 0)  # No recoloring
+
+        # Force image to fill the container consistently
+        try:
+            if hasattr(self, "set_style_transform_angle"):
+                self.set_style_transform_angle(0, 0)  # No rotation
+        except (AttributeError, TypeError):
+            pass
 
     def set_checked(self, checked: bool):
         if checked:

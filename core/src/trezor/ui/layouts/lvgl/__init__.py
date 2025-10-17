@@ -1174,6 +1174,27 @@ async def show_popup(
     from trezor.lvglui.scrs.common import FullSizeWindow
     from trezor import loop
 
+    # If this is "One moment..." popup (in any language), use mainscreen busy state instead
+    if (
+        title == "One moment..."
+        or "moment" in title.lower()
+        or "wait" in title.lower()
+        or len(title) < 10
+    ):
+        if __debug__:
+            print(
+                f"[POPUP] Intercepted '{title}' popup - just sleeping without changing state"
+            )
+        # Don't change any state - just sleep for the timeout
+        # The workflow should already have set the busy state before calling show_popup
+        # This prevents double-counting in the busy state counter
+        await loop.sleep(timeout_ms)
+        if __debug__:
+            print(
+                f"[POPUP] Popup timeout completed, letting workflow manage final state"
+            )
+        return
+
     if description and description_param:
         description = description.format(description_param)
     subtitle = f"{subtitle or ''} {description or ''}"
@@ -1190,6 +1211,19 @@ def draw_simple_text(
     auto_close_ms: int = 2000,
 ) -> None:
     from trezor.lvglui.scrs.common import FullSizeWindow
+
+    # If this is "One moment..." text (in any language), don't do anything special
+    if (
+        title == "One moment..."
+        or "moment" in title.lower()
+        or "wait" in title.lower()
+        or len(title) < 10
+    ):
+        if __debug__:
+            print(f"[DRAW_TEXT] Intercepted '{title}' text - no state change needed")
+        # Don't change any state - the workflow should already have set the busy state
+        # Just return without doing anything to avoid state conflicts
+        return
 
     FullSizeWindow(
         title, description, icon_path=icon_path, auto_close_ms=auto_close_ms, anim_dir=0
