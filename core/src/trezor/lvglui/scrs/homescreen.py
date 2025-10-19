@@ -131,11 +131,13 @@ def force_memory_cleanup():
 
 
 def get_cached_style(image_src):
-    """Get cached style objects to avoid repeated creation"""
-    global _cached_styles
-    if image_src not in _cached_styles:
-        _cached_styles[image_src] = StyleWrapper().bg_img_src(image_src).border_width(0)
-    return _cached_styles[image_src]
+    """Get cached style objects to avoid repeated creation - TEMPORARILY DISABLED"""
+    print(f"[get_cached_style] DISABLED: Called with {image_src}")
+    
+    # TEMPORARY FIX: Return None to completely avoid StyleWrapper issues
+    # This will cause calling code to fail gracefully or skip style application
+    print("[get_cached_style] DISABLED: Returning None for stability")
+    return None
 
 
 def get_memory_info():
@@ -896,10 +898,12 @@ class MainScreen(Screen):
 
                         # Restore AppDrawer's original background (2222.png)
                         current_homescreen = storage_device.get_appdrawer_background()
-                        self.apps.add_style(
-                            get_cached_style(current_homescreen),
-                            0,
-                        )
+                        cached_style = get_cached_style(current_homescreen)
+                        if cached_style is not None:
+                            self.apps.add_style(cached_style, 0)
+                            print(f"[MainScreen] AppDrawer background applied successfully: {current_homescreen}")
+                        else:
+                            print(f"[MainScreen] SAFETY: Skipping AppDrawer background style (get_cached_style returned None): {current_homescreen}")
                         log_with_timestamp("MainScreen: AppDrawer shown behind layer2")
 
                     # Immediately show AppDrawer
@@ -1602,9 +1606,12 @@ class MainScreen(Screen):
 
                         current_lockscreen = device.get_homescreen()
                         if current_lockscreen:
-                            self.parent.add_style(
-                                get_cached_style(current_lockscreen), 0
-                            )
+                            cached_style = get_cached_style(current_lockscreen)
+                            if cached_style is not None:
+                                self.parent.add_style(cached_style, 0)
+                                print(f"[AppDrawer] MainScreen background applied successfully: {current_lockscreen}")
+                            else:
+                                print(f"[AppDrawer] SAFETY: Skipping MainScreen background style (get_cached_style returned None): {current_lockscreen}")
                             log_with_timestamp(
                                 f"AppDrawer: MainScreen background set to lockscreen: {current_lockscreen}"
                             )
@@ -5830,9 +5837,19 @@ class AppdrawerBackgroundSetting(AnimScreen):
     def __init__(
         self, prev_scr=None, selected_wallpaper=None, return_from_wallpaper=False
     ):
+        if __debug__:
+            print(f"[AppdrawerBackgroundSetting.__init__] Called with prev_scr: {prev_scr}")
+            print(f"[AppdrawerBackgroundSetting.__init__] selected_wallpaper: {selected_wallpaper}")
+            print(f"[AppdrawerBackgroundSetting.__init__] return_from_wallpaper: {return_from_wallpaper}")
+            print(f"[AppdrawerBackgroundSetting.__init__] Has _init: {hasattr(self, '_init')}")
+        
         if not hasattr(self, "_init"):
+            if __debug__:
+                print("[AppdrawerBackgroundSetting.__init__] First time initialization")
             self._init = True
         else:
+            if __debug__:
+                print("[AppdrawerBackgroundSetting.__init__] Already initialized - updating")
             # Even if already initialized, update the wallpaper if a new one is provided
             if selected_wallpaper:
                 self.selected_wallpaper = selected_wallpaper
@@ -6059,8 +6076,31 @@ class AppdrawerBackgroundSetting(AnimScreen):
 
     def refresh_text(self):
         """Refresh display when returning to this screen"""
-        # TODO: Load current wallpaper from storage and update preview
-        pass
+        if __debug__:
+            print("[AppdrawerBackgroundSetting.refresh_text] Refreshing display")
+        
+        # 确保界面正确显示
+        try:
+            # 刷新壁纸预览
+            if hasattr(self, "lockscreen_preview") and hasattr(self, "current_wallpaper_path"):
+                if self.current_wallpaper_path:
+                    self.lockscreen_preview.set_src(self.current_wallpaper_path)
+                    if __debug__:
+                        print(f"[AppdrawerBackgroundSetting.refresh_text] Preview updated to: {self.current_wallpaper_path}")
+            
+            # 刷新容器显示
+            if hasattr(self, "container"):
+                self.container.invalidate()
+                
+            # 刷新整个屏幕
+            self.invalidate()
+            
+            if __debug__:
+                print("[AppdrawerBackgroundSetting.refresh_text] Refresh completed")
+                
+        except Exception as e:
+            if __debug__:
+                print(f"[AppdrawerBackgroundSetting.refresh_text] Error during refresh: {e}")
 
     def eventhandler(self, event_obj):
         """Override event handler to ensure clicks are handled"""
@@ -6650,9 +6690,9 @@ class WallperChange(AnimScreen):
                                         "WallperChange: Same wallpaper selected, closing wallpaper selection"
                                     )
 
-                                # Simply load the previous screen directly using LVGL
+                                # Simply load the previous screen with return animation
                                 try:
-                                    lv.scr_load(self.prev_scr)
+                                    self._load_scr(self.prev_scr, back=True)
                                     # Clean up WallperChange singleton
                                     if hasattr(self.__class__, "_instance"):
                                         del self.__class__._instance
@@ -6664,7 +6704,7 @@ class WallperChange(AnimScreen):
                                         )
                                     # Simple fallback to WallpaperScreen
                                     fallback_screen = WallpaperScreen()
-                                    lv.scr_load(fallback_screen)
+                                    self._load_scr(fallback_screen, back=True)
                                     if hasattr(self.__class__, "_instance"):
                                         del self.__class__._instance
                                     self.del_delayed(100)
@@ -6694,7 +6734,7 @@ class WallperChange(AnimScreen):
                                         preserve_blur_state=current_blur_state,
                                         return_from_wallpaper=True,
                                     )
-                                    lv.scr_load(new_screen)
+                                    self._load_scr(new_screen, back=True)
 
                                     # Clean up WallperChange singleton
                                     if hasattr(self.__class__, "_instance"):
@@ -6707,30 +6747,38 @@ class WallperChange(AnimScreen):
                                         )
                                     # Fallback to WallpaperScreen
                                     fallback_screen = WallpaperScreen()
-                                    lv.scr_load(fallback_screen)
+                                    self._load_scr(fallback_screen, back=True)
                                     if hasattr(self.__class__, "_instance"):
                                         del self.__class__._instance
                                     self.del_delayed(100)
-                        else:  # AppdrawerBackgroundSetting
+                        elif self.prev_scr.__class__.__name__ == "AppdrawerBackgroundSetting":
+                            # Lock Screen设置页面 - 处理壁纸选择
                             if __debug__:
                                 print(
-                                    "WallperChange: Navigating to AppdrawerBackgroundSetting"
+                                    "WallperChange: Returning to AppdrawerBackgroundSetting with selected wallpaper"
                                 )
                                 print(
-                                    f"WallperChange: Passing img_path to AppdrawerBackgroundSetting: {wp.img_path}"
+                                    f"WallperChange: Selected wallpaper: {wp.img_path}"
                                 )
                             try:
-                                # Reset AppdrawerBackgroundSetting singleton if it exists
-                                if hasattr(AppdrawerBackgroundSetting, "_instance"):
-                                    del AppdrawerBackgroundSetting._instance
-
-                                new_screen = AppdrawerBackgroundSetting(
-                                    self.prev_scr.prev_scr,
-                                    selected_wallpaper=wp.img_path,
-                                    return_from_wallpaper=True,
-                                )
-                                lv.scr_load(new_screen)
-
+                                # 更新现有的AppdrawerBackgroundSetting实例
+                                self.prev_scr.selected_wallpaper = wp.img_path
+                                self.prev_scr.current_wallpaper_path = wp.img_path
+                                
+                                if hasattr(self.prev_scr, "lockscreen_preview"):
+                                    self.prev_scr.lockscreen_preview.set_src(wp.img_path)
+                                    if __debug__:
+                                        print(f"WallperChange: Updated lockscreen preview to {wp.img_path}")
+                                
+                                # 直接返回到Lock Screen设置页面，使用返回动画
+                                self._load_scr(self.prev_scr, back=True)
+                                
+                                # 确保界面正确刷新
+                                if hasattr(self.prev_scr, 'refresh_text'):
+                                    self.prev_scr.refresh_text()
+                                if hasattr(self.prev_scr, 'invalidate'):
+                                    self.prev_scr.invalidate()
+                                
                                 # Clean up WallperChange singleton
                                 if hasattr(self.__class__, "_instance"):
                                     del self.__class__._instance
@@ -6738,11 +6786,44 @@ class WallperChange(AnimScreen):
                             except Exception as e:
                                 if __debug__:
                                     print(
-                                        f"WallperChange: Failed to create AppdrawerBackgroundSetting: {e}"
+                                        f"WallperChange: Failed to update AppdrawerBackgroundSetting: {e}"
                                     )
+                                # 后备方案：创建新的AppdrawerBackgroundSetting
+                                try:
+                                    new_screen = AppdrawerBackgroundSetting(
+                                        self.prev_scr.prev_scr,
+                                        selected_wallpaper=wp.img_path,
+                                        return_from_wallpaper=True,
+                                    )
+                                    self._load_scr(new_screen, back=True)
+                                    if hasattr(self.__class__, "_instance"):
+                                        del self.__class__._instance
+                                    self.del_delayed(100)
+                                except Exception as fallback_e:
+                                    if __debug__:
+                                        print(f"WallperChange: Fallback creation failed: {fallback_e}")
+                                    # 最终后备方案：返回到WallpaperScreen
+                                    fallback_screen = WallpaperScreen()
+                                    self._load_scr(fallback_screen, back=True)
+                                    if hasattr(self.__class__, "_instance"):
+                                        del self.__class__._instance
+                                    self.del_delayed(100)
+                        else:
+                            # 其他类型的前一个页面
+                            if __debug__:
+                                print(f"WallperChange: Unknown prev_scr type: {self.prev_scr.__class__.__name__}")
+                            # 尝试直接返回到前一个页面，使用返回动画
+                            try:
+                                self._load_scr(self.prev_scr, back=True)
+                                if hasattr(self.__class__, "_instance"):
+                                    del self.__class__._instance
+                                self.del_delayed(100)
+                            except Exception as e:
+                                if __debug__:
+                                    print(f"WallperChange: Failed to return to unknown prev_scr: {e}")
                                 # Fallback to WallpaperScreen
                                 fallback_screen = WallpaperScreen()
-                                lv.scr_load(fallback_screen)
+                                self._load_scr(fallback_screen, back=True)
                                 if hasattr(self.__class__, "_instance"):
                                     del self.__class__._instance
                                 self.del_delayed(100)
@@ -6985,22 +7066,47 @@ class WallperChange(AnimScreen):
                             "WallperChange: Back button clicked - navigating to previous screen"
                         )
                     if self.prev_scr is not None:
-                        # Simplified navigation logic
+                        # 确保正确返回到调用WallperChange的页面
+                        if __debug__:
+                            print(f"WallperChange: Returning to prev_scr: {self.prev_scr}")
+                            print(f"WallperChange: prev_scr type: {type(self.prev_scr)}")
                         try:
-                            self.load_screen(self.prev_scr, destroy_self=True)
+                            # 检查前一个页面是否是AppdrawerBackgroundSetting (Lock Screen设置)
+                            if hasattr(self.prev_scr, '__class__') and self.prev_scr.__class__.__name__ == 'AppdrawerBackgroundSetting':
+                                if __debug__:
+                                    print("WallperChange: Returning to AppdrawerBackgroundSetting (Lock Screen)")
+                                # 直接加载Lock Screen设置页面
+                                self.load_screen(self.prev_scr, destroy_self=True)
+                            elif hasattr(self.prev_scr, '__class__') and self.prev_scr.__class__.__name__ == 'HomeScreenSetting':
+                                if __debug__:
+                                    print("WallperChange: Returning to HomeScreenSetting")
+                                # 直接加载Home Screen设置页面  
+                                self.load_screen(self.prev_scr, destroy_self=True)
+                            else:
+                                if __debug__:
+                                    print("WallperChange: Using standard navigation")
+                                self.load_screen(self.prev_scr, destroy_self=True)
                         except Exception as e:
                             if __debug__:
                                 print(f"WallperChange: Navigation failed: {e}")
-                            # Create a fresh WallpaperScreen as fallback
+                            # 如果导航失败，尝试直接使用返回动画加载
                             try:
-                                fallback_screen = WallpaperScreen()
-                                lv.scr_load(fallback_screen)
+                                if __debug__:
+                                    print("WallperChange: Trying direct load with return animation")
+                                self._load_scr(self.prev_scr, back=True)
                                 self.del_delayed(100)
                             except Exception as fallback_e:
                                 if __debug__:
-                                    print(
-                                        f"WallperChange: Fallback failed: {fallback_e}"
-                                    )
+                                    print(f"WallperChange: Direct load also failed: {fallback_e}")
+                                # 最后的后备方案：返回到设置主页面
+                                try:
+                                    from .homescreen import SettingsScreen
+                                    settings_screen = SettingsScreen()
+                                    self._load_scr(settings_screen, back=True)
+                                    self.del_delayed(100)
+                                except Exception as final_e:
+                                    if __debug__:
+                                        print(f"WallperChange: Final fallback failed: {final_e}")
                     return
                 elif hasattr(self, "rti_btn") and target == self.rti_btn:
                     self.on_click_ext(target)
@@ -8543,6 +8649,12 @@ class WallpaperScreen(AnimScreen):
             self._init = True
         else:
             self.refresh_text()
+            # 重新绑定事件处理器以确保Lock Screen按钮响应性
+            if hasattr(self, 'content_area') and hasattr(self, 'on_click_event'):
+                self.content_area.add_event_cb(self.on_click_event, lv.EVENT.CLICKED, None)
+            if not self.is_visible():
+                # 使用返回动画重新加载屏幕，确保正确的动画方向
+                self._load_scr(self, back=True)
             return
         super().__init__(
             prev_scr=prev_scr,
@@ -8560,12 +8672,28 @@ class WallpaperScreen(AnimScreen):
         self.lock_screen.label_left.set_text(_(i18n_keys.ITEM__LOCK_SCREEN))
         self.home_screen.label_left.set_text(_(i18n_keys.ITEM__HOME_SCREEN))
         # self.power.align_to(self.container, lv.ALIGN.OUT_BOTTOM_MID, 0, 12)
+        
+        # 确保事件处理器正常工作，防止Lock Screen按钮无响应
+        if hasattr(self, 'content_area') and hasattr(self, 'on_click_event'):
+            # 重新绑定事件处理器
+            self.content_area.add_event_cb(self.on_click_event, lv.EVENT.CLICKED, None)
 
     def on_click_event(self, event_obj):
         target = event_obj.get_target()
         if target == self.lock_screen:
-            # LanguageSetting(self)
-            AppdrawerBackgroundSetting(self)
+            if __debug__:
+                print("[WallpaperScreen] Lock Screen clicked")
+            # 确保创建新的AppdrawerBackgroundSetting实例
+            try:
+                # 重置单例状态以确保新实例创建
+                if hasattr(AppdrawerBackgroundSetting, "_instance"):
+                    if __debug__:
+                        print("[WallpaperScreen] Resetting AppdrawerBackgroundSetting singleton")
+                    del AppdrawerBackgroundSetting._instance
+                AppdrawerBackgroundSetting(self)
+            except Exception as e:
+                if __debug__:
+                    print(f"[WallpaperScreen] Error creating AppdrawerBackgroundSetting: {e}")
         elif target == self.home_screen:
             HomeScreenSetting(self)
         else:
