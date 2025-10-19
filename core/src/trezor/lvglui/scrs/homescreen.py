@@ -5340,6 +5340,13 @@ class DisplayScreen(AnimScreen):
             targets.append(self.auto_container)
         if hasattr(self, "device_info_container") and self.device_info_container:
             targets.append(self.device_info_container)
+        # Ensure the lockscreen device name + BLE ID description label
+        # follows the page transition animations as well.
+        if (
+            hasattr(self, "device_name_description")
+            and self.device_name_description
+        ):
+            targets.append(self.device_name_description)
         return targets
 
     def __init__(self, prev_scr=None):
@@ -5424,22 +5431,34 @@ class DisplayScreen(AnimScreen):
             # Clear the default checked state
             self.model_name_bt_id.clear_state()
 
-        # Add description text for device name display
+        # Add description text for device name display (left aligned with items)
         self.device_name_description = lv.label(self.content_area)
         self.device_name_description.set_size(456, lv.SIZE.CONTENT)
         self.device_name_description.add_style(
             StyleWrapper()
             .text_font(font_GeistRegular26)
             .text_color(lv_colors.GRAY_2)
-            .pad_all(16),
+            .text_align_left()
+            .pad_hor(24)
+            .pad_ver(8),
             0,
         )
         self.device_name_description.set_text(
             _(i18n_keys.BUTTON__MODEL_NAME_BLUETOOTH_ID_DESC),
         )
-        self.device_name_description.align_to(
-            self.device_info_container, lv.ALIGN.OUT_BOTTOM_LEFT, 16, 8
-        )
+        # Use a timer to defer alignment to avoid layout deadlock
+        def delayed_align():
+            try:
+                if hasattr(self, 'device_name_description') and hasattr(self, 'device_info_container'):
+                    self.device_name_description.align_to(
+                        self.device_info_container, lv.ALIGN.OUT_BOTTOM_LEFT, 0, 8
+                    )
+            except Exception as e:
+                if __debug__:
+                    print(f"DisplayScreen: Alignment error: {e}")
+        
+        # Defer alignment to next frame to avoid layout deadlock
+        lv.timer_create(lambda t: delayed_align(), 10, None).set_repeat_count(1)
 
         # Disable elastic scrolling and scrollbar to match other pages
         self.content_area.clear_flag(lv.obj.FLAG.SCROLL_ELASTIC)
@@ -5457,7 +5476,11 @@ class DisplayScreen(AnimScreen):
         )
 
         # Add manual swipe detection for right swipe navigation
-        self.add_event_cb(self.on_manual_swipe_detection, lv.EVENT.ALL, None)
+        # NOTE: Do not subscribe to LV.EVENT.ALL to avoid heavy event traffic
+        # that can cause UI stalls. Listen only to the needed events.
+        self.add_event_cb(self.on_manual_swipe_detection, lv.EVENT.GESTURE, None)
+        self.add_event_cb(self.on_manual_swipe_detection, lv.EVENT.SCROLL_BEGIN, None)
+        self.add_event_cb(self.on_manual_swipe_detection, lv.EVENT.SCROLL_END, None)
 
         self.load_screen(self)
         gc.collect()
@@ -7889,32 +7912,46 @@ class TouchSetting(AnimScreen):
             self.container, _(i18n_keys.ITEM__KEYBOARD_HAPTIC), is_haptic_feedback=True
         )
 
-        # Keyboard haptic description
+        # Keyboard haptic description (left aligned with list items)
         self.keyboard_tips = lv.label(self.content_area)
         self.keyboard_tips.set_size(456, lv.SIZE.CONTENT)
         self.keyboard_tips.set_long_mode(lv.label.LONG.WRAP)
-        self.keyboard_tips.set_style_text_color(lv_colors.ONEKEY_GRAY, lv.STATE.DEFAULT)
-        self.keyboard_tips.set_style_text_font(font_GeistRegular26, lv.STATE.DEFAULT)
+        self.keyboard_tips.set_style_text_color(
+            lv_colors.ONEKEY_GRAY, lv.STATE.DEFAULT
+        )
+        self.keyboard_tips.set_style_text_font(
+            font_GeistRegular26, lv.STATE.DEFAULT
+        )
         self.keyboard_tips.set_style_text_line_space(3, 0)
-        self.keyboard_tips.align_to(self.container, lv.ALIGN.OUT_BOTTOM_LEFT, 8, 16)
+        # Add left text alignment and horizontal padding to match list item padding (24)
+        self.keyboard_tips.add_style(
+            StyleWrapper().text_align_left().pad_hor(24).pad_ver(0), 0
+        )
+        self.keyboard_tips.align_to(self.container, lv.ALIGN.OUT_BOTTOM_LEFT, 0, 16)
         self.keyboard_tips.set_text(_(i18n_keys.CONTENT__VIBRATION_HAPTIC__HINT))
 
         # Second container for tap awake
         self.container2 = ContainerFlexCol(
             self.content_area, self.keyboard_tips, padding_row=2
         )
-        self.container2.align_to(self.keyboard_tips, lv.ALIGN.OUT_BOTTOM_LEFT, -8, 24)
+        # Align directly under keyboard tips without horizontal offset
+        self.container2.align_to(self.keyboard_tips, lv.ALIGN.OUT_BOTTOM_LEFT, 0, 24)
         self.tap_awake = ListItemBtnWithSwitch(
             self.container2, _(i18n_keys.ITEM__TAP_TO_WAKE)
         )
 
-        # Tap awake description
+        # Tap awake description (left aligned with list items)
         self.description = lv.label(self.content_area)
         self.description.set_size(456, lv.SIZE.CONTENT)
         self.description.set_long_mode(lv.label.LONG.WRAP)
-        self.description.set_style_text_color(lv_colors.ONEKEY_GRAY, lv.STATE.DEFAULT)
+        self.description.set_style_text_color(
+            lv_colors.ONEKEY_GRAY, lv.STATE.DEFAULT
+        )
         self.description.set_style_text_font(font_GeistRegular26, lv.STATE.DEFAULT)
         self.description.set_style_text_line_space(3, 0)
+        self.description.add_style(
+            StyleWrapper().text_align_left().pad_hor(24).pad_ver(0), 0
+        )
         self.description.align_to(self.tap_awake, lv.ALIGN.OUT_BOTTOM_LEFT, 0, 16)
 
         # Set keyboard haptic state
