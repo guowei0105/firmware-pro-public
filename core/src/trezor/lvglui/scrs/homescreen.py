@@ -5431,23 +5431,25 @@ class DisplayScreen(AnimScreen):
             # Clear the default checked state
             self.model_name_bt_id.clear_state()
 
-        # TEMPORARY: Comment out description label completely to test if it's the cause
-        # self.device_name_description = lv.label(self.content_area)
-        # self.device_name_description.set_size(456, lv.SIZE.CONTENT)
-        # self.device_name_description.add_style(
-        #     StyleWrapper()
-        #     .text_font(font_GeistRegular26)
-        #     .text_color(lv_colors.GRAY_2)
-        #     .text_align_left()
-        #     .pad_hor(24)
-        #     .pad_ver(8),
-        #     0,
-        # )
-        # self.device_name_description.set_text(
-        #     _(i18n_keys.BUTTON__MODEL_NAME_BLUETOOTH_ID_DESC),
-        # )
+        # Create description label with safer approach - no alignment initially
+        self.device_name_description = lv.label(self.content_area)
+        self.device_name_description.set_size(456, lv.SIZE.CONTENT)
+        self.device_name_description.add_style(
+            StyleWrapper()
+            .text_font(font_GeistRegular26)
+            .text_color(lv_colors.GRAY_2)
+            .text_align_left()
+            .pad_hor(24)
+            .pad_ver(8),
+            0,
+        )
+        self.device_name_description.set_text(
+            _(i18n_keys.BUTTON__MODEL_NAME_BLUETOOTH_ID_DESC),
+        )
+        # Use simple positioning instead of align_to to avoid deadlock
+        self.device_name_description.set_pos(24, 500)  # Safe static position for now
         if __debug__:
-            print("DisplayScreen: Description label creation skipped for debugging")
+            print("DisplayScreen: Description label created with static positioning")
 
         # Disable elastic scrolling and scrollbar to match other pages
         self.content_area.clear_flag(lv.obj.FLAG.SCROLL_ELASTIC)
