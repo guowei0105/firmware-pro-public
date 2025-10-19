@@ -5431,32 +5431,23 @@ class DisplayScreen(AnimScreen):
             # Clear the default checked state
             self.model_name_bt_id.clear_state()
 
-        # Add description text for device name display (left aligned with items)
-        self.device_name_description = lv.label(self.content_area)
-        self.device_name_description.set_size(456, lv.SIZE.CONTENT)
-        self.device_name_description.add_style(
-            StyleWrapper()
-            .text_font(font_GeistRegular26)
-            .text_color(lv_colors.GRAY_2)
-            .text_align_left()
-            .pad_hor(24)
-            .pad_ver(8),
-            0,
-        )
-        self.device_name_description.set_text(
-            _(i18n_keys.BUTTON__MODEL_NAME_BLUETOOTH_ID_DESC),
-        )
-        # SIMPLE FIX: Just use direct alignment without any timer/positioning tricks
-        # This should work if there's no circular dependency in the layout
-        try:
-            self.device_name_description.align_to(
-                self.device_info_container, lv.ALIGN.OUT_BOTTOM_LEFT, 0, 8
-            )
-        except Exception as e:
-            if __debug__:
-                print(f"DisplayScreen: Direct alignment failed: {e}")
-            # Fallback to manual positioning
-            self.device_name_description.set_pos(24, 400)  # Static fallback position
+        # TEMPORARY: Comment out description label completely to test if it's the cause
+        # self.device_name_description = lv.label(self.content_area)
+        # self.device_name_description.set_size(456, lv.SIZE.CONTENT)
+        # self.device_name_description.add_style(
+        #     StyleWrapper()
+        #     .text_font(font_GeistRegular26)
+        #     .text_color(lv_colors.GRAY_2)
+        #     .text_align_left()
+        #     .pad_hor(24)
+        #     .pad_ver(8),
+        #     0,
+        # )
+        # self.device_name_description.set_text(
+        #     _(i18n_keys.BUTTON__MODEL_NAME_BLUETOOTH_ID_DESC),
+        # )
+        if __debug__:
+            print("DisplayScreen: Description label creation skipped for debugging")
 
         # Disable elastic scrolling and scrollbar to match other pages
         self.content_area.clear_flag(lv.obj.FLAG.SCROLL_ELASTIC)
