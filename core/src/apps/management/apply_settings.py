@@ -66,10 +66,23 @@ async def apply_settings(ctx: wire.Context, msg: ApplySettings) -> Success:
         # storage.device.set_homescreen(f"A:/res/{msg.homescreen.decode()}")
 
     if msg.label is not None:
+        print(f"[apply_settings] Received label change request: '{msg.label}'")
+        print(f"[apply_settings] Label UTF-8 length: {len(msg.label.encode('utf-8'))}")
+        print(f"[apply_settings] Max allowed length: {storage.device.LABEL_MAXLENGTH}")
+        
         if len(msg.label.encode("utf-8")) > storage.device.LABEL_MAXLENGTH:
+            print("[apply_settings] Label too long, raising DataError")
             raise wire.DataError("Label too long")
-        await require_confirm_change_label(ctx, msg.label)
-        storage.device.set_label(msg.label)
+        
+        print("[apply_settings] Starting user confirmation for label change")
+        try:
+            await require_confirm_change_label(ctx, msg.label)
+            print("[apply_settings] User confirmation successful, setting label")
+            storage.device.set_label(msg.label)
+            print(f"[apply_settings] Label successfully set to: '{msg.label}'")
+        except Exception as e:
+            print(f"[apply_settings] Label change failed with exception: {e}")
+            raise
 
     if msg.use_passphrase is not None:
         await require_confirm_change_passphrase(ctx, msg.use_passphrase)
@@ -114,6 +127,35 @@ async def apply_settings(ctx: wire.Context, msg: ApplySettings) -> Success:
         storage.device.set_experimental_features(msg.experimental_features)
 
     reload_settings_from_storage()
+    
+    # Force refresh MainScreen and LockScreen to update device label display
+    try:
+        # Clear the _LABEL_VALUE cache to force re-reading from storage
+        storage.device._LABEL_VALUE = None
+        updated_label = storage.device.get_label()
+        
+        # Update MainScreen
+        from trezor.lvglui.scrs.homescreen import MainScreen
+        if hasattr(MainScreen, "_instance") and MainScreen._instance:
+            main_screen = MainScreen._instance
+            # Update the display if title exists and device names are enabled
+            if (hasattr(main_screen, "title") and main_screen.title and 
+                storage.device.is_device_name_display_enabled()):
+                main_screen.title.set_text(updated_label)
+                print(f"[apply_settings] MainScreen title updated to: '{updated_label}'")
+        
+        # Update LockScreen
+        from trezor.lvglui.scrs.lockscreen import LockScreen
+        if hasattr(LockScreen, "_instance") and LockScreen._instance:
+            lock_screen = LockScreen._instance
+            # Update the display if title exists and device names are enabled
+            if (hasattr(lock_screen, "title") and lock_screen.title and 
+                storage.device.is_device_name_display_enabled()):
+                lock_screen.title.set_text(updated_label)
+                print(f"[apply_settings] LockScreen title updated to: '{updated_label}'")
+                
+    except Exception as e:
+        print(f"[apply_settings] Failed to refresh screen displays: {e}")
 
     return Success(message="Settings applied")
 
@@ -129,16 +171,23 @@ async def require_confirm_change_homescreen(ctx: wire.GenericContext) -> None:
 
 
 async def require_confirm_change_label(ctx: wire.GenericContext, label: str) -> None:
-    await confirm_action(
-        ctx,
-        "set_label",
-        _(i18n_keys.TITLE__CHANGE_LABEL),
-        description=_(i18n_keys.SUBTITLE__SET_LABEL_CHANGE_LABEL),
-        description_param=label,
-        br_code=ButtonRequestType.ProtectCall,
-        anim_dir=2,
-        icon=None,
-    )
+    print(f"[require_confirm_change_label] Showing confirmation dialog for label: '{label}'")
+    
+    try:
+        await confirm_action(
+            ctx,
+            "set_label",
+            _(i18n_keys.TITLE__CHANGE_LABEL),
+            description=_(i18n_keys.SUBTITLE__SET_LABEL_CHANGE_LABEL),
+            description_param=label,
+            br_code=ButtonRequestType.ProtectCall,
+            anim_dir=2,
+            icon=None,
+        )
+        print("[require_confirm_change_label] User confirmed label change")
+    except Exception as e:
+        print(f"[require_confirm_change_label] User confirmation failed: {e}")
+        raise
 
 
 async def require_confirm_change_passphrase(

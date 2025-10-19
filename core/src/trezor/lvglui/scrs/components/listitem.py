@@ -349,15 +349,13 @@ class ImgGridItem(lv.img):
             self.set_style_radius(48, 0)  # More rounded radius for custom wallpapers
             self.set_style_clip_corner(True, 0)
 
-            # Consistent padding and border for wallpapers
-            self.set_style_pad_all(1, 0)  # 1px padding
-            self.set_style_border_width(1, 0)  # 1px border
-            self.set_style_border_color(lv.color_hex(0x333333), 0)  # Dark gray border
-            self.set_style_border_opa(lv.OPA._50, 0)  # Semi-transparent
+            # Remove padding to eliminate white/black edges
+            self.set_style_pad_all(0, 0)  # No padding to eliminate borders
+            self.set_style_border_width(0, 0)  # No border to prevent edge artifacts
+            self.set_style_border_opa(lv.OPA.TRANSP, 0)  # Transparent border
 
-        # Common styles for both types
-        self.set_style_bg_opa(lv.OPA.COVER, 0)
-        self.set_style_bg_color(lv.color_hex(0x000000), 0)  # Black background
+        # Common styles for both types - use transparent background to avoid edges
+        self.set_style_bg_opa(lv.OPA.TRANSP, 0)  # Transparent background
 
         # Image rendering optimizations
         self.set_style_img_opa(lv.OPA.COVER, 0)

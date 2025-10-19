@@ -500,7 +500,7 @@ class MainScreen(Screen):
             show_device_names = storage_device.is_device_name_display_enabled()
 
             # Get real device names
-            real_device_name = storage_device.get_model()  # "OneKey Pro"
+            real_device_name = storage_device.get_label()  # User custom label
             real_ble_name = storage_device.get_ble_name() or uart.get_ble_name()
 
             # Debug output
@@ -535,7 +535,7 @@ class MainScreen(Screen):
             show_device_names = storage_device.is_device_name_display_enabled()
 
             # Get real device names
-            real_device_name = storage_device.get_model()  # "OneKey Pro"
+            real_device_name = storage_device.get_label()  # User custom label
             real_ble_name = storage_device.get_ble_name() or uart.get_ble_name()
 
             # Update title and subtitle based on current setting
@@ -3245,7 +3245,7 @@ class NftLockScreenPreview(AnimScreen):
         self.lockscreen_preview.align(lv.ALIGN.CENTER, 0, 0)
 
         # Device name and bluetooth name overlaid on the image
-        device_name = storage_device.get_model() or "OneKey Pro"
+        device_name = storage_device.get_label() or "OneKey Pro"
         ble_name = storage_device.get_ble_name() or uart.get_ble_name()
 
         # Device name label (overlaid on image)
@@ -5433,7 +5433,7 @@ class DisplayScreen(AnimScreen):
 
         # Create description label with safer approach - no alignment initially
         self.device_name_description = lv.label(self.content_area)
-        self.device_name_description.set_size(456, lv.SIZE.CONTENT)
+        self.device_name_description.set_size(480, lv.SIZE.CONTENT)  # Wider to prevent line breaks
         self.device_name_description.add_style(
             StyleWrapper()
             .text_font(font_GeistRegular26)
@@ -5446,8 +5446,8 @@ class DisplayScreen(AnimScreen):
         self.device_name_description.set_text(
             _(i18n_keys.BUTTON__MODEL_NAME_BLUETOOTH_ID_DESC),
         )
-        # Use simple positioning instead of align_to to avoid deadlock
-        self.device_name_description.set_pos(0, 550)  # Adjusted: more left (0) and down (550)
+        # Use simple positioning instead of align_to to avoid deadlock  
+        self.device_name_description.set_pos(15, 550)  # Moved right (24) to match ListItem padding
         if __debug__:
             print("DisplayScreen: Description label created with static positioning")
 
@@ -5661,7 +5661,7 @@ class DisplayScreen(AnimScreen):
             # Update MainScreen display if it exists
             if hasattr(MainScreen, "_instance") and MainScreen._instance:
                 main_screen = MainScreen._instance
-                real_device_name = storage_device.get_model()
+                real_device_name = storage_device.get_label()
                 real_ble_name = storage_device.get_ble_name() or uart.get_ble_name()
 
                 if __debug__:
@@ -5744,7 +5744,7 @@ class DisplayScreen(AnimScreen):
 
             if hasattr(LockScreen, "_instance") and LockScreen._instance:
                 lock_screen = LockScreen._instance
-                real_device_name = storage_device.get_model()
+                real_device_name = storage_device.get_label()
                 real_ble_name = storage_device.get_ble_name() or uart.get_ble_name()
 
                 if __debug__:
@@ -6019,7 +6019,7 @@ class AppdrawerBackgroundSetting(AnimScreen):
         self.lockscreen_preview.align(lv.ALIGN.CENTER, 0, 0)
 
         # Device name and bluetooth name overlaid on the image
-        device_name = storage_device.get_model() or "OneKey Pro"
+        device_name = storage_device.get_label() or "OneKey Pro"
         ble_name = storage_device.get_ble_name() or uart.get_ble_name()
 
         # Device name label (overlaid on image, horizontally centered, 49px from top edge)
@@ -6601,7 +6601,7 @@ class WallperChange(AnimScreen):
         self.pro_header.set_text(_(i18n_keys.TITLE__COLLECTION))
         self.pro_header.add_style(
             StyleWrapper()
-            .text_font(font_GeistSemiBold26)
+            .text_font(font_GeistSemiBold30)
             .text_color(lv_colors.WHITE)
             .text_align(lv.TEXT_ALIGN.LEFT),
             0,
@@ -6928,7 +6928,7 @@ class WallperChange(AnimScreen):
 
         if self.edit_mode:
             # Switch to edit mode
-            self.edit_button_label.set_text("Done")
+            self.edit_button_label.set_text(_(i18n_keys.BUTTON__DONE))
             # Show remove icons for all custom wallpapers
             for i, wp in enumerate(self.custom_wps):
                 if hasattr(wp, "remove_icon"):

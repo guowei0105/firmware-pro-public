@@ -41,7 +41,7 @@ class LockScreen(Screen):
 
             if show_device_names:
                 # Get real device names
-                real_device_name = storage_device.get_model()  # "OneKey Pro"
+                real_device_name = storage_device.get_label()  # User custom label
                 real_ble_name = storage_device.get_ble_name()
                 from trezor import uart
 
@@ -75,7 +75,7 @@ class LockScreen(Screen):
 
             if show_device_names:
                 # Get real device names and show them
-                real_device_name = storage_device.get_model()  # "OneKey Pro"
+                real_device_name = storage_device.get_label()  # User custom label
                 real_ble_name = storage_device.get_ble_name()
                 from trezor import uart
 
