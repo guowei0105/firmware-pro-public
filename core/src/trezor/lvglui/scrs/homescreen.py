@@ -5447,7 +5447,7 @@ class DisplayScreen(AnimScreen):
             _(i18n_keys.BUTTON__MODEL_NAME_BLUETOOTH_ID_DESC),
         )
         # Use simple positioning instead of align_to to avoid deadlock
-        self.device_name_description.set_pos(24, 500)  # Safe static position for now
+        self.device_name_description.set_pos(0, 550)  # Adjusted: more left (0) and down (550)
         if __debug__:
             print("DisplayScreen: Description label created with static positioning")
 
