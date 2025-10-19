@@ -565,6 +565,14 @@ async def handle_session(
                     # workflow running on wire.
                     utils.unimport_end(modules)
 
+                    # For UI: mark end of handling this message. This allows the
+                    # homescreen logic to debounce and restore to AppDrawer after
+                    # a quiet period, and works for any request type.
+                    try:
+                        change_state()
+                    except Exception:
+                        pass
+
                     if next_msg is None and msg.type not in AVOID_RESTARTING_FOR:
                         # Shut down the loop if there is no next message waiting.
                         # Let the session be restarted from `main`.

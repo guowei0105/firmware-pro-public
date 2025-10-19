@@ -59,6 +59,10 @@ _last_jpeg_loaded = None  # Cache the last loaded JPEG path
 _operation_count = 0  # Operation counter
 _active_timers = []  # Track active timers
 _cached_styles = {}  # Cache style objects dictionary
+_restore_timer = None  # LVGL timer for debounced restore to MainScreen
+_busy_show_timer = None  # LVGL timer to delay showing Processing
+_busy_show_delay_ms = 800  # Delay before showing Processing text
+_restore_timer = None  # LVGL timer for debounced restore to AppDrawer
 
 
 def get_timestamp():
@@ -314,7 +318,7 @@ async def _delayed_cleanup():
 
 
 def change_state(is_busy: bool = False):
-    global _busy_state_counter, _last_busy_time, _cleanup_task
+    global _busy_state_counter, _last_busy_time, _cleanup_task, _restore_timer, _busy_show_timer
 
     if __debug__:
         print(f"[CHANGE_STATE] Called with is_busy={is_busy}")
@@ -337,6 +341,20 @@ def change_state(is_busy: bool = False):
         _set_persistent_busy_state(_busy_state_counter)
         if __debug__:
             print(f"[CHANGE_STATE] Busy counter: {_busy_state_counter}")
+        # Cancel any pending LVGL restore timer since we are busy again
+        try:
+            if _restore_timer is not None:
+                _restore_timer.delete()
+        except:
+            pass
+        _restore_timer = None
+        # Reschedule delayed busy indicator
+        try:
+            if _busy_show_timer is not None:
+                _busy_show_timer.delete()
+        except:
+            pass
+        _busy_show_timer = None
     else:
         # Decrement busy counter
         if _busy_state_counter > 0:
@@ -345,21 +363,28 @@ def change_state(is_busy: bool = False):
             if _busy_state_counter > 0:
                 _set_persistent_busy_state(_busy_state_counter)
 
-        # Only restore to non-busy state if counter is 0 AND enough time has passed
+        # Only restore to non-busy state if counter is 0.
+        # To avoid flicker across bursts of host messages, debounce the restore
+        # using an LVGL timer. This survives loop.clear() and is cancelled by
+        # any subsequent busy call above.
         time_since_last_busy = utime.ticks_diff(current_time, _last_busy_time)
-        if _busy_state_counter > 0 or time_since_last_busy < _busy_debounce_ms:
+        if _busy_state_counter > 0:
             if __debug__:
                 print(
                     f"[CHANGE_STATE] Staying busy - counter: {_busy_state_counter}, time_diff: {time_since_last_busy}ms"
                 )
+            return
 
-            # Schedule cleanup task if not already scheduled and counter is 0
-            if _busy_state_counter == 0 and _cleanup_task is None:
-                if __debug__:
-                    print(f"[CHANGE_STATE] Scheduling cleanup task")
-                _cleanup_task = workflow.spawn(_delayed_cleanup())
+        # Cancel pending busy-indicator timer; we are no longer busy
+        try:
+            if _busy_show_timer is not None:
+                _busy_show_timer.delete()
+        except:
+            pass
+        _busy_show_timer = None
 
-            return  # Don't change to non-busy state yet
+        # We want to immediately restore the tips to Swipe-to-show.
+        # No debounce here to avoid staying on Processing... between quick requests.
 
         if __debug__:
             print(
@@ -373,72 +398,92 @@ def change_state(is_busy: bool = False):
         # Don't clear persistent state here - let cleanup task handle it
 
     if hasattr(MainScreen, "_instance") and MainScreen._instance:
-        # When setting busy state, ensure MainScreen is visible
-        if is_busy:
-            # Make sure MainScreen is the active screen
-            if not MainScreen._instance.is_visible():
-                if __debug__:
-                    print(f"[CHANGE_STATE] MainScreen not visible, switching to it")
-                lv.scr_load(MainScreen._instance)
-            else:
-                if __debug__:
-                    print(f"[CHANGE_STATE] MainScreen already visible")
+        # Ensure MainScreen is the active screen
+        if not MainScreen._instance.is_visible():
+            if __debug__:
+                print(f"[CHANGE_STATE] MainScreen not visible, switching to it")
+            lv.scr_load(MainScreen._instance)
+        else:
+            if __debug__:
+                print(f"[CHANGE_STATE] MainScreen already visible")
 
+        if is_busy:
             # Hide AppDrawer if it's visible
             if hasattr(MainScreen._instance, "apps") and MainScreen._instance.apps:
                 if not MainScreen._instance.apps.has_flag(lv.obj.FLAG.HIDDEN):
                     if __debug__:
                         print(f"[CHANGE_STATE] Hiding AppDrawer to show MainScreen")
                     MainScreen._instance.apps.hide_to_mainscreen_fallback()
-        else:
-            # When restoring from busy state, show AppDrawer
-            if hasattr(MainScreen._instance, "apps") and MainScreen._instance.apps:
-                if MainScreen._instance.apps.has_flag(lv.obj.FLAG.HIDDEN):
-                    if __debug__:
-                        print(
-                            f"[CHANGE_STATE] Showing AppDrawer after communication complete (no animation)"
-                        )
-                    MainScreen._instance.refresh_appdrawer_background()
-                    # Show AppDrawer directly without animation - ensure complete state setup
-                    MainScreen._instance.hidden_others(True)
-                    if (
-                        hasattr(MainScreen._instance, "up_arrow")
-                        and MainScreen._instance.up_arrow
-                    ):
-                        MainScreen._instance.up_arrow.add_flag(lv.obj.FLAG.HIDDEN)
-                    if (
-                        hasattr(MainScreen._instance, "bottom_tips")
-                        and MainScreen._instance.bottom_tips
-                    ):
-                        MainScreen._instance.bottom_tips.add_flag(lv.obj.FLAG.HIDDEN)
-                    MainScreen._instance.apps.clear_flag(lv.obj.FLAG.HIDDEN)
-                    MainScreen._instance.apps.clear_flag(lv.obj.FLAG.GESTURE_BUBBLE)
-                    MainScreen._instance.apps.visible = True
-                    MainScreen._instance.apps._showing = False
-                    # Set flag to prevent gesture handler from immediately triggering
-                    MainScreen._instance._just_restored_from_busy = True
-                    # Clear persistent state completely since we've successfully restored
-                    _set_persistent_busy_state(0)
-                    _set_persistent_busy_time(0)
-                    if __debug__:
-                        print(
-                            f"[CHANGE_STATE] AppDrawer state set: hidden={MainScreen._instance.apps.has_flag(lv.obj.FLAG.HIDDEN)}, visible={MainScreen._instance.apps.visible}"
-                        )
-                        print(
-                            f"[CHANGE_STATE] Set _just_restored_from_busy flag to prevent gesture handler"
-                        )
-                        print(
-                            f"[CHANGE_STATE] Cleared persistent busy state completely"
-                        )
 
-        MainScreen._instance.change_state(is_busy)
+            # Delay showing Processing to avoid flicker for short requests
+            def _busy_show_cb(t=None):
+                try:
+                    # Only show if still busy
+                    if _busy_state_counter > 0 and MainScreen._instance:
+                        MainScreen._instance.change_state(True)
+                finally:
+                    global _busy_show_timer
+                    _busy_show_timer = None
+
+            if _busy_state_counter > 0 and _busy_show_timer is None:
+                _busy_show_timer = lv.timer_create(lambda _t: _busy_show_cb(), _busy_show_delay_ms, None)
+                _busy_show_timer.set_repeat_count(1)
+        else:
+            # Restoring from busy: stay on MainScreen and reset tips
+            if hasattr(MainScreen._instance, "apps") and MainScreen._instance.apps:
+                if not MainScreen._instance.apps.has_flag(lv.obj.FLAG.HIDDEN):
+                    if __debug__:
+                        print("[CHANGE_STATE] Hiding AppDrawer after communication complete")
+                    MainScreen._instance.apps.hide_to_mainscreen_fallback()
+            MainScreen._instance.change_state(False)
+            _set_persistent_busy_state(0)
+            _set_persistent_busy_time(0)
+            if __debug__:
+                print("[CHANGE_STATE] Restored to MainScreen with swipe prompt")
     elif is_busy:
-        # If MainScreen instance doesn't exist, create and show it
+        # If MainScreen instance doesn't exist, create and show it (without immediate busy)
         if __debug__:
             print(f"[CHANGE_STATE] MainScreen instance doesn't exist, creating it")
         main_screen = MainScreen()
         lv.scr_load(main_screen)
-        main_screen.change_state(is_busy)
+        # Schedule delayed busy indicator
+        def _busy_show_cb2(t=None):
+            try:
+                if _busy_state_counter > 0 and hasattr(MainScreen, "_instance") and MainScreen._instance:
+                    MainScreen._instance.change_state(True)
+            finally:
+                global _busy_show_timer
+                _busy_show_timer = None
+        _busy_show_timer = lv.timer_create(lambda _t: _busy_show_cb2(), _busy_show_delay_ms, None)
+        _busy_show_timer.set_repeat_count(1)
+
+
+def show_appdrawer_immediate():
+    """Immediately show AppDrawer (used after successful unlock)."""
+    try:
+        if hasattr(MainScreen, "_instance") and MainScreen._instance:
+            ms = MainScreen._instance
+        else:
+            ms = MainScreen()
+        if not ms.is_visible():
+            lv.scr_load(ms)
+        # Show AppDrawer directly without animation
+        if hasattr(ms, "apps") and ms.apps:
+            ms.refresh_appdrawer_background()
+            ms.hidden_others(True)
+            if hasattr(ms, "up_arrow"):
+                ms.up_arrow.add_flag(lv.obj.FLAG.HIDDEN)
+            if hasattr(ms, "bottom_tips"):
+                ms.bottom_tips.add_flag(lv.obj.FLAG.HIDDEN)
+            ms.apps.clear_flag(lv.obj.FLAG.HIDDEN)
+            ms.apps.clear_flag(lv.obj.FLAG.GESTURE_BUBBLE)
+            ms.apps.visible = True
+            ms.apps._showing = False
+    except Exception as e:
+        try:
+            print(f"show_appdrawer_immediate error: {e}")
+        except:
+            pass
 
 
 class MainScreen(Screen):
@@ -691,26 +736,19 @@ class MainScreen(Screen):
                     self.bottom_tips.set_text("")  # Clear processing text
                 print("MainScreen: Device locked, staying in MainScreen view")
             else:
-                # Device is unlocked, check if we should show AppDrawer
-                if should_show_appdrawer:
-                    # Communication finished, show AppDrawer without animation
-                    print(
-                        "MainScreen: Communication finished, showing AppDrawer (no animation)"
-                    )
-                    self.refresh_appdrawer_background()
-                    # Show AppDrawer directly without animation
-                    self.hidden_others(True)
-                    self.apps.clear_flag(lv.obj.FLAG.HIDDEN)
-                    self.apps.clear_flag(lv.obj.FLAG.GESTURE_BUBBLE)
-                    self.apps.visible = True
-                    self.apps._showing = False
-                else:
-                    # Default to showing AppDrawer
-                    self.apps.clear_flag(lv.obj.FLAG.HIDDEN)
-                    self.apps.clear_flag(lv.obj.FLAG.GESTURE_BUBBLE)
-                    self.apps.visible = True
-                    self.apps._showing = False
-                    print("MainScreen: Default to AppDrawer view")
+                # Device is unlocked: always default to MainScreen (no AppDrawer)
+                # Hide AppDrawer if needed
+                self.apps.add_flag(lv.obj.FLAG.HIDDEN)
+                self.apps.add_flag(lv.obj.FLAG.GESTURE_BUBBLE)
+                self.apps.visible = False
+                # Show MainScreen elements and tips
+                self.hidden_others(False)
+                if hasattr(self, "up_arrow"):
+                    self.up_arrow.clear_flag(lv.obj.FLAG.HIDDEN)
+                if hasattr(self, "bottom_tips"):
+                    self.bottom_tips.clear_flag(lv.obj.FLAG.HIDDEN)
+                    self.bottom_tips.set_text(_(i18n_keys.BUTTON__SWIPE_TO_SHOW_APPS))
+                print("MainScreen: Default to MainScreen view")
 
         # Add gesture handling for MainScreen
         self.add_event_cb(self.on_main_gesture, lv.EVENT.GESTURE, None)

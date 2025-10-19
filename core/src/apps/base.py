@@ -464,7 +464,7 @@ ALLOW_WHILE_LOCKED = (
 )
 
 
-def set_homescreen(show_app_guide: bool = False) -> None:
+def set_homescreen(show_app_guide: bool = False, prefer_appdrawer: bool = False) -> None:
     import lvgl as lv  # type: ignore[Import "lvgl" could not be resolved]
 
     from trezor.lvglui.scrs import fingerprints
@@ -491,6 +491,14 @@ def set_homescreen(show_app_guide: bool = False) -> None:
 
             store_ble_name(ble_name)
             screen = MainScreen(device_name, ble_name, dev_state)
+            # If requested (e.g., after unlock), prepare AppDrawer before first refresh
+            if prefer_appdrawer:
+                try:
+                    from trezor.lvglui.scrs import homescreen as _homescreen
+
+                    _homescreen.show_appdrawer_immediate()
+                except Exception:
+                    pass
             if show_app_guide:
                 from trezor.lvglui.scrs import app_guide
 
@@ -653,7 +661,8 @@ async def unlock_device(
 
     utils.mark_pin_verified()
     reload_settings_from_storage()
-    set_homescreen()
+    # Prefer AppDrawer immediately after unlock to avoid homescreen flash
+    set_homescreen(prefer_appdrawer=True)
     wire.find_handler = workflow_handlers.find_registered_handler
 
 
