@@ -5450,15 +5450,20 @@ class DisplayScreen(AnimScreen):
         def delayed_align():
             try:
                 if hasattr(self, 'device_name_description') and hasattr(self, 'device_info_container'):
+                    # Force layout update before alignment
+                    self.device_info_container.update_layout()
+                    # Align with matching left padding to match ListItemBtn content
                     self.device_name_description.align_to(
                         self.device_info_container, lv.ALIGN.OUT_BOTTOM_LEFT, 0, 8
                     )
+                    if __debug__:
+                        print("DisplayScreen: Description aligned successfully")
             except Exception as e:
                 if __debug__:
                     print(f"DisplayScreen: Alignment error: {e}")
         
-        # Defer alignment to next frame to avoid layout deadlock
-        lv.timer_create(lambda t: delayed_align(), 10, None).set_repeat_count(1)
+        # Defer alignment with sufficient delay to ensure container layout is complete
+        lv.timer_create(lambda t: delayed_align(), 50, None).set_repeat_count(1)
 
         # Disable elastic scrolling and scrollbar to match other pages
         self.content_area.clear_flag(lv.obj.FLAG.SCROLL_ELASTIC)
