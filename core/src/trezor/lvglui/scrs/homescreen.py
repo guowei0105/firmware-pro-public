@@ -5446,27 +5446,17 @@ class DisplayScreen(AnimScreen):
         self.device_name_description.set_text(
             _(i18n_keys.BUTTON__MODEL_NAME_BLUETOOTH_ID_DESC),
         )
-        # Instead of using align_to which can cause deadlock, use manual positioning
-        # Position it manually to match the container's left edge with same padding
-        self.device_name_description.set_pos(24, 0)  # x=24 matches ListItemBtn padding
-        # Position it relative to device_info_container bottom with proper spacing
-        # We'll update the Y position after the container is rendered
-        def update_description_position():
-            try:
-                if hasattr(self, 'device_name_description') and hasattr(self, 'device_info_container'):
-                    # Get container position and size
-                    container_y = self.device_info_container.get_y()
-                    container_height = self.device_info_container.get_height()
-                    # Position description below container with 8px gap
-                    self.device_name_description.set_y(container_y + container_height + 8)
-                    if __debug__:
-                        print("DisplayScreen: Description positioned successfully")
-            except Exception as e:
-                if __debug__:
-                    print(f"DisplayScreen: Positioning error: {e}")
-        
-        # Use a very short delay to update Y position after layout
-        lv.timer_create(lambda t: update_description_position(), 5, None).set_repeat_count(1)
+        # SIMPLE FIX: Just use direct alignment without any timer/positioning tricks
+        # This should work if there's no circular dependency in the layout
+        try:
+            self.device_name_description.align_to(
+                self.device_info_container, lv.ALIGN.OUT_BOTTOM_LEFT, 0, 8
+            )
+        except Exception as e:
+            if __debug__:
+                print(f"DisplayScreen: Direct alignment failed: {e}")
+            # Fallback to manual positioning
+            self.device_name_description.set_pos(24, 400)  # Static fallback position
 
         # Disable elastic scrolling and scrollbar to match other pages
         self.content_area.clear_flag(lv.obj.FLAG.SCROLL_ELASTIC)
@@ -5483,14 +5473,14 @@ class DisplayScreen(AnimScreen):
             self.on_switch_change, lv.EVENT.VALUE_CHANGED, None
         )
 
-        # Add manual swipe detection for right swipe navigation
-        # NOTE: Do not subscribe to LV.EVENT.ALL to avoid heavy event traffic
-        # that can cause UI stalls. Listen only to the needed events.
-        self.add_event_cb(self.on_manual_swipe_detection, lv.EVENT.GESTURE, None)
-        self.add_event_cb(self.on_manual_swipe_detection, lv.EVENT.SCROLL_BEGIN, None)
-        self.add_event_cb(self.on_manual_swipe_detection, lv.EVENT.SCROLL_END, None)
+        # TEMPORARILY DISABLED: Add manual swipe detection for right swipe navigation
+        # NOTE: These event listeners might be causing the deadlock, disabling for debugging
+        # self.add_event_cb(self.on_manual_swipe_detection, lv.EVENT.GESTURE, None)
+        # self.add_event_cb(self.on_manual_swipe_detection, lv.EVENT.SCROLL_BEGIN, None)
+        # self.add_event_cb(self.on_manual_swipe_detection, lv.EVENT.SCROLL_END, None)
 
-        self.load_screen(self)
+        # TEMPORARILY DISABLED: load_screen might be causing issues
+        # self.load_screen(self)
         gc.collect()
 
     def on_manual_swipe_detection(self, event_obj):
