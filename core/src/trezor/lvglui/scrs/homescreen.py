@@ -161,8 +161,8 @@ def brightness2_percent_str(brightness: int) -> str:
 GRID_CELL_SIZE_ROWS = const(240)
 GRID_CELL_SIZE_COLS = const(144)
 
-APP_DRAWER_UP_TIME = 10
-APP_DRAWER_DOWN_TIME = 50
+APP_DRAWER_UP_TIME = 300
+APP_DRAWER_DOWN_TIME = 300
 APP_DRAWER_UP_DELAY = 0
 APP_DRAWER_DOWN_DELAY = 0
 if __debug__:
@@ -174,7 +174,7 @@ if __debug__:
     PATH_EASE_OUT = lv.anim_t.path_ease_out
     PATH_STEP = lv.anim_t.path_step
     APP_DRAWER_UP_PATH_CB = PATH_EASE_OUT
-    APP_DRAWER_DOWN_PATH_CB = PATH_EASE_IN_OUT
+    APP_DRAWER_DOWN_PATH_CB = PATH_EASE_OUT
 
 # Global variables for debouncing busy state
 _busy_state_counter = 0
@@ -216,13 +216,6 @@ def _set_persistent_busy_state(counter):
         # Only update timestamp when going from 0 to non-zero (first busy)
         if current_saved == 0 and counter > 0:
             storage.cache.set_int(storage.cache.APP_COMMON_BUSY_TIME, utime.ticks_ms())
-            if __debug__:
-                print(
-                    f"[PERSISTENT] Saved busy state: {counter} with NEW timestamp {utime.ticks_ms()}"
-                )
-        else:
-            if __debug__:
-                print(f"[PERSISTENT] Saved busy state: {counter} (timestamp unchanged)")
     except:
         pass
 
@@ -233,8 +226,6 @@ def _set_persistent_busy_time(time_ms):
         import storage.cache
 
         storage.cache.set_int(storage.cache.APP_COMMON_BUSY_TIME, time_ms)
-        if __debug__:
-            print(f"[PERSISTENT] Saved busy time: {time_ms}")
     except:
         pass
 
@@ -246,13 +237,9 @@ async def _delayed_cleanup():
     import utime
     from trezor import loop
 
-    if __debug__:
-        print(f"[CLEANUP] Starting cleanup task, will wait {_busy_debounce_ms}ms")
 
     await loop.sleep(_busy_debounce_ms)
 
-    if __debug__:
-        print(f"[CLEANUP] Cleanup task woke up, checking state...")
 
     # Check if we should restore non-busy state
     current_time = utime.ticks_ms()
@@ -265,25 +252,16 @@ async def _delayed_cleanup():
             )
 
         # Clear persistent state and counter
-        global _busy_state_counter
         _busy_state_counter = 0
         _set_persistent_busy_state(0)
         _set_persistent_busy_time(0)
 
         if hasattr(MainScreen, "_instance") and MainScreen._instance:
-            if __debug__:
-                print(
-                    f"[CLEANUP] Calling MainScreen.change_state(False) to restore normal state"
-                )
             MainScreen._instance.change_state(False)
 
             # Show AppDrawer after restoring normal state (without animation)
             if hasattr(MainScreen._instance, "apps") and MainScreen._instance.apps:
                 if MainScreen._instance.apps.has_flag(lv.obj.FLAG.HIDDEN):
-                    if __debug__:
-                        print(
-                            f"[CLEANUP] Showing AppDrawer after debounce (no animation)"
-                        )
                     MainScreen._instance.refresh_appdrawer_background()
                     # Show AppDrawer directly without animation - ensure complete state setup
                     MainScreen._instance.hidden_others(True)
@@ -301,18 +279,6 @@ async def _delayed_cleanup():
                     MainScreen._instance.apps.clear_flag(lv.obj.FLAG.GESTURE_BUBBLE)
                     MainScreen._instance.apps.visible = True
                     MainScreen._instance.apps._showing = False
-                    if __debug__:
-                        print(
-                            f"[CLEANUP] AppDrawer state set: hidden={MainScreen._instance.apps.has_flag(lv.obj.FLAG.HIDDEN)}, visible={MainScreen._instance.apps.visible}"
-                        )
-
-            if __debug__:
-                print(f"[CLEANUP] MainScreen state restored - AppDrawer shown")
-    else:
-        if __debug__:
-            print(
-                f"[CLEANUP] Not yet ready for cleanup - counter: {_busy_state_counter}, time_diff: {time_since_last_busy}ms, threshold: {_busy_debounce_ms}ms"
-            )
 
     _cleanup_task = None
 
@@ -320,8 +286,6 @@ async def _delayed_cleanup():
 def change_state(is_busy: bool = False):
     global _busy_state_counter, _last_busy_time, _cleanup_task, _restore_timer, _busy_show_timer
 
-    if __debug__:
-        print(f"[CHANGE_STATE] Called with is_busy={is_busy}")
 
     import utime
     from trezor import workflow
@@ -331,16 +295,12 @@ def change_state(is_busy: bool = False):
     # Initialize from persistent state if needed
     if _busy_state_counter == 0 and _last_busy_time == 0:
         _busy_state_counter = _get_persistent_busy_state()
-        if __debug__:
-            print(f"[CHANGE_STATE] Loaded persistent counter: {_busy_state_counter}")
 
     if is_busy:
         # Increment busy counter and update timestamp
         _busy_state_counter += 1
         _last_busy_time = current_time
         _set_persistent_busy_state(_busy_state_counter)
-        if __debug__:
-            print(f"[CHANGE_STATE] Busy counter: {_busy_state_counter}")
         # Cancel any pending LVGL restore timer since we are busy again
         try:
             if _restore_timer is not None:
@@ -369,10 +329,6 @@ def change_state(is_busy: bool = False):
         # any subsequent busy call above.
         time_since_last_busy = utime.ticks_diff(current_time, _last_busy_time)
         if _busy_state_counter > 0:
-            if __debug__:
-                print(
-                    f"[CHANGE_STATE] Staying busy - counter: {_busy_state_counter}, time_diff: {time_since_last_busy}ms"
-                )
             return
 
         # Cancel pending busy-indicator timer; we are no longer busy
@@ -386,10 +342,6 @@ def change_state(is_busy: bool = False):
         # We want to immediately restore the tips to Swipe-to-show.
         # No debounce here to avoid staying on Processing... between quick requests.
 
-        if __debug__:
-            print(
-                f"[CHANGE_STATE] Restoring non-busy state - counter: {_busy_state_counter}"
-            )
 
         # Cancel cleanup task if it exists
         if _cleanup_task is not None:
@@ -400,19 +352,11 @@ def change_state(is_busy: bool = False):
     if hasattr(MainScreen, "_instance") and MainScreen._instance:
         # Ensure MainScreen is the active screen
         if not MainScreen._instance.is_visible():
-            if __debug__:
-                print(f"[CHANGE_STATE] MainScreen not visible, switching to it")
             lv.scr_load(MainScreen._instance)
-        else:
-            if __debug__:
-                print(f"[CHANGE_STATE] MainScreen already visible")
-
         if is_busy:
             # Hide AppDrawer if it's visible
             if hasattr(MainScreen._instance, "apps") and MainScreen._instance.apps:
                 if not MainScreen._instance.apps.has_flag(lv.obj.FLAG.HIDDEN):
-                    if __debug__:
-                        print(f"[CHANGE_STATE] Hiding AppDrawer to show MainScreen")
                     MainScreen._instance.apps.hide_to_mainscreen_fallback()
 
             # Delay showing Processing to avoid flicker for short requests
@@ -432,18 +376,12 @@ def change_state(is_busy: bool = False):
             # Restoring from busy: stay on MainScreen and reset tips
             if hasattr(MainScreen._instance, "apps") and MainScreen._instance.apps:
                 if not MainScreen._instance.apps.has_flag(lv.obj.FLAG.HIDDEN):
-                    if __debug__:
-                        print("[CHANGE_STATE] Hiding AppDrawer after communication complete")
                     MainScreen._instance.apps.hide_to_mainscreen_fallback()
             MainScreen._instance.change_state(False)
             _set_persistent_busy_state(0)
             _set_persistent_busy_time(0)
-            if __debug__:
-                print("[CHANGE_STATE] Restored to MainScreen with swipe prompt")
     elif is_busy:
         # If MainScreen instance doesn't exist, create and show it (without immediate busy)
-        if __debug__:
-            print(f"[CHANGE_STATE] MainScreen instance doesn't exist, creating it")
         main_screen = MainScreen()
         lv.scr_load(main_screen)
         # Schedule delayed busy indicator
@@ -481,7 +419,7 @@ def show_appdrawer_immediate():
             ms.apps._showing = False
     except Exception as e:
         try:
-            print(f"show_appdrawer_immediate error: {e}")
+            pass
         except:
             pass
 
@@ -504,10 +442,6 @@ class MainScreen(Screen):
             real_ble_name = storage_device.get_ble_name() or uart.get_ble_name()
 
             # Debug output
-            if __debug__:
-                print(
-                    f"[MAINSCREEN] Init - show_device_names: {show_device_names}, device: {real_device_name}, ble: {real_ble_name}"
-                )
 
             # Initialize Screen with proper kwargs
             if show_device_names:
@@ -518,18 +452,12 @@ class MainScreen(Screen):
                 )
             else:
                 super().__init__()
-                if __debug__:
-                    print(
-                        f"[MAINSCREEN] Not showing device names, initialized without title/subtitle"
-                    )
 
             # Set background for first-time initialization
             self.add_style(
                 StyleWrapper().bg_img_src(lockscreen),
                 0,
             )
-            if __debug__:
-                print(f"MainScreen: Initial background set to {lockscreen}")
         else:
             # Check if device name display setting has changed
             show_device_names = storage_device.is_device_name_display_enabled()
@@ -539,10 +467,6 @@ class MainScreen(Screen):
             real_ble_name = storage_device.get_ble_name() or uart.get_ble_name()
 
             # Update title and subtitle based on current setting
-            if __debug__:
-                print(
-                    f"[MAINSCREEN] Else branch - show_device_names: {show_device_names}, device: {real_device_name}, ble: {real_ble_name}"
-                )
 
             if show_device_names:
                 # Check if title and subtitle exist before using them
@@ -552,8 +476,6 @@ class MainScreen(Screen):
                 if hasattr(self, "subtitle") and self.subtitle:
                     self.subtitle.set_text(real_ble_name)
                     self.subtitle.clear_flag(lv.obj.FLAG.HIDDEN)
-                if __debug__:
-                    print(f"[MAINSCREEN] Else branch - titles set and shown")
             else:
                 # Hide device names if they exist
                 if hasattr(self, "title") and self.title:
@@ -562,8 +484,6 @@ class MainScreen(Screen):
                 if hasattr(self, "subtitle") and self.subtitle:
                     self.subtitle.add_flag(lv.obj.FLAG.HIDDEN)
                     self.subtitle.set_text("")
-                if __debug__:
-                    print(f"[MAINSCREEN] Else branch - titles hidden and cleared")
 
             # if (
             #     not hasattr(self, "_cached_lockscreen")
@@ -575,8 +495,6 @@ class MainScreen(Screen):
                 StyleWrapper().bg_img_src(lockscreen),
                 0,
             )
-            if __debug__:
-                print(f"MainScreen: Background refreshed to {lockscreen}")
             if hasattr(self, "dev_state"):
                 from apps.base import get_state
 
@@ -650,10 +568,6 @@ class MainScreen(Screen):
         # Load persistent state if not already loaded
         if _busy_state_counter == 0 and _last_busy_time == 0:
             _busy_state_counter = _get_persistent_busy_state()
-            if __debug__:
-                print(
-                    f"MainScreen: Loaded persistent busy counter: {_busy_state_counter}"
-                )
 
         # Check if we should clear old busy state (no active communication for a while)
         import utime
@@ -667,10 +581,6 @@ class MainScreen(Screen):
             last_busy_time = _get_persistent_busy_time()
             time_since_last_busy = utime.ticks_diff(current_time, last_busy_time)
 
-            if __debug__:
-                print(
-                    f"MainScreen: Checking busy state age - current: {current_time}, last_busy: {last_busy_time}, diff: {time_since_last_busy}ms"
-                )
 
             # Use much more conservative threshold during MainScreen initialization
             # because session restarts can happen during normal operations
@@ -679,16 +589,9 @@ class MainScreen(Screen):
             # For very recent activity (less than 3 seconds), never clear during initialization
             # This prevents clearing states during normal multi-step operations with session restarts
             if time_since_last_busy < 3000:
-                if __debug__:
-                    print(
-                        f"MainScreen: Recent activity detected ({time_since_last_busy}ms ago), preserving busy state during initialization"
-                    )
                 # Don't clear - this is likely an ongoing operation
+                pass
             elif time_since_last_busy > 5000:  # Reduce threshold to 5 seconds
-                if __debug__:
-                    print(
-                        f"MainScreen: Communication likely finished ({time_since_last_busy}ms ago), clearing busy state and showing AppDrawer"
-                    )
                 _busy_state_counter = 0
                 _set_persistent_busy_state(0)
                 # Clear the persistent busy time as well since communication is done
@@ -696,17 +599,13 @@ class MainScreen(Screen):
                 # Force show AppDrawer after clearing busy state
                 should_show_appdrawer = True
             else:
-                if __debug__:
-                    print(
-                        f"MainScreen: Keeping potentially active busy state (activity {time_since_last_busy}ms ago, waiting for 5s threshold)"
-                    )
+                pass
 
         if _busy_state_counter > 0:
             # Keep AppDrawer hidden during busy state
             self.apps.add_flag(lv.obj.FLAG.HIDDEN)
             self.apps.add_flag(lv.obj.FLAG.GESTURE_BUBBLE)
             self.apps.visible = False
-            print("MainScreen: Staying in MainScreen view (busy state)")
 
             # Show MainScreen elements including title and subtitle
             if hasattr(self, "title") and self.title:
@@ -1149,17 +1048,112 @@ class MainScreen(Screen):
         except Exception as e:
             print(f"MainScreen: Error in show_layer2_and_appdrawer: {e}")
 
-    def hidden_others(self, hidden: bool = True):
-        if hidden:
-            if hasattr(self, "title"):
-                self.title.add_flag(lv.obj.FLAG.HIDDEN)
-            if hasattr(self, "subtitle"):
-                self.subtitle.add_flag(lv.obj.FLAG.HIDDEN)
+    def _get_title_labels(self):
+        labels = []
+        if hasattr(self, "title") and self.title:
+            labels.append(self.title)
+        if hasattr(self, "subtitle") and self.subtitle:
+            labels.append(self.subtitle)
+        return labels
+
+    def _cancel_title_fade(self):
+        labels = self._get_title_labels()
+        for label in labels:
+            try:
+                lv.anim_del(label, None)
+            except:
+                pass
+            label.set_style_text_opa(lv.OPA.COVER, 0)
+            label.invalidate()
+        if hasattr(self, "_title_fade_anims"):
+            self._title_fade_anims.clear()
+        self._title_fade_prepared = False
+
+    def prepare_title_fade_in(self):
+        labels = self._get_title_labels()
+        if not labels:
+            self._title_fade_prepared = False
+            return
+
+        self._cancel_title_fade()
+        if not hasattr(self, "_title_fade_anims"):
+            self._title_fade_anims = []
+
+        for label in labels:
+            label.clear_flag(lv.obj.FLAG.HIDDEN)
+            label.set_style_text_opa(0, 0)
+            label.invalidate()
+
+        self._title_fade_prepared = True
+
+    def start_title_fade_in(self, duration=150):
+        labels = self._get_title_labels()
+        if not labels:
+            self._title_fade_prepared = False
+            return
+
+        if not getattr(self, "_title_fade_prepared", False):
+            # Ensure labels start from 0 opacity when fade is triggered without preparation
+            for label in labels:
+                label.clear_flag(lv.obj.FLAG.HIDDEN)
+                label.set_style_text_opa(0, 0)
+                label.invalidate()
+
+        if not hasattr(self, "_title_fade_anims"):
+            self._title_fade_anims = []
         else:
-            if hasattr(self, "title"):
-                self.title.clear_flag(lv.obj.FLAG.HIDDEN)
-            if hasattr(self, "subtitle"):
-                self.subtitle.clear_flag(lv.obj.FLAG.HIDDEN)
+            self._title_fade_anims.clear()
+
+        def _make_exec_cb(target_label):
+            def _exec_cb(_anim, value):
+                target_label.set_style_text_opa(value, 0)
+                target_label.invalidate()
+
+            return _exec_cb
+
+        def _make_ready_cb(target_label):
+            def _ready_cb(_anim):
+                target_label.set_style_text_opa(lv.OPA.COVER, 0)
+                target_label.invalidate()
+                if hasattr(self, "_title_fade_anims"):
+                    try:
+                        self._title_fade_anims.remove(_anim)
+                    except ValueError:
+                        pass
+                if not getattr(self, "_title_fade_anims", []):
+                    self._title_fade_prepared = False
+
+            return _ready_cb
+
+        for label in labels:
+            try:
+                lv.anim_del(label, None)
+            except:
+                pass
+            fade_anim = lv.anim_t()
+            fade_anim.init()
+            fade_anim.set_var(label)
+            fade_anim.set_time(duration)
+            fade_anim.set_values(0, lv.OPA.COVER)
+            fade_anim.set_path_cb(lv.anim_t.path_linear)
+            fade_anim.set_custom_exec_cb(_make_exec_cb(label))
+            fade_anim.set_ready_cb(_make_ready_cb(label))
+            self._title_fade_anims.append(fade_anim)
+            lv.anim_t.start(fade_anim)
+
+    def hidden_others(self, hidden: bool = True):
+        labels = self._get_title_labels()
+        if hidden:
+            self._cancel_title_fade()
+            for label in labels:
+                label.add_flag(lv.obj.FLAG.HIDDEN)
+                label.set_style_text_opa(lv.OPA.COVER, 0)
+        else:
+            for label in labels:
+                label.clear_flag(lv.obj.FLAG.HIDDEN)
+                if not getattr(self, "_title_fade_prepared", False):
+                    label.set_style_text_opa(lv.OPA.COVER, 0)
+                label.invalidate()
 
     def refresh_appdrawer_background(self):
         """Refresh AppDrawer background"""
@@ -1235,6 +1229,10 @@ class MainScreen(Screen):
             self.parent = parent
             self.visible = False
             self.text_label = {}
+            self._icon_sources = set()
+            self._page_refresh_timer = None
+            self._pending_gc_timer = None
+            self._page_anim_targets = ()
 
             # Initialize pre-render manager
             self._prerender_manager = None
@@ -1244,6 +1242,7 @@ class MainScreen(Screen):
 
             self.init_ui()
             self.init_items()  # Restore original immediate creation of all items
+            self._configure_image_cache()
             self.init_indicators()
             self.init_anim()
 
@@ -1316,8 +1315,6 @@ class MainScreen(Screen):
                     page_cont.add_flag(lv.obj.FLAG.HIDDEN)
                 self.page_conts.append(page_cont)
             self.page_animating = False
-            self._page_anim_refs = []
-            self._page_anim_handles = []
             self.show_page(0)
 
         def init_items(self):
@@ -1390,9 +1387,9 @@ class MainScreen(Screen):
 
             btn = lv.imgbtn(cont)
             btn.set_size(144, 144)  # Updated to match main branch
-            btn.set_style_bg_img_src(
-                f"A:/res/{img_src}.png", 0
-            )  # Restored to original .jpg format
+            icon_path = f"A:/res/{img_src}.png"
+            btn.set_style_bg_img_src(icon_path, 0)
+            self._icon_sources.add(icon_path)
             # Use inline button styles - remove border radius settings
             btn.add_style(StyleWrapper().bg_opa(lv.OPA.TRANSP).shadow_width(0), 0)
             btn.add_style(
@@ -1431,6 +1428,19 @@ class MainScreen(Screen):
             )
             btn.add_event_cb(lambda e: self.on_item_click(name), lv.EVENT.CLICKED, None)
             return cont
+
+        def _configure_image_cache(self):
+            """Ensure icon textures have enough LVGL cache slots to avoid decode stalls."""
+            icon_count = len(self._icon_sources)
+            if not icon_count:
+                return
+            try:
+                cache_set_size = getattr(getattr(lv, "img", None), "cache_set_size", None)
+                if cache_set_size:
+                    # Reserve a couple extra slots so other screens keep their bitmaps
+                    cache_set_size(icon_count + 2)
+            except Exception:
+                pass
 
         def create_down_arrow(self):
             img_down = lv.imgbtn(self)
@@ -1523,6 +1533,7 @@ class MainScreen(Screen):
                 log_with_timestamp(
                     f"AppDrawer: Animation started, setting _animation_in_progress = True"
                 )
+                
 
                 from trezorui import Display
 
@@ -1608,6 +1619,8 @@ class MainScreen(Screen):
                     )
 
                     self.parent.hidden_others(False)
+                    if hasattr(self.parent, "prepare_title_fade_in"):
+                        self.parent.prepare_title_fade_in()
                     if hasattr(self.parent, "up_arrow"):
                         self.parent.up_arrow.clear_flag(lv.obj.FLAG.HIDDEN)
                     if hasattr(self.parent, "bottom_tips"):
@@ -1647,9 +1660,6 @@ class MainScreen(Screen):
                             cached_style = get_cached_style(current_lockscreen)
                             if cached_style is not None:
                                 self.parent.add_style(cached_style, 0)
-                                print(f"[AppDrawer] MainScreen background applied successfully: {current_lockscreen}")
-                            else:
-                                print(f"[AppDrawer] SAFETY: Skipping MainScreen background style (get_cached_style returned None): {current_lockscreen}")
                             log_with_timestamp(
                                 f"AppDrawer: MainScreen background set to lockscreen: {current_lockscreen}"
                             )
@@ -1678,7 +1688,7 @@ class MainScreen(Screen):
                     def on_animation_complete():
                         global _animation_in_progress
                         log_with_timestamp(
-                            "AppDrawer: === on_animation_complete (250ms timer) ==="
+                            "AppDrawer: === on_animation_complete (200ms timer) ==="
                         )
                         try:
                             if hasattr(display, "cover_background_hide"):
@@ -1686,6 +1696,8 @@ class MainScreen(Screen):
                                 log_with_timestamp(
                                     "AppDrawer: Layer2 successfully hidden, MainScreen fully visible"
                                 )
+                            if hasattr(self.parent, "start_title_fade_in"):
+                                self.parent.start_title_fade_in(duration=300)
                             _animation_in_progress = False
                             elapsed = get_timestamp() - _animation_start_time
                             log_with_timestamp(
@@ -1722,9 +1734,13 @@ class MainScreen(Screen):
 
         def hide_to_mainscreen_fallback(self):
             """Backup simple hide method"""
+            global _animation_in_progress
             self.add_flag(lv.obj.FLAG.HIDDEN)
             self.add_flag(lv.obj.FLAG.GESTURE_BUBBLE)
             self.visible = False
+            
+            # Ensure animation flag is properly reset
+            _animation_in_progress = False
 
             self.parent.hidden_others(False)
             if hasattr(self.parent, "up_arrow"):
@@ -1733,7 +1749,6 @@ class MainScreen(Screen):
                 self.parent.bottom_tips.clear_flag(lv.obj.FLAG.HIDDEN)
             if hasattr(self.parent, "dev_state"):
                 self.parent.dev_state.show()
-            print("AppDrawer: Hidden via fallback method, MainScreen shown")
 
         def handle_page_gesture(self, _dir):
             """Handle page swipe gestures"""
@@ -1741,31 +1756,39 @@ class MainScreen(Screen):
                 return
             # Optimization: if animation is in late stage, allow new gestures
             if self.page_animating:
-                # Cancel current animation and complete immediately
+                # Cancel the in-flight animation and settle immediately to avoid jitter
                 try:
-                    for handle in self._page_anim_handles:
-                        lv.anim_del(handle, None)
+                    for target in getattr(self, "_page_anim_targets", ()):
+                        if target:
+                            lv.anim_del(target, None)
                 except:
                     pass
                 # Complete current animation immediately
-                if hasattr(self, "_page_anim_target"):
-                    self._on_page_anim_ready(self.current_page, self._page_anim_target)
+                if hasattr(self, "_page_anim_target") and hasattr(
+                    self, "_page_anim_old_index"
+                ):
+                    self._on_page_anim_ready(
+                        self._page_anim_old_index, self._page_anim_target
+                    )
                 return
 
             # Check if indicators exist before using them
             if not hasattr(self, "indicators") or not self.indicators:
-                print("AppDrawer: indicators not initialized, skipping page change")
                 return
 
             target_page = self.current_page
             if _dir == lv.DIR.LEFT:
+                # Enable circular navigation: when at last page, go to first page
                 if self.current_page >= self.PAGE_SIZE - 1:
-                    return
-                target_page = self.current_page + 1
+                    target_page = 0  # Go to first page
+                else:
+                    target_page = self.current_page + 1
             elif _dir == lv.DIR.RIGHT:
+                # Enable circular navigation: when at first page, go to last page
                 if self.current_page <= 0:
-                    return
-                target_page = self.current_page - 1
+                    target_page = self.PAGE_SIZE - 1  # Go to last page
+                else:
+                    target_page = self.current_page - 1
 
             if target_page == self.current_page:
                 return
@@ -1824,6 +1847,15 @@ class MainScreen(Screen):
                 return
 
             self.page_animating = True
+            self._page_anim_target = target_index
+            self._page_anim_old_index = old_index
+            self._page_anim_targets = (old_cont, new_cont)
+            if self._pending_gc_timer:
+                try:
+                    self._pending_gc_timer.delete()
+                except:
+                    pass
+                self._pending_gc_timer = None
 
             # Cancel any running animations on these containers to prevent jitter/bounce
             try:
@@ -1877,8 +1909,6 @@ class MainScreen(Screen):
                 # Optimize animation callback, directly manipulate x coordinate
                 def exec_cb(a, val):
                     target_obj.set_x(int(val))
-                    # Force refresh display area
-                    target_obj.invalidate()
 
                 anim.set_custom_exec_cb(exec_cb)
                 anim.set_repeat_count(1)
@@ -1894,39 +1924,33 @@ class MainScreen(Screen):
                 )
             )
 
-            self._page_anim_refs = [anim_out, anim_in]
-            self._page_anim_handles = [
-                lv.anim_t.start(anim_out),
-                lv.anim_t.start(anim_in),
-            ]
-
-            # Start first refresh immediately
-            try:
-                lv.refr_now(None)
-            except:
-                pass
+            lv.anim_t.start(anim_out)
+            lv.anim_t.start(anim_in)
 
             # Optimize animation refresh logic
             def animation_refresh():
                 if self.page_animating:
                     try:
-                        # Use lv.task_handler instead of refr_now for better efficiency
-                        lv.task_handler()
+                        lv.timer_handler()
                     except:
                         try:
-                            lv.refr_now(None)
+                            lv.task_handler()
                         except:
                             pass
 
-            # Optimization: maintain 16ms refresh interval with longer animation time
-            refresh_timer = lv.timer_create(
-                lambda t: animation_refresh(),
-                10,
-                None,  # 10ms refresh, 100FPS high frame rate
+            # Keep the refresh timer active for the full animation duration
+            refresh_interval = 16  # roughly 60 FPS
+            repeat = max(1, (anim_time + refresh_interval - 1) // refresh_interval)
+            if self._page_refresh_timer:
+                try:
+                    self._page_refresh_timer.delete()
+                except:
+                    pass
+                self._page_refresh_timer = None
+            self._page_refresh_timer = lv.timer_create(
+                lambda t: animation_refresh(), refresh_interval, None
             )
-            refresh_timer.set_repeat_count(
-                10
-            )  # 10 refreshes, total 160ms, covers 120ms animation
+            self._page_refresh_timer.set_repeat_count(repeat)
 
         def _on_page_anim_ready(self, old_index: int, target_index: int):
             # Reset both pages to their resting positions and visibility.
@@ -1942,14 +1966,14 @@ class MainScreen(Screen):
 
             self.show_page(target_index)
             self.page_animating = False
-            self._page_anim_refs = []
-            self._page_anim_handles = []
+            self._page_anim_targets = ()
 
-            # Force refresh once to ensure final state is correct
-            try:
-                lv.refr_now(None)
-            except:
-                pass
+            if self._page_refresh_timer:
+                try:
+                    self._page_refresh_timer.delete()
+                except:
+                    pass
+                self._page_refresh_timer = None
 
             # Delay memory cleanup to avoid affecting final rendering
             def delayed_gc():
@@ -1959,11 +1983,19 @@ class MainScreen(Screen):
                     gc.collect()
                 except:
                     pass
+                self._pending_gc_timer = None
 
-            # Clean memory after 50ms
+            # Schedule memory cleanup slightly after the animation ends
             def schedule_gc():
-                gc_timer = lv.timer_create(lambda t: delayed_gc(), 50, None)
-                gc_timer.set_repeat_count(1)
+                if self._pending_gc_timer:
+                    try:
+                        self._pending_gc_timer.delete()
+                    except:
+                        pass
+                self._pending_gc_timer = lv.timer_create(
+                    lambda t: delayed_gc(), 150, None
+                )
+                self._pending_gc_timer.set_repeat_count(1)
 
             try:
                 schedule_gc()
@@ -1978,7 +2010,6 @@ class MainScreen(Screen):
         def show_anim_del_cb(self, _anim):
             self.show_page(self.current_page)
             self.visible = True
-            print("AppDrawer: show_anim_del_cb - animation complete, set visible=True")
 
         def dismiss_anim_start_cb(self, _anim):
             self.hidden_page(self.current_page)
@@ -1988,19 +2019,14 @@ class MainScreen(Screen):
             self.add_flag(lv.obj.FLAG.HIDDEN)
             self.visible = False
             self.add_flag(lv.obj.FLAG.GESTURE_BUBBLE)
-            print("AppDrawer: dismiss_anim_del_cb - AppDrawer fully dismissed")
 
         def show(self):
             """Simplified show method - no longer used, replaced with simplified direct display method"""
-            print(
-                "AppDrawer: show() method called - using simplified display logic instead"
-            )
+            return
 
         def dismiss(self):
             """Simplified dismiss method - no longer used, replaced with simplified direct hide method"""
-            print(
-                "AppDrawer: dismiss() method called - using simplified hide logic instead"
-            )
+            return
 
         def refresh_background(self):
             """Refresh AppDrawer background image"""
@@ -2010,10 +2036,9 @@ class MainScreen(Screen):
                     StyleWrapper().bg_img_src(homescreen).border_width(0),
                     0,
                 )
-                print(f"AppDrawer: Background refreshed to {homescreen}")
             else:
                 # Clear image background to show black background
-                print("AppDrawer: Background set to black (no image)")
+                pass
 
         def on_pressed(self, text_key):
             label = self.text_label[text_key]
@@ -2042,8 +2067,6 @@ class MainScreen(Screen):
             try:
                 # Clean up existing NftGallery instance to allow fresh creation
                 if hasattr(NftGallery, "_instance"):
-                    if __debug__:
-                        print("[AppDrawer] Cleaning up existing NftGallery instance")
                     old_instance = NftGallery._instance
                     try:
                         old_instance.delete()
@@ -2052,12 +2075,8 @@ class MainScreen(Screen):
                     del NftGallery._instance
 
                 # Create new NftGallery instance
-                if __debug__:
-                    print("[AppDrawer] Creating new NftGallery instance")
                 return NftGallery(self.parent)
             except Exception as e:
-                if __debug__:
-                    print(f"[AppDrawer] Error creating NftGallery: {e}")
                 # Fallback to direct creation
                 return NftGallery(self.parent)
 
@@ -2109,11 +2128,7 @@ class MainScreen(Screen):
                 from .appdrawer_prerender import PreRenderManager
 
                 self._prerender_manager = PreRenderManager(self)
-                if __debug__:
-                    print("AppDrawer: PreRender manager initialized")
             except Exception as e:
-                if __debug__:
-                    print(f"AppDrawer: Failed to init prerender: {e}")
                 self._prerender_manager = None
 
         def _render_page_content(self, page_index, target_container):
@@ -6064,7 +6079,7 @@ class AppdrawerBackgroundSetting(AnimScreen):
         # Icon in the button - using landscape icon as shown in the image
         self.button_icon = lv.img(self.change_button)
         self.button_icon.set_src(
-            "A:/res/wallper.png"
+            "A:/res/change-wallper.png"
         )  # Landscape icon for wallpaper selection
         self.button_icon.align(lv.ALIGN.CENTER, 0, 0)
 
@@ -6487,10 +6502,10 @@ class WallperChange(AnimScreen):
             self.done_button_label = lv.label(self.done_button)
             self.done_button_label.set_text(_(i18n_keys.BUTTON__DONE))
             self.done_button_label.add_style(
-                StyleWrapper()
-                .text_font(font_GeistSemiBold30)  # Match Edit button font size
-                .text_color(lv.color_hex(0xFFFFFF)),
-                0,
+                StyleWrapper().text_font(font_GeistSemiBold30), 0  # Match Edit button font size
+            )
+            self.done_button_label.set_style_text_color(
+                lv.color_hex(0xD2D2D2), 0  # Match Edit button color
             )
             self.done_button_label.center()
 
