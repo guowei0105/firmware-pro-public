@@ -280,7 +280,8 @@ class ImgGridItem(lv.img):
         row_num,
         file_name: str,
         path_dir: str,
-        img_path_other: str = "A:/res/checked-solid.png",
+        img_path_selected: str = "A:/res/selected.png",
+        img_path_unselected: str | None = "A:/res/unselect.png",
         is_internal: bool = False,
         style_type: str = "wallpaper",  # "wallpaper" or "nft"
     ):
@@ -292,6 +293,12 @@ class ImgGridItem(lv.img):
         self.file_name = file_name
         self.zoom_path = path_dir + file_name
         self.style_type = style_type
+        self.selected_indicator_src = (
+            img_path_selected if style_type != "nft" else None
+        )
+        self.unselected_indicator_src = (
+            img_path_unselected if style_type != "nft" else None
+        )
 
         # Set up the container first before loading image
         self._setup_styles()
@@ -317,11 +324,24 @@ class ImgGridItem(lv.img):
 
         # Keep A:1:/res/wallpapers/ path for custom wallpapers (don't convert it)
 
-        # Create checkmark overlay
-        self.check = lv.img(self)
-        self.check.set_src(img_path_other)
-        self.check.center()
-        self.set_checked(False)
+        # Create selection indicator overlay (wallpapers only)
+        self.check = None
+        if self.selected_indicator_src:
+            self.check = lv.img(self)
+            initial_src = (
+                self.unselected_indicator_src or self.selected_indicator_src
+            )
+            try:
+                self.check.set_src(initial_src)
+            except Exception:
+                # Fallback to legacy indicator if the new assets are missing
+                fallback_src = "A:/res/checked-solid.png"
+                self.check.set_src(fallback_src)
+                self.selected_indicator_src = fallback_src
+                self.unselected_indicator_src = None
+            self.check.clear_flag(lv.obj.FLAG.CLICKABLE)
+            self.check.align(lv.ALIGN.TOP_RIGHT, -12, 12)
+            self.set_checked(False)
         self.add_flag(lv.obj.FLAG.CLICKABLE)
         self.add_flag(lv.obj.FLAG.EVENT_BUBBLE)
 
@@ -371,7 +391,16 @@ class ImgGridItem(lv.img):
             pass
 
     def set_checked(self, checked: bool):
-        if checked:
+        if not self.check or not self.selected_indicator_src:
+            return
+
+        if self.unselected_indicator_src:
+            self.check.set_src(
+                self.selected_indicator_src if checked else self.unselected_indicator_src
+            )
+            self.check.clear_flag(lv.obj.FLAG.HIDDEN)
+        elif checked:
+            self.check.set_src(self.selected_indicator_src)
             self.check.clear_flag(lv.obj.FLAG.HIDDEN)
         else:
             self.check.add_flag(lv.obj.FLAG.HIDDEN)

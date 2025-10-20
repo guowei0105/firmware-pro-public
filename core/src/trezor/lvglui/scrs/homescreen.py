@@ -6303,6 +6303,7 @@ class WallperChange(AnimScreen):
         # Initialize edit mode state
         self.edit_mode = False
         self.marked_for_deletion = set()  # Track which files are marked for deletion
+        self.selected_wallpapers = set()  # Track which wallpapers are selected for deletion
 
         # Get custom wallpapers
         file_name_list = []
@@ -6427,28 +6428,74 @@ class WallperChange(AnimScreen):
         )
         self.custom_header.align(lv.ALIGN.LEFT_MID, 0, 0)
 
-        # Edit/Done button on the right (only show if there are custom wallpapers)
+        # Edit/Delete/Done buttons on the right (only show if there are custom wallpapers)
         if file_name_list:
+            # Edit button - initially visible, positioned at the right edge
             self.edit_button = lv.btn(self.custom_header_container)
-            self.edit_button.set_size(60, 30)
+            self.edit_button.set_size(60, 30)  # Smaller width for better fit
             self.edit_button.add_style(
                 StyleWrapper().bg_opa(lv.OPA.TRANSP).border_opa(lv.OPA.TRANSP), 0
             )
-            self.edit_button.align(lv.ALIGN.RIGHT_MID, -12, 0)
+            self.edit_button.align(lv.ALIGN.RIGHT_MID, 4, 0)  # Slightly more to the right
 
             self.edit_button_label = lv.label(self.edit_button)
             self.edit_button_label.set_text(_(i18n_keys.BUTTON__EDIT))
             self.edit_button_label.add_style(
-                StyleWrapper()
-                .text_font(font_GeistSemiBold26)
-                .text_color(lv.color_hex(0xD2D2D2)),
-                0,
+                StyleWrapper().text_font(font_GeistSemiBold30), 0  # Match Custom title font size
             )
             self.edit_button_label.center()
+            self.edit_button_label.set_style_text_color(
+                lv.color_hex(0xD2D2D2), 0
+            )
 
-            # Add click handler for edit button
             self.edit_button.add_event_cb(
                 self.on_edit_button_clicked, lv.EVENT.CLICKED, None
+            )
+
+            # Delete button - initially hidden, appears to the left of Done when in edit mode
+            self.delete_button = lv.btn(self.custom_header_container)
+            self.delete_button.set_size(80, 30)  # Adjust width for "Delete" text
+            self.delete_button.add_style(
+                StyleWrapper().bg_opa(lv.OPA.TRANSP).border_opa(lv.OPA.TRANSP), 0
+            )
+            self.delete_button.align(lv.ALIGN.RIGHT_MID, -70, 0)  # Much closer to Done button
+            self.delete_button.add_flag(lv.obj.FLAG.HIDDEN)  # Initially hidden
+
+            self.delete_button_label = lv.label(self.delete_button)
+            self.delete_button_label.set_text(_(i18n_keys.BUTTON__DELETE))
+            self.delete_button_label.add_style(
+                StyleWrapper().text_font(font_GeistSemiBold30), 0  # Match other buttons
+            )
+            self.delete_button_label.center()
+            self.delete_button_label.set_style_text_color(
+                lv.color_hex(0xFF3B30), 0  # Red color for delete action
+            )
+
+            self.delete_button.add_event_cb(
+                self.on_delete_button_clicked, lv.EVENT.CLICKED, None
+            )
+
+            # Done button - initially hidden, replaces Edit button position when in edit mode
+            self.done_button = lv.btn(self.custom_header_container)
+            self.done_button.set_size(60, 30)  # Match Edit button size
+            self.done_button.add_style(
+                StyleWrapper().bg_opa(lv.OPA.TRANSP).border_opa(lv.OPA.TRANSP), 0
+            )
+            self.done_button.align(lv.ALIGN.RIGHT_MID, 4, 0)  # Same position as Edit button
+            self.done_button.add_flag(lv.obj.FLAG.HIDDEN)  # Initially hidden
+
+            self.done_button_label = lv.label(self.done_button)
+            self.done_button_label.set_text(_(i18n_keys.BUTTON__DONE))
+            self.done_button_label.add_style(
+                StyleWrapper()
+                .text_font(font_GeistSemiBold30)  # Match Edit button font size
+                .text_color(lv.color_hex(0xFFFFFF)),
+                0,
+            )
+            self.done_button_label.center()
+
+            self.done_button.add_event_cb(
+                self.on_done_button_clicked, lv.EVENT.CLICKED, None
             )
 
         current_row += 1
@@ -6471,6 +6518,7 @@ class WallperChange(AnimScreen):
                     current_row + (i // 3),
                     zoom_file_name,  # Use zoom- prefix for thumbnails
                     path_dir,
+                    img_path_unselected=None,  # Disable built-in selection for custom wallpapers
                     is_internal=True,  # Try setting back to True like Collection wallpapers
                 )
 
@@ -6499,6 +6547,46 @@ class WallperChange(AnimScreen):
                         print(f"[WallperChange] LVGL path access error: {e}")
                 self.wps.append(current_wp)
                 self.custom_wps.append(current_wp)
+
+                # Create selection checkbox for each custom wallpaper (initially hidden)
+                # Selection checkbox shows when in edit mode
+                selection_checkbox = lv.btn(current_wp)
+                selection_checkbox.set_size(32, 32)  # Reduced size to prevent overflow
+                selection_checkbox.clear_flag(lv.obj.FLAG.SCROLLABLE)
+                selection_checkbox.add_flag(lv.obj.FLAG.HIDDEN)  # Initially hidden
+                selection_checkbox.add_flag(lv.obj.FLAG.CLICKABLE)
+
+                # Style the button - transparent background and prevent overflow
+                selection_checkbox.set_style_bg_opa(lv.OPA.TRANSP, 0)
+                selection_checkbox.set_style_border_opa(lv.OPA.TRANSP, 0)
+                selection_checkbox.set_style_shadow_opa(lv.OPA.TRANSP, 0)
+                selection_checkbox.set_style_clip_corner(True, 0)  # Enable clipping
+                selection_checkbox.set_style_pad_all(0, 0)  # Remove padding
+
+                # Use unselect.png image initially (note: correct filename)
+                selection_checkbox_img = lv.img(selection_checkbox)
+                selection_checkbox_img.set_src("A:/res/unselect.png")
+                selection_checkbox_img.set_size(32, 32)  # Match actual image pixel size
+                selection_checkbox_img.center()  # Center in the 32px container
+                selection_checkbox_img.clear_flag(
+                    lv.obj.FLAG.CLICKABLE
+                )  # Not clickable, parent handles events
+
+                # Position relative to parent wallpaper - top right corner (adjusted left and down)
+                selection_checkbox.align(lv.ALIGN.TOP_RIGHT, -12, 12)
+                selection_checkbox.move_foreground()
+
+                # Add independent event handler for selection
+                selection_checkbox.add_event_cb(
+                    lambda e, wp=current_wp: self.on_selection_checkbox_clicked(e, wp),
+                    lv.EVENT.CLICKED,
+                    None,
+                )
+
+                # Store selection checkbox reference in the wallpaper object
+                current_wp.selection_checkbox = selection_checkbox
+                current_wp.selection_checkbox_img = selection_checkbox_img
+                current_wp.is_selected = False  # Track selection state
 
                 # Create remove icon for each custom wallpaper (initially hidden)
                 # Use remove_icon.png directly with 44px hot area
@@ -6622,10 +6710,14 @@ class WallperChange(AnimScreen):
                 current_row + (i // 3),
                 file_name,
                 path_dir,
+                img_path_unselected=None,  # Disable built-in selection for internal wallpapers
                 is_internal=True,
             )
             self.wps.append(current_wp)
             # Debug output disabled for performance
+
+        # Disabled: Don't highlight active wallpaper to avoid default selection indicators
+        # self._highlight_active_wallpaper()
 
         self.container.add_event_cb(self.on_click, lv.EVENT.CLICKED, None)
 
@@ -6918,50 +7010,188 @@ class WallperChange(AnimScreen):
         pass
 
     def on_edit_button_clicked(self, event_obj):
-        """Handle Edit/Done button click"""
+        """Handle Edit button click to enter edit mode"""
+        if self.edit_mode or not getattr(self, "custom_wps", None):
+            return
+
         if __debug__:
-            print(
-                f"WallpaperChange: Edit button clicked, current edit_mode: {self.edit_mode}"
-            )
+            print("WallpaperChange: Edit button clicked - entering edit mode")
 
-        self.edit_mode = not self.edit_mode
+        self._enter_edit_mode()
 
+    def on_delete_button_clicked(self, event_obj):
+        """Handle Delete button click to delete selected wallpapers"""
+        if not self.edit_mode or not self.selected_wallpapers:
+            return
+
+        if __debug__:
+            print(f"WallpaperChange: Delete button clicked - deleting {len(self.selected_wallpapers)} selected wallpapers")
+
+        # Move selected wallpapers to marked_for_deletion and delete immediately
+        self.marked_for_deletion = self.selected_wallpapers.copy()
+        self.delete_marked_files()
+        self.selected_wallpapers.clear()
+        
+        # Exit edit mode after deletion
+        self._exit_edit_mode(commit=False)
+
+    def on_done_button_clicked(self, event_obj):
+        """Handle Done button click to exit edit mode"""
+        if not self.edit_mode:
+            return
+
+        if __debug__:
+            print("WallpaperChange: Done button clicked - exiting edit mode")
+
+        self._exit_edit_mode(commit=False)  # Exit without deleting
+
+
+    def _enter_edit_mode(self):
+        """Enable edit mode UI state"""
         if self.edit_mode:
-            # Switch to edit mode
-            self.edit_button_label.set_text(_(i18n_keys.BUTTON__DONE))
-            # Show remove icons for all custom wallpapers
-            for i, wp in enumerate(self.custom_wps):
-                if hasattr(wp, "remove_icon"):
-                    wp.remove_icon.clear_flag(lv.obj.FLAG.HIDDEN)
-                    # Ensure remove icon stays on top
-                    wp.remove_icon.move_foreground()
-                    if __debug__:
-                        print(
-                            f"WallpaperChange: Showing remove_icon {wp.remove_icon} for wp[{i}]"
-                        )
-                else:
-                    if __debug__:
-                        print(f"WallpaperChange: wp[{i}] has no remove_icon attribute")
-            if __debug__:
-                print("WallpaperChange: Entered edit mode - showing remove icons")
-        else:
-            # Switch to normal mode and perform deletions
-            self.edit_button_label.set_text(_(i18n_keys.BUTTON__EDIT))
-            # Hide remove icons
-            for wp in self.custom_wps:
-                if hasattr(wp, "remove_icon"):
-                    wp.remove_icon.add_flag(lv.obj.FLAG.HIDDEN)
+            return
 
-            # Delete marked files
-            if self.marked_for_deletion:
+        self.edit_mode = True
+
+        # Hide Edit button and show Delete and Done buttons
+        if hasattr(self, "edit_button"):
+            self.edit_button.add_flag(lv.obj.FLAG.HIDDEN)
+        if hasattr(self, "delete_button"):
+            self.delete_button.clear_flag(lv.obj.FLAG.HIDDEN)
+        if hasattr(self, "done_button"):
+            self.done_button.clear_flag(lv.obj.FLAG.HIDDEN)
+
+        # Show selection checkboxes for custom wallpapers
+        for i, wp in enumerate(self.custom_wps):
+            if hasattr(wp, "selection_checkbox"):
+                wp.selection_checkbox.clear_flag(lv.obj.FLAG.HIDDEN)
+                wp.selection_checkbox.move_foreground()
+                # Reset selection state
+                wp.is_selected = False
+                wp.selection_checkbox_img.set_src("A:/res/unselect.png")
                 if __debug__:
                     print(
-                        f"WallpaperChange: Exiting edit mode - deleting {len(self.marked_for_deletion)} files"
+                        f"WallpaperChange: Showing selection_checkbox for wp[{i}]"
                     )
-                self.delete_marked_files()
-            else:
-                if __debug__:
-                    print("WallpaperChange: Exiting edit mode - no files to delete")
+            elif __debug__:
+                print(f"WallpaperChange: wp[{i}] has no selection_checkbox attribute")
+
+        # Clear any previous selections
+        self.selected_wallpapers.clear()
+
+        if __debug__:
+            print("WallpaperChange: Entered edit mode - showing selection checkboxes")
+
+    def _exit_edit_mode(self, *, commit: bool):
+        """Disable edit mode UI state"""
+        if not self.edit_mode:
+            return
+
+        self.edit_mode = False
+
+        # Show Edit button and hide Delete and Done buttons
+        if hasattr(self, "edit_button"):
+            self.edit_button.clear_flag(lv.obj.FLAG.HIDDEN)
+        if hasattr(self, "delete_button"):
+            self.delete_button.add_flag(lv.obj.FLAG.HIDDEN)
+        if hasattr(self, "done_button"):
+            self.done_button.add_flag(lv.obj.FLAG.HIDDEN)
+
+        # Hide selection checkboxes for custom wallpapers
+        for wp in self.custom_wps:
+            if hasattr(wp, "selection_checkbox"):
+                wp.selection_checkbox.add_flag(lv.obj.FLAG.HIDDEN)
+
+        if not commit:
+            if __debug__:
+                print("WallpaperChange: Exit edit mode without committing deletions")
+            self.selected_wallpapers.clear()
+            return
+
+        # Delete selected wallpapers when committing
+        if self.selected_wallpapers:
+            if __debug__:
+                print(
+                    f"WallpaperChange: Exiting edit mode - deleting {len(self.selected_wallpapers)} selected files"
+                )
+            # Move selected wallpapers to marked_for_deletion for consistent deletion logic
+            self.marked_for_deletion = self.selected_wallpapers.copy()
+            self.delete_marked_files()
+            self.selected_wallpapers.clear()
+        elif __debug__:
+            print("WallpaperChange: Exiting edit mode - no files to delete")
+
+    def _highlight_active_wallpaper(self):
+        """Update selection indicators based on the currently active wallpaper"""
+        active_path = self._get_active_wallpaper_path()
+        active_normalized = self._normalize_wallpaper_path(active_path)
+
+        if __debug__:
+            print(
+                f"WallpaperChange: Highlighting active wallpaper - path: {active_path}, normalized: {active_normalized}"
+            )
+
+        for wp in getattr(self, "wps", []):
+            wp_normalized = self._normalize_wallpaper_path(getattr(wp, "img_path", ""))
+            is_selected = active_normalized is not None and (
+                wp_normalized == active_normalized
+            )
+            wp.set_checked(is_selected)
+
+    def _get_active_wallpaper_path(self) -> str | None:
+        """Determine the wallpaper currently in use for selection highlighting"""
+        if hasattr(self.prev_scr, "current_wallpaper_path"):
+            current = getattr(self.prev_scr, "current_wallpaper_path", None)
+            if current:
+                return current
+
+        if hasattr(self.prev_scr, "selected_wallpaper"):
+            selected = getattr(self.prev_scr, "selected_wallpaper", None)
+            if selected:
+                return selected
+
+        try:
+            return storage_device.get_homescreen()
+        except Exception:
+            return None
+
+    def _normalize_wallpaper_path(self, path: str | None) -> str | None:
+        """Normalize wallpaper paths to enable reliable comparisons"""
+        if not path:
+            return None
+
+        normalized = path
+        if normalized.startswith("A:1:/"):
+            normalized = normalized[5:]
+        elif normalized.startswith("A:/"):
+            normalized = normalized[3:]
+        elif normalized.startswith("1:/"):
+            normalized = normalized[3:]
+        normalized = normalized.lstrip("/")
+        normalized = normalized.replace("zoom-", "")
+        normalized = normalized.replace("-blur", "")
+        return normalized
+
+    def on_selection_checkbox_clicked(self, event_obj, wallpaper):
+        """Handle selection checkbox click to toggle selection state"""
+        if not self.edit_mode:
+            return
+            
+        # Toggle selection state
+        wallpaper.is_selected = not wallpaper.is_selected
+        
+        if wallpaper.is_selected:
+            # Add to selected set and change to selected image
+            self.selected_wallpapers.add(wallpaper)
+            wallpaper.selection_checkbox_img.set_src("A:/res/selected.png")
+            if __debug__:
+                print(f"WallpaperChange: Selected wallpaper {wallpaper.img_path}")
+        else:
+            # Remove from selected set and change to unselected image
+            self.selected_wallpapers.discard(wallpaper)
+            wallpaper.selection_checkbox_img.set_src("A:/res/unselect.png")
+            if __debug__:
+                print(f"WallpaperChange: Deselected wallpaper {wallpaper.img_path}")
 
     def on_remove_icon_clicked(self, event_obj, wallpaper):
         """Handle remove icon click"""
