@@ -1881,10 +1881,17 @@ class MainScreen(Screen):
                 anim.set_time(anim_time)
                 anim.set_path_cb(easing_cb)
 
-                # Optimize animation callback, directly manipulate x coordinate
-                def exec_cb(a, val):
-                    target_obj.set_x(int(val))
-                    target_obj.invalidate()
+                # Optimize animation callback: adjust x and invalidate precise dirty regions
+                prev_area = lv.area_t()
+                new_area = lv.area_t()
+
+                def exec_cb(a, val, prev_area=prev_area, new_area=new_area):
+                    target_obj.get_coords(prev_area)
+                    new_x = int(val)
+                    target_obj.set_x(new_x)
+                    target_obj.get_coords(new_area)
+                    target_obj.invalidate_area(prev_area)
+                    target_obj.invalidate_area(new_area)
 
                 anim.set_custom_exec_cb(exec_cb)
                 anim.set_repeat_count(1)
@@ -1923,8 +1930,14 @@ class MainScreen(Screen):
                         except:
                             pass
 
-            refresh_timer = lv.timer_create(lambda t: animation_refresh(), 10, None)
-            refresh_timer.set_repeat_count(10)
+            refresh_interval = 16  # roughly 60 FPS to reduce timer pressure
+            refresh_repeat = max(1, (anim_time + refresh_interval - 1) // refresh_interval)
+            refresh_timer = lv.timer_create(
+                lambda t: animation_refresh(),
+                refresh_interval,
+                None,
+            )
+            refresh_timer.set_repeat_count(refresh_repeat)
 
         def _on_page_anim_ready(self, old_index: int, target_index: int):
             # Reset both pages to their resting positions and visibility.
