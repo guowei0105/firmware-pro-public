@@ -1222,7 +1222,7 @@ class MainScreen(Screen):
     class AppDrawer(lv.obj):
         PAGE_SIZE = 2
         PAGE_SLIDE_TIME = 300  # Shortened animation time for quick response
-        PRERENDER_ENABLED = False  # Disable pre-render optimization
+        PRERENDER_ENABLED = True  # Enable pre-render optimization for smoother paging
 
         def __init__(self, parent):
             super().__init__(parent)
@@ -1230,9 +1230,8 @@ class MainScreen(Screen):
             self.visible = False
             self.text_label = {}
             self._icon_sources = set()
-            self._page_refresh_timer = None
-            self._pending_gc_timer = None
-            self._page_anim_targets = ()
+            self._page_anim_refs = []
+            self._page_anim_handles = []
 
             # Initialize pre-render manager
             self._prerender_manager = None
@@ -1758,37 +1757,25 @@ class MainScreen(Screen):
             if self.page_animating:
                 # Cancel the in-flight animation and settle immediately to avoid jitter
                 try:
-                    for target in getattr(self, "_page_anim_targets", ()):
-                        if target:
-                            lv.anim_del(target, None)
+                    for handle in self._page_anim_handles:
+                        lv.anim_del(handle, None)
                 except:
                     pass
                 # Complete current animation immediately
-                if hasattr(self, "_page_anim_target") and hasattr(
-                    self, "_page_anim_old_index"
-                ):
-                    self._on_page_anim_ready(
-                        self._page_anim_old_index, self._page_anim_target
-                    )
+                if hasattr(self, "_page_anim_target"):
+                    self._on_page_anim_ready(self.current_page, self._page_anim_target)
                 return
 
             # Check if indicators exist before using them
             if not hasattr(self, "indicators") or not self.indicators:
+                if __debug__:
+                    print("AppDrawer: indicators not initialized, skipping page change")
                 return
 
-            target_page = self.current_page
             if _dir == lv.DIR.LEFT:
-                # Enable circular navigation: when at last page, go to first page
-                if self.current_page >= self.PAGE_SIZE - 1:
-                    target_page = 0  # Go to first page
-                else:
-                    target_page = self.current_page + 1
-            elif _dir == lv.DIR.RIGHT:
-                # Enable circular navigation: when at first page, go to last page
-                if self.current_page <= 0:
-                    target_page = self.PAGE_SIZE - 1  # Go to last page
-                else:
-                    target_page = self.current_page - 1
+                target_page = (self.current_page + 1) % self.PAGE_SIZE
+            else:
+                target_page = (self.current_page - 1 + self.PAGE_SIZE) % self.PAGE_SIZE
 
             if target_page == self.current_page:
                 return
@@ -1848,14 +1835,6 @@ class MainScreen(Screen):
 
             self.page_animating = True
             self._page_anim_target = target_index
-            self._page_anim_old_index = old_index
-            self._page_anim_targets = (old_cont, new_cont)
-            if self._pending_gc_timer:
-                try:
-                    self._pending_gc_timer.delete()
-                except:
-                    pass
-                self._pending_gc_timer = None
 
             # Cancel any running animations on these containers to prevent jitter/bounce
             try:
@@ -1867,12 +1846,8 @@ class MainScreen(Screen):
             # Try to use cached page content
             if self.PRERENDER_ENABLED and self._prerender_manager:
                 cached_page = self._prerender_manager.get_cached_page(target_index)
-                if cached_page:
-                    # Using cached content can reduce rendering time
-                    if __debug__:
-                        print(
-                            f"AppDrawer: Using cached content for page {target_index}"
-                        )
+                if cached_page and __debug__:
+                    print(f"AppDrawer: Using cached content for page {target_index}")
 
             # Skip GC before animation to avoid stuttering
             # GC will be performed after animation completes
@@ -1909,6 +1884,7 @@ class MainScreen(Screen):
                 # Optimize animation callback, directly manipulate x coordinate
                 def exec_cb(a, val):
                     target_obj.set_x(int(val))
+                    target_obj.invalidate()
 
                 anim.set_custom_exec_cb(exec_cb)
                 anim.set_repeat_count(1)
@@ -1924,33 +1900,31 @@ class MainScreen(Screen):
                 )
             )
 
-            lv.anim_t.start(anim_out)
-            lv.anim_t.start(anim_in)
+            self._page_anim_refs = [anim_out, anim_in]
+            self._page_anim_handles = [
+                lv.anim_t.start(anim_out),
+                lv.anim_t.start(anim_in),
+            ]
+
+            # Immediately refresh once to minimise initial lag
+            try:
+                lv.refr_now(None)
+            except:
+                pass
 
             # Optimize animation refresh logic
             def animation_refresh():
                 if self.page_animating:
                     try:
-                        lv.timer_handler()
+                        lv.task_handler()
                     except:
                         try:
-                            lv.task_handler()
+                            lv.refr_now(None)
                         except:
                             pass
 
-            # Keep the refresh timer active for the full animation duration
-            refresh_interval = 16  # roughly 60 FPS
-            repeat = max(1, (anim_time + refresh_interval - 1) // refresh_interval)
-            if self._page_refresh_timer:
-                try:
-                    self._page_refresh_timer.delete()
-                except:
-                    pass
-                self._page_refresh_timer = None
-            self._page_refresh_timer = lv.timer_create(
-                lambda t: animation_refresh(), refresh_interval, None
-            )
-            self._page_refresh_timer.set_repeat_count(repeat)
+            refresh_timer = lv.timer_create(lambda t: animation_refresh(), 10, None)
+            refresh_timer.set_repeat_count(10)
 
         def _on_page_anim_ready(self, old_index: int, target_index: int):
             # Reset both pages to their resting positions and visibility.
@@ -1966,14 +1940,14 @@ class MainScreen(Screen):
 
             self.show_page(target_index)
             self.page_animating = False
-            self._page_anim_targets = ()
+            self._page_anim_refs = []
+            self._page_anim_handles = []
 
-            if self._page_refresh_timer:
-                try:
-                    self._page_refresh_timer.delete()
-                except:
-                    pass
-                self._page_refresh_timer = None
+            # Force a final refresh to ensure the page settles cleanly
+            try:
+                lv.refr_now(None)
+            except:
+                pass
 
             # Delay memory cleanup to avoid affecting final rendering
             def delayed_gc():
@@ -1983,19 +1957,11 @@ class MainScreen(Screen):
                     gc.collect()
                 except:
                     pass
-                self._pending_gc_timer = None
 
             # Schedule memory cleanup slightly after the animation ends
             def schedule_gc():
-                if self._pending_gc_timer:
-                    try:
-                        self._pending_gc_timer.delete()
-                    except:
-                        pass
-                self._pending_gc_timer = lv.timer_create(
-                    lambda t: delayed_gc(), 150, None
-                )
-                self._pending_gc_timer.set_repeat_count(1)
+                gc_timer = lv.timer_create(lambda t: delayed_gc(), 50, None)
+                gc_timer.set_repeat_count(1)
 
             try:
                 schedule_gc()
