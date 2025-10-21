@@ -1413,7 +1413,7 @@ class MainScreen(Screen):
                 0,
             )
             label.set_style_text_letter_space(-1, 0)
-            label.set_long_mode(lv.label.LONG.DOT)
+            label.set_long_mode(lv.label.LONG.WRAP)  # Auto wrap to 2 lines instead of truncating with dots
             label.set_style_max_height(52, 0)  # 26px * 2 = 52px for 2 lines
 
             # Use absolute positioning instead of align_to to avoid layout calculation issues
