@@ -2906,6 +2906,13 @@ class NftGallery(Screen):
                 "nav_back": True,
             }
             super().__init__(**kwargs)
+
+            # Keep right scrollbar but remove bottom scrollbar
+            self.content_area.set_scroll_dir(lv.DIR.VER)
+            self.content_area.set_width(480)
+            self.content_area.clear_flag(lv.obj.FLAG.SCROLL_CHAIN)
+            self.content_area.clear_flag(lv.obj.FLAG.SCROLL_MOMENTUM)
+            self.content_area.clear_flag(lv.obj.FLAG.SCROLL_ELASTIC)
         else:
             if hasattr(self, "overview") and self.overview:
                 self.overview.delete()
@@ -2950,13 +2957,15 @@ class NftGallery(Screen):
                 if nft_counts > 1
                 else _(i18n_keys.CONTENT__STR_ITEM).format(nft_counts)
             )
+            # Use zero horizontal padding to keep the gallery within the viewport and avoid horizontal scrollbar.
             self.container = ContainerGrid(
                 self.content_area,
                 row_dsc=row_dsc,
                 col_dsc=col_dsc,
                 align_base=self.title,
-                pos=(-12, 74),
+                pos=(0, 74),
                 pad_gap=4,
+                pad_hor=0,
             )
             self.nfts = []
             if not utils.EMULATOR:
@@ -2979,6 +2988,10 @@ class NftGallery(Screen):
                     self.nfts.append(current_nft)
 
             self.container.add_event_cb(self.on_click, lv.EVENT.CLICKED, None)
+
+    def on_nav_back(self, event_obj):
+        """Disable swipe-back gesture while keeping the back button active."""
+        return
 
     def empty(self):
 
@@ -3048,10 +3061,17 @@ class NftManager(AnimScreen):
 
         super().__init__(
             prev_scr=prev_scr,
-            title="Wallpaper",
+            title=_(i18n_keys.TITLE__WALLPAPER),
             nav_back=True,
         )
         self.nft_config = nft_config
+
+        # Disable horizontal scrolling and keep only the vertical scrollbar.
+        self.content_area.set_scroll_dir(lv.DIR.VER)
+        self.content_area.set_width(480)
+        self.content_area.clear_flag(lv.obj.FLAG.SCROLL_CHAIN)
+        self.content_area.clear_flag(lv.obj.FLAG.SCROLL_MOMENTUM)
+        self.content_area.clear_flag(lv.obj.FLAG.SCROLL_ELASTIC)
 
         # Add trash icon to title bar (right side)
         self.trash_icon = lv.imgbtn(self.content_area)
@@ -3106,7 +3126,9 @@ class NftManager(AnimScreen):
         self.btn_lock_screen = NormalButton(self.content_area)
         self.btn_lock_screen.set_size(456, 98)
         self.btn_lock_screen.enable(lv_colors.ONEKEY_PURPLE, lv_colors.WHITE)
-        self.btn_lock_screen.label.set_text("Set as Lock Screen")
+        self.btn_lock_screen.label.set_text(
+            _(i18n_keys.BUTTON__SET_AS_LOCK_SCREEN)
+        )
         self.btn_lock_screen.align_to(
             self.nft_description, lv.ALIGN.OUT_BOTTOM_LEFT, -8, 32
         )
@@ -3115,7 +3137,9 @@ class NftManager(AnimScreen):
         self.btn_home_screen = NormalButton(self.content_area)
         self.btn_home_screen.set_size(456, 98)
         self.btn_home_screen.enable(lv_colors.GRAY_1, lv_colors.WHITE)
-        self.btn_home_screen.label.set_text("Set as Home Screen")
+        self.btn_home_screen.label.set_text(
+            _(i18n_keys.BUTTON__SET_AS_HOME_SCREEN)
+        )
         self.btn_home_screen.align_to(
             self.btn_lock_screen, lv.ALIGN.OUT_BOTTOM_LEFT, 0, 8
         )
@@ -3127,6 +3151,10 @@ class NftManager(AnimScreen):
         if storage_device.get_homescreen() == self.img_path:
             storage_device.set_appdrawer_background(utils.get_default_wallpaper())
         self.load_screen(self.prev_scr, destroy_self=True)
+
+    def on_nav_back(self, event_obj):
+        """Disable swipe gesture navigation while keeping back button functional."""
+        return
 
     def _load_scr(self, scr: "Screen", back: bool = False) -> None:
         lv.scr_load(scr)
@@ -3189,7 +3217,7 @@ class NftLockScreenPreview(AnimScreen):
     def __init__(self, prev_scr, nft_path, nft_config):
         super().__init__(
             prev_scr=prev_scr,
-            title="Preview",
+            title=_(i18n_keys.TITLE__PREVIEW),
             nav_back=True,
             rti_path="A:/res/checkmark.png",
         )
@@ -3462,7 +3490,7 @@ class NftHomeScreenPreview(AnimScreen):
     def __init__(self, prev_scr, nft_path, nft_config):
         super().__init__(
             prev_scr=prev_scr,
-            title="Preview",
+            title=_(i18n_keys.TITLE__PREVIEW),
             nav_back=True,
             rti_path="A:/res/checkmark.png",
         )
