@@ -3251,6 +3251,7 @@ class NftLockScreenPreview(AnimScreen):
         zoom = min(zoom_x, zoom_y)  # Use smaller zoom to ensure image fits completely
 
         self.lockscreen_preview.set_zoom(zoom)
+        self.lockscreen_preview.set_antialias(True)  # Enable anti-aliasing for smooth scaling
         self.lockscreen_preview.align(lv.ALIGN.CENTER, 0, 0)
 
         # Device name and bluetooth name overlaid on the image
@@ -3529,6 +3530,7 @@ class NftHomeScreenPreview(AnimScreen):
         zoom = min(zoom_x, zoom_y)  # Use smaller zoom to ensure image fits completely
 
         self.homescreen_preview.set_zoom(zoom)
+        self.homescreen_preview.set_antialias(True)  # Enable anti-aliasing for smooth scaling
         self.homescreen_preview.align(lv.ALIGN.CENTER, 0, 0)
 
         # Add 4 app icons matching AppDrawer desktop layout (2 rows x 2 cols)
@@ -6078,6 +6080,7 @@ class AppdrawerBackgroundSetting(AnimScreen):
         zoom_y = int((574 / base_height) * 256)
         zoom = min(zoom_x, zoom_y)
         self.lockscreen_preview.set_zoom(zoom)
+        self.lockscreen_preview.set_antialias(True)  # Enable anti-aliasing for smooth scaling
         self.lockscreen_preview.align(lv.ALIGN.CENTER, 0, 0)
 
         # Device name and bluetooth name overlaid on the image
@@ -6494,9 +6497,14 @@ class WallperChange(AnimScreen):
         if file_name_list:
             # Edit button - initially visible, positioned at the right edge
             self.edit_button = lv.btn(self.custom_header_container)
-            self.edit_button.set_size(60, 30)  # Smaller width for better fit
+            self.edit_button.set_size(lv.SIZE.CONTENT, 30)  # Auto width to fit text in all languages
             self.edit_button.add_style(
-                StyleWrapper().bg_opa(lv.OPA.TRANSP).border_opa(lv.OPA.TRANSP), 0
+                StyleWrapper()
+                .bg_opa(lv.OPA.TRANSP)
+                .border_opa(lv.OPA.TRANSP)
+                .pad_left(8)
+                .pad_right(8),  # Add horizontal padding for better spacing
+                0
             )
             self.edit_button.align(lv.ALIGN.RIGHT_MID, 4, 0)  # Slightly more to the right
 
@@ -6516,11 +6524,16 @@ class WallperChange(AnimScreen):
 
             # Delete button - initially hidden, appears to the left of Done when in edit mode
             self.delete_button = lv.btn(self.custom_header_container)
-            self.delete_button.set_size(80, 30)  # Adjust width for "Delete" text
+            self.delete_button.set_size(lv.SIZE.CONTENT, 30)  # Auto width to fit text
             self.delete_button.add_style(
-                StyleWrapper().bg_opa(lv.OPA.TRANSP).border_opa(lv.OPA.TRANSP), 0
+                StyleWrapper()
+                .bg_opa(lv.OPA.TRANSP)
+                .border_opa(lv.OPA.TRANSP)
+                .pad_left(8)
+                .pad_right(8),  # Add horizontal padding for better spacing
+                0
             )
-            self.delete_button.align(lv.ALIGN.RIGHT_MID, -70, 0)  # Much closer to Done button
+            self.delete_button.align(lv.ALIGN.RIGHT_MID, -78, 0)  # Adjusted position for auto-sized button
             self.delete_button.add_flag(lv.obj.FLAG.HIDDEN)  # Initially hidden
 
             self.delete_button_label = lv.label(self.delete_button)
@@ -6539,9 +6552,14 @@ class WallperChange(AnimScreen):
 
             # Done button - initially hidden, replaces Edit button position when in edit mode
             self.done_button = lv.btn(self.custom_header_container)
-            self.done_button.set_size(60, 30)  # Match Edit button size
+            self.done_button.set_size(lv.SIZE.CONTENT, 30)  # Auto width to fit text
             self.done_button.add_style(
-                StyleWrapper().bg_opa(lv.OPA.TRANSP).border_opa(lv.OPA.TRANSP), 0
+                StyleWrapper()
+                .bg_opa(lv.OPA.TRANSP)
+                .border_opa(lv.OPA.TRANSP)
+                .pad_left(8)
+                .pad_right(8),  # Add horizontal padding for better spacing
+                0
             )
             self.done_button.align(lv.ALIGN.RIGHT_MID, 4, 0)  # Same position as Edit button
             self.done_button.add_flag(lv.obj.FLAG.HIDDEN)  # Initially hidden
@@ -9173,8 +9191,11 @@ class HomeScreenSetting(AnimScreen):
                 if __debug__:
                     print(f"[HomeScreenSetting] Return animation error: {e}")
 
-        # Disable scrollbar for this screen
+        # Disable scrollbars on content_area (inherited from AnimScreen)
         self.content_area.set_scrollbar_mode(lv.SCROLLBAR_MODE.OFF)
+        self.content_area.clear_flag(lv.obj.FLAG.SCROLLABLE)
+        # Remove bottom padding to prevent content overflow (800 - 24 = 776 vs container 800)
+        self.content_area.set_style_pad_bottom(0, 0)
 
         # Main container for the screen
         self.container = lv.obj(self.content_area)
@@ -9186,6 +9207,9 @@ class HomeScreenSetting(AnimScreen):
         # Don't capture click events - let them pass through to buttons
         self.container.clear_flag(lv.obj.FLAG.CLICKABLE)
         self.container.add_flag(lv.obj.FLAG.EVENT_BUBBLE)
+        # Disable scrollbars on the main container
+        self.container.set_scrollbar_mode(lv.SCROLLBAR_MODE.OFF)
+        self.container.clear_flag(lv.obj.FLAG.SCROLLABLE)
 
         # Home screen preview container with image (same size as LockScreenSetting)
         self.preview_container = lv.obj(self.container)
@@ -9197,6 +9221,9 @@ class HomeScreenSetting(AnimScreen):
         # Don't capture click events - let them pass through to buttons
         self.preview_container.clear_flag(lv.obj.FLAG.CLICKABLE)
         self.preview_container.add_flag(lv.obj.FLAG.EVENT_BUBBLE)
+        # Disable scrollbars on the preview container
+        self.preview_container.set_scrollbar_mode(lv.SCROLLBAR_MODE.OFF)
+        self.preview_container.clear_flag(lv.obj.FLAG.SCROLLABLE)
 
         # Home screen preview image
         self.homescreen_preview = lv.img(self.preview_container)
@@ -9354,7 +9381,17 @@ class HomeScreenSetting(AnimScreen):
                         f"[HomeScreenSetting.__init__] Error checking initial src state: {e}"
                     )
 
-        self.homescreen_preview.set_size(344, 574)
+        # Use zoom scaling instead of set_size to avoid jagged edges
+        self.homescreen_preview.set_size(lv.SIZE.CONTENT, lv.SIZE.CONTENT)
+        self.homescreen_preview.clear_flag(lv.obj.FLAG.SCROLLABLE)
+
+        # Calculate zoom to fit image within 344x574 while maintaining aspect ratio
+        base_width, base_height = 480, 800
+        zoom_x = int((344 / base_width) * 256)
+        zoom_y = int((574 / base_height) * 256)
+        zoom = min(zoom_x, zoom_y)
+        self.homescreen_preview.set_zoom(zoom)
+        self.homescreen_preview.set_antialias(True)  # Enable anti-aliasing for smooth scaling
         self.homescreen_preview.align(lv.ALIGN.CENTER, 0, 0)
 
         self.app_icons = []
