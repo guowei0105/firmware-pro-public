@@ -1391,8 +1391,11 @@ class MainScreen(Screen):
             self._icon_sources.add(icon_path)
             # Use inline button styles - remove border radius settings
             btn.add_style(StyleWrapper().bg_opa(lv.OPA.TRANSP).shadow_width(0), 0)
+            # Add press effect: darken the icon by 30% opacity black overlay
             btn.add_style(
-                StyleWrapper().bg_img_recolor(lv_colors.BLACK),
+                StyleWrapper()
+                .bg_img_recolor_opa(lv.OPA._30)
+                .bg_img_recolor(lv_colors.BLACK),
                 lv.PART.MAIN | lv.STATE.PRESSED,
             )
             btn.add_flag(lv.obj.FLAG.EVENT_BUBBLE)
@@ -1411,6 +1414,10 @@ class MainScreen(Screen):
                 .text_color(lv_colors.WHITE)
                 .text_align_center(),
                 0,
+            )
+            # Add press effect: reduce label opacity to 70% when pressed
+            label.add_style(
+                StyleWrapper().text_opa(lv.OPA._70), lv.PART.MAIN | lv.STATE.PRESSED
             )
             label.set_style_text_letter_space(-1, 0)
             label.set_long_mode(lv.label.LONG.WRAP)  # Auto wrap to 2 lines instead of truncating with dots
