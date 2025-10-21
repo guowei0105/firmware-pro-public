@@ -3192,6 +3192,12 @@ class NftLockScreenPreview(AnimScreen):
         if __debug__:
             print(f"[NftLockScreenPreview] Init with nft_path: {nft_path}")
 
+        # Disable scrollbars on content_area (inherited from AnimScreen)
+        self.content_area.set_scrollbar_mode(lv.SCROLLBAR_MODE.OFF)
+        self.content_area.clear_flag(lv.obj.FLAG.SCROLLABLE)
+        # Remove bottom padding to prevent content overflow (800 - 24 = 776 vs container 800)
+        self.content_area.set_style_pad_bottom(0, 0)
+
         # Main container for the screen
         self.container = lv.obj(self.content_area)
         self.container.set_size(lv.pct(100), lv.pct(100))
@@ -3201,6 +3207,9 @@ class NftLockScreenPreview(AnimScreen):
         )
         self.container.clear_flag(lv.obj.FLAG.CLICKABLE)
         self.container.add_flag(lv.obj.FLAG.EVENT_BUBBLE)
+        # Disable scrollbars on the main container
+        self.container.set_scrollbar_mode(lv.SCROLLBAR_MODE.OFF)
+        self.container.clear_flag(lv.obj.FLAG.SCROLLABLE)
 
         # Lock screen preview container with image - NFT image 118px from top, 344x574 size
         self.preview_container = lv.obj(self.container)
@@ -3231,11 +3240,14 @@ class NftLockScreenPreview(AnimScreen):
         self.lockscreen_preview.set_src(nft_path)
         # Use image's natural size, then scale with zoom to fit container
         self.lockscreen_preview.set_size(lv.SIZE.CONTENT, lv.SIZE.CONTENT)
+        # Disable scrollbars on the image itself
+        self.lockscreen_preview.clear_flag(lv.obj.FLAG.SCROLLABLE)
 
         # Calculate zoom to fit image within 344x574 while maintaining aspect ratio
-        # Assume typical NFT size is around 456x456, calculate zoom for both dimensions
-        zoom_x = int((344 / 456) * 256)  # Scale to fit width
-        zoom_y = int((574 / 456) * 256)  # Scale to fit height
+        # Use actual wallpaper size 480x800 instead of NFT size 456x456
+        base_width, base_height = 480, 800
+        zoom_x = int((344 / base_width) * 256)  # Scale to fit width
+        zoom_y = int((574 / base_height) * 256)  # Scale to fit height
         zoom = min(zoom_x, zoom_y)  # Use smaller zoom to ensure image fits completely
 
         self.lockscreen_preview.set_zoom(zoom)
@@ -3457,6 +3469,12 @@ class NftHomeScreenPreview(AnimScreen):
         blur_path = nft_path.replace(file_name, f"{file_name_without_ext}-blur.jpg")
         self.blur_exists = self._check_blur_exists(blur_path)
 
+        # Disable scrollbars on content_area (inherited from AnimScreen)
+        self.content_area.set_scrollbar_mode(lv.SCROLLBAR_MODE.OFF)
+        self.content_area.clear_flag(lv.obj.FLAG.SCROLLABLE)
+        # Remove bottom padding to prevent content overflow (800 - 24 = 776 vs container 800)
+        self.content_area.set_style_pad_bottom(0, 0)
+
         # Main container
         self.container = lv.obj(self.content_area)
         self.container.set_size(lv.pct(100), lv.pct(100))
@@ -3466,6 +3484,9 @@ class NftHomeScreenPreview(AnimScreen):
         )
         self.container.clear_flag(lv.obj.FLAG.CLICKABLE)
         self.container.add_flag(lv.obj.FLAG.EVENT_BUBBLE)
+        # Disable scrollbars on the main container
+        self.container.set_scrollbar_mode(lv.SCROLLBAR_MODE.OFF)
+        self.container.clear_flag(lv.obj.FLAG.SCROLLABLE)
 
         # Home screen preview container - NFT image 118px from top, 344x574 size
         self.preview_container = lv.obj(self.container)
@@ -3497,37 +3518,56 @@ class NftHomeScreenPreview(AnimScreen):
         self.homescreen_preview.set_src(nft_path)
         # Use image's natural size, then scale with zoom to fit container
         self.homescreen_preview.set_size(lv.SIZE.CONTENT, lv.SIZE.CONTENT)
+        # Disable scrollbars on the image itself
+        self.homescreen_preview.clear_flag(lv.obj.FLAG.SCROLLABLE)
 
         # Calculate zoom to fit image within 344x574 while maintaining aspect ratio
-        # Assume typical NFT size is around 456x456, calculate zoom for both dimensions
-        zoom_x = int((344 / 456) * 256)  # Scale to fit width
-        zoom_y = int((574 / 456) * 256)  # Scale to fit height
+        # Use actual wallpaper size 480x800 instead of NFT size 456x456
+        base_width, base_height = 480, 800
+        zoom_x = int((344 / base_width) * 256)  # Scale to fit width
+        zoom_y = int((574 / base_height) * 256)  # Scale to fit height
         zoom = min(zoom_x, zoom_y)  # Use smaller zoom to ensure image fits completely
 
         self.homescreen_preview.set_zoom(zoom)
         self.homescreen_preview.align(lv.ALIGN.CENTER, 0, 0)
 
-        # Add 6 app icons like HomeScreenSetting (3 rows of 2, 100px size)
+        # Add 4 app icons matching AppDrawer desktop layout (2 rows x 2 cols)
         self.app_icons = []
-        icon_size = 100
-        icon_spacing_x = 41  # Horizontal spacing between icons
-        icon_spacing_y = 40.3  # Vertical spacing between icons
-        start_x = -((icon_size // 2) + (icon_spacing_x // 2))  # Centered
-        start_y = 64  # First row distance from top of preview_container
 
-        for i in range(6):
-            row = i // 2  # 0, 0, 1, 1, 2, 2
-            col = i % 2  # 0, 1, 0, 1, 0, 1
-            x_pos = int(start_x + col * (icon_size + icon_spacing_x))
-            y_pos = int(start_y + row * (icon_size + icon_spacing_y))
+        # Desktop absolute screen coordinates (considering main_cont at y=75):
+        # Left column x=64, Right column x=272
+        # First row y=75+89=164, Second row y=75+367=442
+        # Icon size: 144x144
+
+        # Preview scaling: wallpaper 480x800 scaled to fit 344x574 container
+        # Actual display size: 343x572, centered with offset (0.5, 1)
+        scale_x = 343.0 / 480.0  # ≈ 0.71458
+        scale_y = 572.0 / 800.0  # ≈ 0.715
+        offset_x = 0.5
+        offset_y = 1.0
+
+        # Desktop icon positions in absolute screen coordinates
+        desktop_positions = [
+            (64, 164),   # Left-Top
+            (272, 164),  # Right-Top
+            (64, 442),   # Left-Bottom
+            (272, 442),  # Right-Bottom
+        ]
+
+        for i in range(4):
+            screen_x, screen_y = desktop_positions[i]
+
+            # Map desktop screen coordinates to preview coordinates
+            x_pos = int(screen_x * scale_x + offset_x)
+            y_pos = int(screen_y * scale_y + offset_y)
 
             # Create image directly without holder to show natural shape
             icon_img = lv.img(self.preview_container)
             icon_img.set_src("A:/res/icon_example.png")
             # Let image use its natural size
             icon_img.set_size(lv.SIZE.CONTENT, lv.SIZE.CONTENT)
-            # Position the image
-            icon_img.align_to(self.preview_container, lv.ALIGN.TOP_MID, x_pos, y_pos)
+            # Use set_pos for absolute positioning (left-top corner)
+            icon_img.set_pos(x_pos, y_pos)
             self.app_icons.append(icon_img)
 
         # Create only Blur button for NFT HomeScreen preview (no Change button needed)
@@ -3664,7 +3704,11 @@ class NftHomeScreenPreview(AnimScreen):
         # Update the preview image
         self.homescreen_preview.set_src(self.current_wallpaper_path)
         # Re-apply zoom after changing source
-        scale = int(574 * 256 / 456)  # Scale based on height
+        # Use actual wallpaper size 480x800 instead of NFT size 456x456
+        base_width, base_height = 480, 800
+        zoom_x = int((344 / base_width) * 256)
+        zoom_y = int((574 / base_height) * 256)
+        scale = min(zoom_x, zoom_y)
         self.homescreen_preview.set_zoom(scale)
         self.homescreen_preview.align(lv.ALIGN.CENTER, 0, 0)
         self._update_blur_button_state()
@@ -5939,6 +5983,12 @@ class AppdrawerBackgroundSetting(AnimScreen):
             if hasattr(self, "rti_btn"):
                 print(f"rti_btn: {self.rti_btn}")
 
+        # Disable scrollbars on content_area (inherited from AnimScreen)
+        self.content_area.set_scrollbar_mode(lv.SCROLLBAR_MODE.OFF)
+        self.content_area.clear_flag(lv.obj.FLAG.SCROLLABLE)
+        # Remove bottom padding to prevent content overflow (800 - 24 = 776 vs container 800)
+        self.content_area.set_style_pad_bottom(0, 0)
+
         # Main container for the screen
         self.container = lv.obj(self.content_area)
         self.container.set_size(lv.pct(100), lv.pct(100))
@@ -5949,6 +5999,9 @@ class AppdrawerBackgroundSetting(AnimScreen):
         # Don't capture click events - let them pass through to buttons
         self.container.clear_flag(lv.obj.FLAG.CLICKABLE)
         self.container.add_flag(lv.obj.FLAG.EVENT_BUBBLE)
+        # Disable scrollbars on the main container
+        self.container.set_scrollbar_mode(lv.SCROLLBAR_MODE.OFF)
+        self.container.clear_flag(lv.obj.FLAG.SCROLLABLE)
 
         # Lock screen preview container with image
         self.preview_container = lv.obj(self.container)
@@ -5960,6 +6013,9 @@ class AppdrawerBackgroundSetting(AnimScreen):
         # Don't capture click events - let them pass through to buttons
         self.preview_container.clear_flag(lv.obj.FLAG.CLICKABLE)
         self.preview_container.add_flag(lv.obj.FLAG.EVENT_BUBBLE)
+        # Prevent LVGL from drawing scrollbars around the static preview
+        self.preview_container.set_scrollbar_mode(lv.SCROLLBAR_MODE.OFF)
+        self.preview_container.clear_flag(lv.obj.FLAG.SCROLLABLE)
 
         # Lock screen preview image
         self.lockscreen_preview = lv.img(self.preview_container)
@@ -6012,7 +6068,16 @@ class AppdrawerBackgroundSetting(AnimScreen):
                 self.current_wallpaper_path = "A:/res/wallpaper-2.jpg"
                 self.lockscreen_preview.set_src("A:/res/wallpaper-2.jpg")
 
-        self.lockscreen_preview.set_size(344, 574)
+        # Use zoom scaling instead of set_size to properly fit wallpaper
+        # Use actual wallpaper size 480x800 instead of NFT size 456x456
+        self.lockscreen_preview.set_size(lv.SIZE.CONTENT, lv.SIZE.CONTENT)
+        # Disable scrollbars on the image itself
+        self.lockscreen_preview.clear_flag(lv.obj.FLAG.SCROLLABLE)
+        base_width, base_height = 480, 800
+        zoom_x = int((344 / base_width) * 256)
+        zoom_y = int((574 / base_height) * 256)
+        zoom = min(zoom_x, zoom_y)
+        self.lockscreen_preview.set_zoom(zoom)
         self.lockscreen_preview.align(lv.ALIGN.CENTER, 0, 0)
 
         # Device name and bluetooth name overlaid on the image
@@ -8957,13 +9022,13 @@ class WallpaperScreen(AnimScreen):
 
         self.container = ContainerFlexCol(self.content_area, self.title, padding_row=2)
         self.lock_screen = ListItemBtn(self.container, _(i18n_keys.ITEM__LOCK_SCREEN))
-        self.home_screen = ListItemBtn(self.container, _(i18n_keys.ITEM__HOME_SCREEN))
+        self.home_screen = ListItemBtn(self.container, _(i18n_keys.BUTTON__HOME_SCREEN))
         self.content_area.add_event_cb(self.on_click_event, lv.EVENT.CLICKED, None)
         self.load_screen(self)
 
     def refresh_text(self):
         self.lock_screen.label_left.set_text(_(i18n_keys.ITEM__LOCK_SCREEN))
-        self.home_screen.label_left.set_text(_(i18n_keys.ITEM__HOME_SCREEN))
+        self.home_screen.label_left.set_text(_(i18n_keys.BUTTON__HOME_SCREEN))
         # self.power.align_to(self.container, lv.ALIGN.OUT_BOTTOM_MID, 0, 12)
         
         # 确保事件处理器正常工作，防止Lock Screen按钮无响应
@@ -9293,27 +9358,41 @@ class HomeScreenSetting(AnimScreen):
         self.homescreen_preview.align(lv.ALIGN.CENTER, 0, 0)
 
         self.app_icons = []
-        icon_size = 110
-        icon_spacing_x = 41  # Horizontal spacing between icons
-        icon_spacing_y = 40.3  # Vertical spacing between icons
-        start_x = -((icon_size // 2) + (icon_spacing_x // 2))  # Centered
-        start_y = 64  # First row distance from top of preview_container
 
-        for i in range(6):
-            row = i // 2  # 0, 0, 1, 1, 2, 2
-            col = i % 2  # 0, 1, 0, 1, 0, 1
+        # Desktop absolute screen coordinates (considering main_cont at y=75):
+        # Left column x=64, Right column x=272
+        # First row y=75+89=164, Second row y=75+367=442
+        # Icon size: 144x144
 
-            # Position the icon
-            x_pos = int(start_x + col * (icon_size + icon_spacing_x))
-            y_pos = int(start_y + row * (icon_size + icon_spacing_y))
+        # Preview scaling: wallpaper 480x800 scaled to fit 344x574 container
+        # Actual display size: 343x572, centered with offset (0.5, 1)
+        scale_x = 343.0 / 480.0  # ≈ 0.71458
+        scale_y = 572.0 / 800.0  # ≈ 0.715
+        offset_x = 0.5
+        offset_y = 1.0
+
+        # Desktop icon positions in absolute screen coordinates
+        desktop_positions = [
+            (64, 164),   # Left-Top
+            (272, 164),  # Right-Top
+            (64, 442),   # Left-Bottom
+            (272, 442),  # Right-Bottom
+        ]
+
+        for i in range(4):
+            screen_x, screen_y = desktop_positions[i]
+
+            # Map desktop screen coordinates to preview coordinates
+            x_pos = int(screen_x * scale_x + offset_x)
+            y_pos = int(screen_y * scale_y + offset_y)
 
             # Create image directly without holder to show natural shape
             icon_img = lv.img(self.preview_container)
             icon_img.set_src("A:/res/icon_example.png")
             # Let image use its natural size
             icon_img.set_size(lv.SIZE.CONTENT, lv.SIZE.CONTENT)
-            # Position the image
-            icon_img.align_to(self.preview_container, lv.ALIGN.TOP_MID, x_pos, y_pos)
+            # Use set_pos for absolute positioning (left-top corner)
+            icon_img.set_pos(x_pos, y_pos)
 
             self.app_icons.append(icon_img)
         # Create button group
