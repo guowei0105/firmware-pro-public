@@ -3597,7 +3597,7 @@ class NftHomeScreenPreview(AnimScreen):
             icon.set_src(icon_path)
         icon.align(lv.ALIGN.CENTER, 0, 0)
 
-        # Create label
+        # Create label - make it clickable to expand click area
         label = lv.label(self.container)
         label.set_text(text)
         label.add_style(
@@ -3608,8 +3608,11 @@ class NftHomeScreenPreview(AnimScreen):
             0,
         )
         label.align_to(button, lv.ALIGN.OUT_BOTTOM_MID, 0, 4)
+        # Make label clickable so text can also be clicked
+        label.add_flag(lv.obj.FLAG.CLICKABLE)
+        label.add_event_cb(callback, lv.EVENT.CLICKED, None)
 
-        # Add event callback
+        # Add event callback to button
         button.add_event_cb(callback, lv.EVENT.CLICKED, None)
 
         return button, icon, label
@@ -6144,6 +6147,9 @@ class AppdrawerBackgroundSetting(AnimScreen):
             0,
         )
         self.change_label.align_to(self.change_button, lv.ALIGN.OUT_BOTTOM_MID, 0, 4)
+        # Make label clickable so text can also be clicked
+        self.change_label.add_flag(lv.obj.FLAG.CLICKABLE)
+        self.change_label.add_event_cb(self.on_select_clicked, lv.EVENT.CLICKED, None)
 
         # Add event handlers
         self.change_button.add_event_cb(self.on_select_clicked, lv.EVENT.CLICKED, None)
@@ -6868,8 +6874,15 @@ class WallperChange(AnimScreen):
                             self.on_remove_icon_clicked(event_obj, wp)
                             return
 
-            # Skip wallpaper selection if in edit mode
-            if self.edit_mode:
+            # In edit mode, clicking wallpaper image should toggle selection
+            if self.edit_mode and hasattr(self, "custom_wps"):
+                # Check if clicked on a custom wallpaper
+                for wp in self.custom_wps:
+                    if target == wp:
+                        # Toggle selection state for the wallpaper
+                        self.on_selection_checkbox_clicked(event_obj, wp)
+                        return
+                # If not a custom wallpaper, skip further processing in edit mode
                 return
 
             # Check if target is a wallpaper
@@ -9517,8 +9530,11 @@ class HomeScreenSetting(AnimScreen):
             0,
         )
         label.align_to(button, lv.ALIGN.OUT_BOTTOM_MID, 0, 4)
+        # Make label clickable so text can also be clicked
+        label.add_flag(lv.obj.FLAG.CLICKABLE)
+        label.add_event_cb(callback, lv.EVENT.CLICKED, None)
 
-        # Add event callback
+        # Add event callback to button
         button.add_event_cb(callback, lv.EVENT.CLICKED, None)
 
         if __debug__:

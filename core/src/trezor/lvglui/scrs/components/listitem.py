@@ -314,6 +314,7 @@ class ImgGridItem(lv.img):
             # Set default zoom and opacity for proper display
             self.set_zoom(256)  # Default zoom (256 = 100%)
             self.set_style_img_opa(lv.OPA.COVER, 0)  # Ensure image is fully opaque
+            self.set_antialias(True)  # Enable anti-aliasing for smooth scaling
         except (AttributeError, TypeError):
             pass
 
