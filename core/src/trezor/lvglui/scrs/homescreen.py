@@ -1396,7 +1396,8 @@ class MainScreen(Screen):
                 lv.PART.MAIN | lv.STATE.PRESSED,
             )
             btn.add_flag(lv.obj.FLAG.EVENT_BUBBLE)
-            btn.align(lv.ALIGN.TOP_MID, 0, 0)
+            # Use absolute positioning instead of align to avoid layout calculation issues
+            btn.set_pos(0, 0)  # Center horizontally: (144 - 144) / 2 = 0
             btn.set_style_border_width(0, 0)
             btn.clear_flag(lv.obj.FLAG.SCROLLABLE)
             btn.clear_flag(lv.obj.FLAG.GESTURE_BUBBLE)
@@ -1415,7 +1416,9 @@ class MainScreen(Screen):
             label.set_long_mode(lv.label.LONG.DOT)
             label.set_style_max_height(52, 0)  # 26px * 2 = 52px for 2 lines
 
-            label.align_to(btn, lv.ALIGN.OUT_BOTTOM_MID, 0, 8)
+            # Use absolute positioning instead of align_to to avoid layout calculation issues
+            # Position: below button (144px) + 8px gap, centered horizontally
+            label.set_pos(0, 144 + 8)
 
             self.text_label[text_key] = label
 
@@ -1696,7 +1699,7 @@ class MainScreen(Screen):
                                     "AppDrawer: Layer2 successfully hidden, MainScreen fully visible"
                                 )
                             if hasattr(self.parent, "start_title_fade_in"):
-                                self.parent.start_title_fade_in(duration=300)
+                                self.parent.start_title_fade_in(duration=100)
                             _animation_in_progress = False
                             elapsed = get_timestamp() - _animation_start_time
                             log_with_timestamp(
