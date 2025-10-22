@@ -559,7 +559,11 @@ def lock_device() -> None:
     if storage.device.is_initialized() and config.has_pin():
         from trezor.lvglui.scrs import fingerprints
 
-        se_thd89.clear_session()
+        try:
+            se_thd89.clear_session()
+        except Exception:
+            if __debug__:
+                print("Warning: Failed to clear SE session")
 
         if fingerprints.is_available():
             fingerprints.lock()
