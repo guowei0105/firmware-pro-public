@@ -212,21 +212,15 @@ async def handle_usb_state():
                     from trezor.crypto import se_thd89
 
                     if config.is_unlocked():
-                        try:
-                            se_thd89.clear_session()
-                        except Exception:
-                            if __debug__:
-                                print("Warning: Failed to clear SE session on USB change")
+                        se_thd89.clear_session()
                         if fingerprints.is_available():
                             fingerprints.lock()
                         else:
                             config.lock()
-                        # Don't call safe_reloop() on USB events to avoid triggering
-                        # unnecessary AppDrawer animations. Instead, just do internal reloop
-                        # to refresh handlers without visual changes.
+                        await safe_reloop()
                         await workflow.spawn(utils.internal_reloop())
-                elif not usb_auto_lock and not state:
-                    await safe_reloop(ack=False)
+                # When USB auto-lock is disabled, do nothing on USB disconnect
+                # to avoid unwanted page switches
             else:
                 utils.AIRGAP_MODE_CHANGED = False
             base.reload_settings_from_storage()
