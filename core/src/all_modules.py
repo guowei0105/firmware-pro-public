@@ -141,6 +141,8 @@ trezor.enums.TonWalletVersion
 import trezor.enums.TonWalletVersion
 trezor.enums.TonWorkChain
 import trezor.enums.TonWorkChain
+trezor.enums.TronMessageType
+import trezor.enums.TronMessageType
 trezor.enums.TronResourceCode
 import trezor.enums.TronResourceCode
 trezor.enums.WordRequestType
@@ -217,6 +219,8 @@ trezor.lvglui.scrs.components.banner
 import trezor.lvglui.scrs.components.banner
 trezor.lvglui.scrs.components.button
 import trezor.lvglui.scrs.components.button
+trezor.lvglui.scrs.components.composite
+import trezor.lvglui.scrs.components.composite
 trezor.lvglui.scrs.components.container
 import trezor.lvglui.scrs.components.container
 trezor.lvglui.scrs.components.doubleclick
@@ -471,6 +475,8 @@ apps.aptos.helper
 import apps.aptos.helper
 apps.aptos.sign_message
 import apps.aptos.sign_message
+apps.aptos.sign_siwa_message
+import apps.aptos.sign_siwa_message
 apps.aptos.sign_tx
 import apps.aptos.sign_tx
 apps.base
@@ -975,6 +981,10 @@ apps.ur_registry.account
 import apps.ur_registry.account
 apps.ur_registry.chains
 import apps.ur_registry.chains
+apps.ur_registry.chains.base_sign_request
+import apps.ur_registry.chains.base_sign_request
+apps.ur_registry.chains.base_signature
+import apps.ur_registry.chains.base_signature
 apps.ur_registry.chains.bitcoin
 import apps.ur_registry.chains.bitcoin
 apps.ur_registry.chains.bitcoin.crypto_psbt
@@ -1017,6 +1027,16 @@ apps.ur_registry.chains.solana.sol_transaction
 import apps.ur_registry.chains.solana.sol_transaction
 apps.ur_registry.chains.solana.sol_unsafe_message
 import apps.ur_registry.chains.solana.sol_unsafe_message
+apps.ur_registry.chains.tron
+import apps.ur_registry.chains.tron
+apps.ur_registry.chains.tron.tron_message
+import apps.ur_registry.chains.tron.tron_message
+apps.ur_registry.chains.tron.tron_sign_request
+import apps.ur_registry.chains.tron.tron_sign_request
+apps.ur_registry.chains.tron.tron_signature
+import apps.ur_registry.chains.tron.tron_signature
+apps.ur_registry.chains.tron.tron_transaction
+import apps.ur_registry.chains.tron.tron_transaction
 apps.ur_registry.crypto_coin_info
 import apps.ur_registry.crypto_coin_info
 apps.ur_registry.crypto_hd_key
@@ -1243,6 +1263,8 @@ if not utils.BITCOIN_ONLY:
     import apps.ethereum.layout
     apps.ethereum.networks
     import apps.ethereum.networks
+    apps.ethereum.onekey.eip7702_delegators
+    import apps.ethereum.onekey.eip7702_delegators
     apps.ethereum.onekey.get_address
     import apps.ethereum.onekey.get_address
     apps.ethereum.onekey.get_public_key
@@ -1259,6 +1281,8 @@ if not utils.BITCOIN_ONLY:
     import apps.ethereum.onekey.sign_tx
     apps.ethereum.onekey.sign_tx_eip1559
     import apps.ethereum.onekey.sign_tx_eip1559
+    apps.ethereum.onekey.sign_tx_eip7702
+    import apps.ethereum.onekey.sign_tx_eip7702
     apps.ethereum.onekey.sign_typed_data
     import apps.ethereum.onekey.sign_typed_data
     apps.ethereum.onekey.sign_typed_data_hash

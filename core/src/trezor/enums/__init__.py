@@ -172,6 +172,7 @@ if TYPE_CHECKING:
         EthereumSignTypedHashOneKey = 20117
         EthereumGnosisSafeTxAck = 20118
         EthereumGnosisSafeTxRequest = 20119
+        EthereumSignTxEIP7702OneKey = 20120
         NEMGetAddress = 67
         NEMAddress = 68
         NEMSignTx = 69
@@ -322,6 +323,7 @@ if TYPE_CHECKING:
         AptosSignedTx = 10603
         AptosSignMessage = 10604
         AptosMessageSignature = 10605
+        AptosSignSIWAMessage = 10606
         WebAuthnListResidentCredentials = 800
         WebAuthnCredentials = 801
         WebAuthnAddResidentCredential = 802
@@ -774,6 +776,10 @@ if TYPE_CHECKING:
     class TonWorkChain(IntEnum):
         BASECHAIN = 0
         MASTERCHAIN = 1
+
+    class TronMessageType(IntEnum):
+        V1 = 1
+        V2 = 2
 
     class TronResourceCode(IntEnum):
         BANDWIDTH = 0

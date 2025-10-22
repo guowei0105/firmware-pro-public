@@ -165,6 +165,7 @@ if not utils.BITCOIN_ONLY:
     EthereumSignTypedHashOneKey = 20117
     EthereumGnosisSafeTxAck = 20118
     EthereumGnosisSafeTxRequest = 20119
+    EthereumSignTxEIP7702OneKey = 20120
     NEMGetAddress = 67
     NEMAddress = 68
     NEMSignTx = 69
@@ -315,6 +316,7 @@ if not utils.BITCOIN_ONLY:
     AptosSignedTx = 10603
     AptosSignMessage = 10604
     AptosMessageSignature = 10605
+    AptosSignSIWAMessage = 10606
     WebAuthnListResidentCredentials = 800
     WebAuthnCredentials = 801
     WebAuthnAddResidentCredential = 802

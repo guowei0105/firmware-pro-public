@@ -168,8 +168,15 @@ def get_features() -> Features:
         f.attach_to_pin_user = False
     # private fields:
     if config.is_unlocked():
-        # passphrase_protection is private, see #1807
-        f.passphrase_protection = storage.device.is_passphrase_enabled()
+        import apps.common.passphrase as passphrase
+
+        if (
+            not has_attach_to_pin_capability()
+            and passphrase.is_passphrase_pin_enabled()
+        ):
+            f.passphrase_protection = False
+        else:
+            f.passphrase_protection = storage.device.is_passphrase_enabled()
         f.needs_backup = storage.device.needs_backup()
         f.unfinished_backup = storage.device.unfinished_backup()
         f.no_backup = storage.device.no_backup()
@@ -183,7 +190,6 @@ def get_features() -> Features:
         f.auto_lock_delay_ms = storage.device.get_autolock_delay_ms()
         f.display_rotation = storage.device.get_rotation()
         f.experimental_features = storage.device.get_experimental_features()
-        from apps.common import passphrase
 
         f.unlocked_attach_pin = passphrase.is_passphrase_pin_enabled()
 
@@ -553,6 +559,8 @@ def lock_device() -> None:
     if storage.device.is_initialized() and config.has_pin():
         from trezor.lvglui.scrs import fingerprints
 
+        se_thd89.clear_session()
+
         if fingerprints.is_available():
             fingerprints.lock()
         else:
@@ -560,10 +568,6 @@ def lock_device() -> None:
                 print(
                     f"pin locked,  finger is available: {fingerprints.is_available()} ===== finger is unlocked: {fingerprints.is_unlocked()} "
                 )
-            from apps.common import passphrase
-
-            if passphrase.is_passphrase_pin_enabled():
-                storage.cache.end_current_session()
             config.lock()
         wire.find_handler = get_pinlocked_handler
         set_homescreen()

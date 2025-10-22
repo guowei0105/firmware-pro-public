@@ -21,6 +21,14 @@ from . import (
 from .common import FullSizeWindow, lv
 from .components.banner import LEVEL, Banner
 from .components.button import ListItemBtn
+from .components.composite import (
+    AmountGroup,
+    CardGroup,
+    DirectionGroup,
+    FeeGroup,
+    MoreGroup,
+    RawDataItem,
+)
 from .components.container import ContainerFlexCol
 from .components.listitem import CardHeader, CardItem, DisplayItem
 from .components.qrcode import QRCode
@@ -595,62 +603,81 @@ class Message(FullSizeWindow):
 
 
 class TransactionOverview(FullSizeWindow):
-    def __init__(self, title, address, primary_color, icon_path, has_details=None):
-        if __debug__:
-            self.layout_address = address
-
+    def __init__(
+        self,
+        title,
+        primary_color,
+        icon_path,
+        sub_icon_path,
+        card_title: str,
+        card_icon: str,
+        items: tuple[tuple[str, str], ...],
+        banner_text: str | None = None,
+        banner_level: int = 2,
+        has_details=False,
+    ):
         super().__init__(
             title,
             None,
             _(i18n_keys.BUTTON__CONTINUE),
             _(i18n_keys.BUTTON__REJECT),
-            anim_dir=2,
+            anim_dir=0,
             primary_color=primary_color,
-            icon_path="A:/res/icon-send.png",
-            sub_icon_path=icon_path or "A:/res/evm-eth.png",
+            icon_path=icon_path,
+            sub_icon_path=sub_icon_path,
         )
-        self.group_directions = ContainerFlexCol(
-            self.content_area, self.title, pos=(0, 40), padding_row=0
+        if banner_text:
+            self.banner = Banner(
+                self.content_area,
+                banner_level,
+                banner_text,
+            )
+            self.banner.align_to(self.title, lv.ALIGN.OUT_BOTTOM_MID, 0, 24)
+        self.card_group = CardGroup(
+            self.content_area,
+            self.title if not banner_text else self.banner,
+            card_title,
+            card_icon,
+            items,
+            relative_pos=(0, 40 if not banner_text else 16),
+            no_align=False,
         )
-        self.item_group_header = CardHeader(
-            self.group_directions,
-            _(i18n_keys.FORM__DIRECTIONS),
-            "A:/res/group-icon-directions.png",
-        )
-        self.item_group_body_to = DisplayItem(
-            self.group_directions,
-            _(i18n_keys.LIST_KEY__TO__COLON),
-            address,
-        )
-        self.group_directions.add_dummy()
 
         if has_details:
-            self.view_btn = NormalButton(
-                self.content_area,
-                f"{LV_SYMBOLS.LV_SYMBOL_ANGLE_DOUBLE_DOWN}  {_(i18n_keys.BUTTON__DETAILS)}",
-            )
-            self.view_btn.set_size(456, 82)
-            self.view_btn.add_style(StyleWrapper().text_font(font_GeistSemiBold26), 0)
-            self.view_btn.enable()
-            self.view_btn.align_to(self.group_directions, lv.ALIGN.OUT_BOTTOM_MID, 0, 8)
-            self.view_btn.add_event_cb(self.on_click, lv.EVENT.CLICKED, None)
+            from .components.composite import ShowMore
+
+            self.show_more = ShowMore(self.content_area, self.card_group.pannel)
+
+            self.add_event_cb(self.on_click, lv.EVENT.CLICKED, None)
 
     def on_click(self, event_obj):
         code = event_obj.code
         target = event_obj.get_target()
         if code == lv.EVENT.CLICKED:
-            if target == self.view_btn:
+            if target == self.show_more.view_btn:
                 self.destroy(400)
                 self.channel.publish(2)
 
-    if __debug__:
 
-        def read_content(self) -> list[str]:
-            return (
-                [self.layout_title or ""]
-                + [self.layout_subtitle or ""]
-                + [self.layout_address or ""]
-            )
+class TransactionOverviewSend(TransactionOverview):
+    def __init__(
+        self,
+        title,
+        primary_color,
+        icon_path,
+        address,
+        has_details=False,
+    ):
+        super().__init__(
+            title,
+            primary_color,
+            "A:/res/icon-send.png",
+            icon_path or "A:/res/evm-eth.png",
+            _(i18n_keys.FORM__DIRECTIONS),
+            "A:/res/group-icon-directions.png",
+            items=((_(i18n_keys.LIST_KEY__TO__COLON), address),),
+            has_details=has_details,
+        )
 
 
 class TransactionOverviewNew(FullSizeWindow):
@@ -912,6 +939,144 @@ class TransactionDetailsETH(FullSizeWindow):
                     confirm_text=None,
                     cancel_text=None,
                 )
+
+
+class TransactionDetailsBase(FullSizeWindow):
+    ALLOWED_SECTIONS = ["amount", "direction", "fee", "more", "data"]
+
+    def __init__(
+        self,
+        title,
+        primary_color=lv_colors.ONEKEY_GREEN,
+        icon_path: str | None = None,
+        sub_icon_path: str | None = None,
+        banner_text: str | None = None,
+        banner_level: int = 2,
+        section_order: list[str] = None,
+        **kwargs,
+    ):
+        super().__init__(
+            title,
+            None,
+            _(i18n_keys.BUTTON__CONTINUE),
+            _(i18n_keys.BUTTON__REJECT),
+            primary_color=primary_color,
+            icon_path=icon_path,
+            sub_icon_path=sub_icon_path,
+        )
+        self.primary_color = primary_color
+
+        if any(
+            section_name.split("_")[0] not in TransactionDetailsBase.ALLOWED_SECTIONS
+            for section_name in kwargs.keys()
+        ):
+            raise ValueError("Invalid section name")
+        if banner_text:
+            self.banner = Banner(
+                self.content_area,
+                banner_level,
+                banner_text,
+            )
+            self.banner.align_to(self.title, lv.ALIGN.OUT_BOTTOM_MID, 0, 24)
+        self.container = ContainerFlexCol(
+            self.content_area,
+            self.title if not banner_text else self.banner,
+            pos=(0, 40 if not banner_text else 16),
+        )
+        self.section_order = section_order or TransactionDetailsBase.ALLOWED_SECTIONS
+        for section_prefix in self.section_order:
+            section_name = f"{section_prefix}_section"
+            section_params = kwargs.get(section_name, None)
+            if section_params is None:
+                continue
+            if section_prefix == "amount":
+                assert isinstance(
+                    section_params, tuple
+                ), "amount section params must be a tuple"
+                self.group_amounts = AmountGroup(
+                    self.container,
+                    section_params,
+                )
+            elif section_prefix == "direction":
+                assert isinstance(
+                    section_params, tuple
+                ), "direction section params must be a tuple"
+                self.group_directions = DirectionGroup(
+                    self.container,
+                    section_params,
+                )
+            elif section_prefix == "fee":
+                assert isinstance(
+                    section_params, tuple
+                ), "fee section params must be a tuple"
+                self.group_fees = FeeGroup(
+                    self.container,
+                    section_params,
+                )
+            elif section_prefix == "more":
+                assert isinstance(
+                    section_params, tuple
+                ), "more section params must be a tuple"
+                self.group_more = MoreGroup(
+                    self.container,
+                    section_params,
+                )
+            elif section_prefix == "data":
+                assert isinstance(
+                    section_params, dict
+                ), "data section params must be a dict"
+                self.group_data = RawDataItem(
+                    self.container,
+                    section_params.get("raw_data", None),
+                    max_length=section_params.get("max_length", 225),
+                    primary_color=self.primary_color,
+                )
+
+
+class TransactionDetailsEIP7702(TransactionDetailsBase):
+    def __init__(
+        self,
+        title: str,
+        authorty_addr: str,
+        delegate_addr: str | None,
+        value: str,
+        nonce: str,
+        network: str,
+        max_priority_fee_per_gas=None,
+        max_fee_per_gas=None,
+        fee_max: str = None,
+        primary_color=lv_colors.ONEKEY_GREEN,
+        icon_path: str | None = None,
+    ):
+
+        super().__init__(
+            title,
+            primary_color,
+            icon_path,
+            direction_section=(
+                (_(i18n_keys.FIELDS_ACCOUNT), authorty_addr),
+                (_(i18n_keys.FIELDS_DELEGATE_TO), delegate_addr),
+            ),
+            more_section=(
+                (_(i18n_keys.LIST_KEY__AMOUNT__COLON), value),
+                ("Nonce", nonce),
+                (
+                    _(i18n_keys.FIELDS_DELEGATE_ON_NETWORK)
+                    if delegate_addr
+                    else _(i18n_keys.FIELDS_REVOKE_ON_NETWORK),
+                    network,
+                ),
+            ),
+            fee_section=(
+                (_(i18n_keys.LIST_KEY__MAXIMUM_FEE__COLON), fee_max),
+                (
+                    _(i18n_keys.LIST_KEY__PRIORITY_FEE_PER_GAS__COLON),
+                    max_priority_fee_per_gas,
+                ),
+                (_(i18n_keys.LIST_KEY__MAXIMUM_FEE_PER_GAS__COLON), max_fee_per_gas),
+            ),
+            section_order=["direction", "more", "fee"],
+        )
 
 
 class SafeTxSafeApproveHash(FullSizeWindow):
@@ -5791,3 +5956,112 @@ class Turbo(FullSizeWindow):
             elif target == self.gif_mask:
                 motor.vibrate(motor.SUCCESS)
                 self._on_gif_click(event_obj)
+
+
+class CertificationInfo(FullSizeWindow):
+    class CertificationItem(lv.obj):
+        def __init__(
+            self,
+            parent,
+            left_text: str,
+            right_text: str | None,
+            icon_path: str | None = None,
+            right_text_color=lv_colors.ONEKEY_GRAY_4,
+        ):
+            super().__init__(parent)
+            self.remove_style_all()
+            self.set_size(456, lv.SIZE.CONTENT)
+            self.add_style(
+                StyleWrapper()
+                .bg_color(lv_colors.ONEKEY_BLACK_3)
+                .bg_opa()
+                .radius(0)
+                .border_width(0)
+                .pad_hor(24)
+                .pad_ver(20)
+                .text_font(font_GeistRegular20)
+                .text_letter_space(-1)
+                .text_align_left(),
+                0,
+            )
+            self.label_left = lv.label(self)
+            # self.label_left.set_recolor(True)
+            self.label_left.set_size(lv.SIZE.CONTENT, lv.SIZE.CONTENT)
+            self.label_left.set_long_mode(lv.label.LONG.WRAP)
+            self.label_left.set_text(left_text)
+            self.label_left.add_style(
+                StyleWrapper().text_color(lv_colors.WHITE).align(lv.ALIGN.TOP_LEFT), 0
+            )
+            if right_text:
+                self.label_right = lv.label(self)
+                self.label_right.set_size(lv.SIZE.CONTENT, lv.SIZE.CONTENT)
+                # self.label_right.set_recolor(True)
+                self.label_right.set_text(right_text)
+                self.label_right.add_style(
+                    StyleWrapper().text_color(right_text_color), 0
+                )
+                self.label_right.align(lv.ALIGN.TOP_LEFT, 152, 0)
+            if icon_path:
+                self.img = lv.img(self)
+                self.img.remove_style_all()
+                self.img.set_src(icon_path)
+                if right_text:
+                    self.img.align_to(self.label_right, lv.ALIGN.OUT_BOTTOM_LEFT, 0, 20)
+                else:
+                    self.img.align(lv.ALIGN.TOP_LEFT, 152, 0)
+
+    def __init__(self):
+        super().__init__(
+            _(i18n_keys.CONTENT__CERTIFICATIONS),
+            None,
+        )
+        self.add_nav_back()
+        self.container = ContainerFlexCol(
+            self.content_area, self.title, padding_row=0, pos=(0, 30)
+        )
+        self.container.add_style(
+            StyleWrapper().bg_color(lv_colors.ONEKEY_BLACK_3).bg_opa(), 0
+        )
+        self.certs_info = [
+            ("Model", "OneKey Pro", None, lv_colors.WHITE),
+            (
+                "United States",
+                "FCC ID: 2BB8VP1",
+                "A:/res/cert-fcc.png",
+                lv_colors.ONEKEY_GRAY_4,
+            ),
+            ("Europe", None, "A:/res/cert-ce.png", lv_colors.ONEKEY_GRAY_4),
+            (
+                "Japan",
+                "MIC: 211-240720",
+                "A:/res/cert-mic.png",
+                lv_colors.ONEKEY_GRAY_4,
+            ),
+            (
+                "Brazil",
+                "ANATEL ID: 02335-25-16343",
+                "A:/res/cert-anatel.png",
+                lv_colors.ONEKEY_GRAY_4,
+            ),
+        ]
+        for i, (country, cert_id, icon_path, color) in enumerate(self.certs_info):
+            self.CertificationItem(self.container, country, cert_id, icon_path, color)
+            if i != len(self.certs_info) - 1:
+                self.line = lv.line(self.container)
+                self.line.set_size(408, 1)
+                self.line.add_style(
+                    StyleWrapper().bg_color(lv_colors.ONEKEY_GRAY_2).bg_opa(), 0
+                )
+        self.add_event_cb(self.on_nav_back, lv.EVENT.CLICKED, None)
+        self.add_event_cb(self.on_nav_back, lv.EVENT.GESTURE, None)
+
+    def on_nav_back(self, event_obj):
+        code = event_obj.code
+        target = event_obj.get_target()
+        if code == lv.EVENT.CLICKED:
+            if target == self.nav_back.nav_btn:
+                self.destroy(50)
+        elif code == lv.EVENT.GESTURE:
+            _dir = lv.indev_get_act().get_gesture_dir()
+            if _dir == lv.DIR.RIGHT:
+                lv.event_send(self.nav_back.nav_btn, lv.EVENT.CLICKED, None)

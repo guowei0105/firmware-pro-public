@@ -149,6 +149,8 @@ def find_message_handler_module(msg_type: int) -> str:
             return "apps.ethereum.onekey.sign_tx"
         if msg_type == MessageType.EthereumSignTxEIP1559OneKey:
             return "apps.ethereum.onekey.sign_tx_eip1559"
+        if msg_type == MessageType.EthereumSignTxEIP7702OneKey:
+            return "apps.ethereum.onekey.sign_tx_eip7702"
         if msg_type == MessageType.EthereumSignMessageOneKey:
             return "apps.ethereum.onekey.sign_message"
         if msg_type == MessageType.EthereumVerifyMessageOneKey:
@@ -291,6 +293,8 @@ def find_message_handler_module(msg_type: int) -> str:
             return "apps.aptos.sign_tx"
         if msg_type == MessageType.AptosSignMessage:
             return "apps.aptos.sign_message"
+        if msg_type == MessageType.AptosSignSIWAMessage:
+            return "apps.aptos.sign_siwa_message"
 
         # algo
         if msg_type == MessageType.AlgorandGetAddress:
@@ -458,9 +462,6 @@ def _wrap_with_version_check(handler):
     async def wrapper(ctx, msg):
         # Execute the original handler
         result = await handler(ctx, msg)
-        from apps.base import check_version_compatibility
-
-        check_version_compatibility()
         return result
 
     return wrapper
