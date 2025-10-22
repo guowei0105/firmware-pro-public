@@ -64,18 +64,9 @@ _busy_show_timer = None  # LVGL timer to delay showing Processing
 _busy_show_delay_ms = 800  # Delay before showing Processing text
 _restore_timer = None  # LVGL timer for debounced restore to AppDrawer
 
-
 def get_timestamp():
     """Get current timestamp in milliseconds"""
     return utime.ticks_ms()
-
-
-def log_with_timestamp(message):
-    """Timestamped logging - lightweight version"""
-    if __debug__ and False:  # Disable logging for better performance
-        timestamp = get_timestamp()
-        print(f"[{timestamp}] {message}")
-
 
 def check_operation_frequency():
     """Check operation frequency to prevent too rapid operations"""
@@ -86,10 +77,9 @@ def check_operation_frequency():
 
     _last_operation_time = current_time
     _operation_count += 1
-    if __debug__ and _operation_count % 5 == 0:  # Print memory every 5 operations
-        print(f"Operation #{_operation_count}: Memory status: {get_memory_info()}")
+    if __debug__ and _operation_count % 5 == 0:
+        pass
     return True
-
 
 def cleanup_timers():
     """Clean up all active timers"""
@@ -101,7 +91,6 @@ def cleanup_timers():
         except:
             pass
     _active_timers.clear()
-
 
 def force_memory_cleanup():
     """Force memory cleanup"""
@@ -127,22 +116,15 @@ def force_memory_cleanup():
 
     if __debug__:
         mem_after = gc.mem_alloc()
-        print(
-            f"[GC] Memory cleanup: before {mem_before}B, after {mem_after}B, cleaned {styles_cleaned} styles"
-        )
 
     # Note: Don't clean timers and JPEG cache to avoid repeated loading and breaking running animations
 
-
 def get_cached_style(image_src):
     """Get cached style objects to avoid repeated creation - TEMPORARILY DISABLED"""
-    print(f"[get_cached_style] DISABLED: Called with {image_src}")
     
     # TEMPORARY FIX: Return None to completely avoid StyleWrapper issues
     # This will cause calling code to fail gracefully or skip style application
-    print("[get_cached_style] DISABLED: Returning None for stability")
     return None
-
 
 def get_memory_info():
     """Get memory information"""
@@ -153,10 +135,8 @@ def get_memory_info():
     except:
         return "memory info unavailable"
 
-
 def brightness2_percent_str(brightness: int) -> str:
     return f"{int(brightness / style.BACKLIGHT_MAX * 100)}%"
-
 
 GRID_CELL_SIZE_ROWS = const(240)
 GRID_CELL_SIZE_COLS = const(144)
@@ -182,7 +162,6 @@ _last_busy_time = 0
 _busy_debounce_ms = 1000  # 1 second debounce time
 _cleanup_task = None
 
-
 def _get_persistent_busy_state():
     try:
         import storage.cache
@@ -190,7 +169,6 @@ def _get_persistent_busy_state():
         return storage.cache.get_int(storage.cache.APP_COMMON_BUSY_STATE, 0)
     except:
         return 0
-
 
 def _get_persistent_busy_time():
     """Get last busy time from storage cache"""
@@ -200,7 +178,6 @@ def _get_persistent_busy_time():
         return storage.cache.get_int(storage.cache.APP_COMMON_BUSY_TIME, 0)
     except:
         return 0
-
 
 def _set_persistent_busy_state(counter):
     """Set busy state to storage cache"""
@@ -219,7 +196,6 @@ def _set_persistent_busy_state(counter):
     except:
         pass
 
-
 def _set_persistent_busy_time(time_ms):
     """Set busy time to storage cache"""
     try:
@@ -229,7 +205,6 @@ def _set_persistent_busy_time(time_ms):
     except:
         pass
 
-
 async def _delayed_cleanup():
     """Delayed cleanup task to restore non-busy state after debounce time"""
     global _busy_state_counter, _cleanup_task
@@ -237,9 +212,7 @@ async def _delayed_cleanup():
     import utime
     from trezor import loop
 
-
     await loop.sleep(_busy_debounce_ms)
-
 
     # Check if we should restore non-busy state
     current_time = utime.ticks_ms()
@@ -247,9 +220,7 @@ async def _delayed_cleanup():
 
     if time_since_last_busy >= _busy_debounce_ms:
         if __debug__:
-            print(
-                f"[CLEANUP] Restoring non-busy state after debounce - counter: {_busy_state_counter}, time_diff: {time_since_last_busy}ms"
-            )
+            pass
 
         # Clear persistent state and counter
         _busy_state_counter = 0
@@ -282,10 +253,8 @@ async def _delayed_cleanup():
 
     _cleanup_task = None
 
-
 def change_state(is_busy: bool = False):
     global _busy_state_counter, _last_busy_time, _cleanup_task, _restore_timer, _busy_show_timer
-
 
     import utime
     from trezor import workflow
@@ -342,7 +311,6 @@ def change_state(is_busy: bool = False):
         # We want to immediately restore the tips to Swipe-to-show.
         # No debounce here to avoid staying on Processing... between quick requests.
 
-
         # Cancel cleanup task if it exists
         if _cleanup_task is not None:
             _cleanup_task = None
@@ -395,7 +363,6 @@ def change_state(is_busy: bool = False):
         _busy_show_timer = lv.timer_create(lambda _t: _busy_show_cb2(), _busy_show_delay_ms, None)
         _busy_show_timer.set_repeat_count(1)
 
-
 def show_appdrawer_immediate():
     """Immediately show AppDrawer (used after successful unlock)."""
     try:
@@ -422,7 +389,6 @@ def show_appdrawer_immediate():
             pass
         except:
             pass
-
 
 class MainScreen(Screen):
     def __init__(self, device_name=None, ble_name=None, dev_state=None):
@@ -581,7 +547,6 @@ class MainScreen(Screen):
             last_busy_time = _get_persistent_busy_time()
             time_since_last_busy = utime.ticks_diff(current_time, last_busy_time)
 
-
             # Use much more conservative threshold during MainScreen initialization
             # because session restarts can happen during normal operations
             threshold_ms = 15000  # 15 seconds - only clear truly stale states
@@ -633,7 +598,6 @@ class MainScreen(Screen):
                 if hasattr(self, "bottom_tips"):
                     self.bottom_tips.clear_flag(lv.obj.FLAG.HIDDEN)
                     self.bottom_tips.set_text("")  # Clear processing text
-                print("MainScreen: Device locked, staying in MainScreen view")
             else:
                 # Device is unlocked: always default to MainScreen (no AppDrawer)
                 # Hide AppDrawer if needed
@@ -647,11 +611,9 @@ class MainScreen(Screen):
                 if hasattr(self, "bottom_tips"):
                     self.bottom_tips.clear_flag(lv.obj.FLAG.HIDDEN)
                     self.bottom_tips.set_text(_(i18n_keys.BUTTON__SWIPE_TO_SHOW_APPS))
-                print("MainScreen: Default to MainScreen view")
 
         # Add gesture handling for MainScreen
         self.add_event_cb(self.on_main_gesture, lv.EVENT.GESTURE, None)
-        print("MainScreen: Added gesture event handler")
 
         save_app_obj(self)
 
@@ -663,7 +625,7 @@ class MainScreen(Screen):
             # If animation is in progress, ignore gesture
             if _animation_in_progress:
                 if __debug__:
-                    print("[GESTURE] Ignored: Animation in progress")
+                    pass
                 return
 
             # Check if AppDrawer is visible
@@ -672,22 +634,18 @@ class MainScreen(Screen):
                 is_showing = getattr(self.apps, "_showing", False)
 
                 if __debug__:
-                    print(
-                        f"[GESTURE] AppDrawer state - hidden: {is_app_drawer_hidden}, showing: {is_showing}, visible: {getattr(self.apps, 'visible', None)}"
-                    )
+                    pass
 
                 if not is_app_drawer_hidden:
                     # When AppDrawer is visible, MainScreen doesn't handle any gestures
                     if __debug__:
-                        print("[GESTURE] Ignored: AppDrawer is visible")
+                        pass
                     return
 
                 # Check if communication just recovered (prevent accidental triggers)
                 if hasattr(self, "_just_restored_from_busy"):
                     if __debug__:
-                        print(
-                            "[GESTURE] Ignored: Just restored from busy state, preventing accidental gesture"
-                        )
+                        pass
                     delattr(self, "_just_restored_from_busy")
                     return
 
@@ -696,19 +654,17 @@ class MainScreen(Screen):
             _dir = indev.get_gesture_dir()
 
             if __debug__:
-                print(f"[GESTURE] Direction: {_dir} (TOP={lv.DIR.TOP})")
+                pass
 
             # Strict control: only allow UP gesture
             if _dir == lv.DIR.TOP:
                 if __debug__:
-                    print(
-                        "[GESTURE] Processing UP gesture - showing AppDrawer with animation"
-                    )
+                    pass
                 self.refresh_appdrawer_background()
                 self.show_appdrawer_simple()
             else:
                 if __debug__:
-                    print(f"[GESTURE] Ignored: Not UP gesture (was {_dir})")
+                    pass
 
     def show_appdrawer_simple(self):
         """Show AppDrawer with layer2 animation"""
@@ -724,18 +680,11 @@ class MainScreen(Screen):
 
         if __debug__:
             global _operation_count
-            print(
-                f"MainScreen: Starting show_appdrawer (operation #{_operation_count})"
-            )
-        log_with_timestamp("MainScreen: === show_appdrawer_simple START ===")
 
         if hasattr(self, "apps") and self.apps:
             try:
                 _animation_in_progress = True
                 _animation_start_time = get_timestamp()
-                log_with_timestamp(
-                    f"MainScreen: Animation started, setting _animation_in_progress = True"
-                )
 
                 from trezorui import Display
 
@@ -769,9 +718,7 @@ class MainScreen(Screen):
                                 display_path = lockscreen_path
 
                         if __debug__:
-                            log_with_timestamp(
-                                f"MainScreen: Layer2 path conversion: {lockscreen_path} -> {display_path}"
-                            )
+                            pass
 
                         # Check if JPEG needs to be reloaded
                         global _last_jpeg_loaded
@@ -779,23 +726,14 @@ class MainScreen(Screen):
                             # Try to release memory before loading
                             gc.collect()
                             if __debug__:
-                                print(
-                                    f"MainScreen: Memory before JPEG load: {get_memory_info()}"
-                                )
+                                pass
                             display.cover_background_load_jpeg(display_path)
                             _last_jpeg_loaded = display_path
                             if __debug__:
-                                print(
-                                    f"MainScreen: Layer2 background loaded: {display_path}"
-                                )
-                                print(
-                                    f"MainScreen: Memory after JPEG load: {get_memory_info()}"
-                                )
+                                pass
                         else:
                             if __debug__:
-                                print(
-                                    f"MainScreen: Layer2 background already loaded, skipping: {display_path}"
-                                )
+                                pass
 
                     except Exception:
                         # Use pure black background as fallback
@@ -805,9 +743,6 @@ class MainScreen(Screen):
                             for i in range(len(black_image)):
                                 black_image[i] = 0x00
                             display.cover_background_set_image(bytes(black_image))
-                        log_with_timestamp(
-                            "MainScreen: Layer2 fallback to black background"
-                        )
 
                 # Step 2: Show layer2 (initial position at top of screen)
                 if hasattr(display, "cover_background_animate_to_y"):
@@ -817,7 +752,6 @@ class MainScreen(Screen):
                     if hasattr(display, "cover_background_show"):
                         display.cover_background_show()  # Show first, already properly configured
                     display.cover_background_move_to_y(0)  # Then set position
-                    log_with_timestamp("MainScreen: Layer2 shown at screen top")
 
                     # Step 3: Immediately show AppDrawer and restore original background (covered by layer2)
                     def show_appdrawer_behind_layer2():
@@ -838,16 +772,11 @@ class MainScreen(Screen):
                         cached_style = get_cached_style(current_homescreen)
                         if cached_style is not None:
                             self.apps.add_style(cached_style, 0)
-                            print(f"[MainScreen] AppDrawer background applied successfully: {current_homescreen}")
                         else:
-                            print(f"[MainScreen] SAFETY: Skipping AppDrawer background style (get_cached_style returned None): {current_homescreen}")
-                        log_with_timestamp("MainScreen: AppDrawer shown behind layer2")
+                            pass
 
                     # Immediately show AppDrawer
                     show_appdrawer_behind_layer2()
-                    log_with_timestamp(
-                        "MainScreen: AppDrawer display sequence completed"
-                    )
 
                     # Step 4: After delay, slide layer2 up and out of screen
                     def start_layer2_animation():
@@ -860,9 +789,6 @@ class MainScreen(Screen):
                         display.cover_background_animate_to_y(
                             -800, 200
                         )  # 200ms animation (optimized response time)
-                        log_with_timestamp(
-                            "MainScreen: Layer2 started sliding up animation (200ms)"
-                        )
 
                         # Restore LVGL refresh after animation complete
                         try:
@@ -873,26 +799,15 @@ class MainScreen(Screen):
                         # Step 5: Hide layer2 after animation complete
                         def on_slide_complete():
                             global _animation_in_progress
-                            log_with_timestamp(
-                                "MainScreen: === Animation complete callback ==="
-                            )
                             if hasattr(display, "cover_background_hide"):
                                 display.cover_background_hide()
-                                log_with_timestamp(
-                                    "MainScreen: Layer2 hidden after slide up animation"
-                                )
                             _animation_in_progress = False
                             elapsed = get_timestamp() - _animation_start_time
-                            log_with_timestamp(
-                                f"MainScreen: Animation completed, total time: {elapsed}ms, setting _animation_in_progress = False"
-                            )
                             # Clean timers and force memory cleanup
                             cleanup_timers()
                             force_memory_cleanup()
                             if __debug__:
-                                print(
-                                    f"MainScreen: Memory after animation complete: {get_memory_info()}"
-                                )
+                                pass
 
                             # Ensure LVGL refresh is restored
                             try:
@@ -918,12 +833,8 @@ class MainScreen(Screen):
                     animation_timer.set_repeat_count(1)
                     # Track timer
                     _active_timers.append(animation_timer)
-                    log_with_timestamp(
-                        "MainScreen: Layer2 animation timer created (20ms delay)"
-                    )
 
             except Exception as e:
-                print(f"MainScreen: Error in show_appdrawer_simple: {e}")
                 # Show AppDrawer in simple way on error
                 self.hidden_others(True)
                 if hasattr(self, "up_arrow"):
@@ -933,7 +844,6 @@ class MainScreen(Screen):
                 self.apps.clear_flag(lv.obj.FLAG.HIDDEN)
                 self.apps.clear_flag(lv.obj.FLAG.GESTURE_BUBBLE)
                 self.apps.visible = True
-                print("MainScreen: AppDrawer shown via fallback method")
 
     def show_layer2_and_appdrawer(self):
         """Show layer2 and restore AppDrawer, then slide layer2 up and out"""
@@ -964,11 +874,8 @@ class MainScreen(Screen):
                             display_path = lockscreen_path
 
                     if __debug__:
-                        print(
-                            f"MainScreen: Layer2 path conversion (2): {lockscreen_path} -> {display_path}"
-                        )
+                        pass
                     display.cover_background_load_jpeg(display_path)
-                    print("MainScreen: Layer2 background loaded")
 
                 except Exception:
                     # Use pure black background as fallback
@@ -978,7 +885,6 @@ class MainScreen(Screen):
                         for i in range(len(black_image)):
                             black_image[i] = 0x00
                         display.cover_background_set_image(bytes(black_image))
-                    print("MainScreen: Layer2 fallback to black background")
 
             # Step 2: Show layer2 (initial position at top of screen, ready to show downward)
             if hasattr(display, "cover_background_animate_to_y"):
@@ -988,7 +894,6 @@ class MainScreen(Screen):
                 if hasattr(display, "cover_background_show"):
                     display.cover_background_show()  # Show first, already properly configured
                 display.cover_background_move_to_y(0)  # Then set position
-                print("MainScreen: Layer2 shown at screen top")
 
                 # Step 3: Immediately show AppDrawer and restore original background (covered by layer2)
                 def show_appdrawer_behind_layer2():
@@ -1007,9 +912,6 @@ class MainScreen(Screen):
                             .border_width(0),
                             0,
                         )
-                        print(
-                            "MainScreen: AppDrawer shown behind layer2 with proper gesture handling"
-                        )
 
                 # Brief delay before showing AppDrawer (let layer2 finish displaying first)
                 show_timer = lv.timer_create(
@@ -1022,13 +924,11 @@ class MainScreen(Screen):
                     display.cover_background_animate_to_y(
                         -800, 200
                     )  # 200ms animation (optimized response time)
-                    print("MainScreen: Layer2 started sliding up animation")
 
                     # Step 5: Hide layer2 after animation complete
                     def on_slide_complete():
                         if hasattr(display, "cover_background_hide"):
                             display.cover_background_hide()
-                            print("MainScreen: Layer2 hidden after slide up animation")
 
                     # Hide layer2 after animation complete
                     completion_timer = lv.timer_create(
@@ -1046,7 +946,7 @@ class MainScreen(Screen):
                 animation_timer.set_repeat_count(1)
 
         except Exception as e:
-            print(f"MainScreen: Error in show_layer2_and_appdrawer: {e}")
+            pass
 
     def _get_title_labels(self):
         labels = []
@@ -1159,7 +1059,6 @@ class MainScreen(Screen):
         """Refresh AppDrawer background"""
         if hasattr(self, "apps") and self.apps:
             self.apps.refresh_background()
-            print("MainScreen: AppDrawer background refreshed")
 
     def change_state(self, busy: bool):
         if busy:
@@ -1531,17 +1430,10 @@ class MainScreen(Screen):
 
             if __debug__:
                 global _operation_count
-                print(
-                    f"AppDrawer: Starting hide_to_mainscreen (operation #{_operation_count})"
-                )
-            log_with_timestamp("AppDrawer: === hide_to_mainscreen START ===")
 
             try:
                 _animation_in_progress = True
                 _animation_start_time = get_timestamp()
-                log_with_timestamp(
-                    f"AppDrawer: Animation started, setting _animation_in_progress = True"
-                )
                 
 
                 from trezorui import Display
@@ -1582,9 +1474,7 @@ class MainScreen(Screen):
                                 display_path = lockscreen_path
 
                         if __debug__:
-                            log_with_timestamp(
-                                f"AppDrawer: Layer2 path conversion: {lockscreen_path} -> {display_path}"
-                            )
+                            pass
 
                         # Check if JPEG needs to be reloaded
                         global _last_jpeg_loaded
@@ -1592,23 +1482,14 @@ class MainScreen(Screen):
                             # Try to release memory before loading
                             gc.collect()
                             if __debug__:
-                                print(
-                                    f"AppDrawer: Memory before JPEG load: {get_memory_info()}"
-                                )
+                                pass
                             display.cover_background_load_jpeg(display_path)
                             _last_jpeg_loaded = display_path
                             if __debug__:
-                                print(
-                                    f"AppDrawer: Layer2 background loaded: {display_path}"
-                                )
-                                print(
-                                    f"AppDrawer: Memory after JPEG load: {get_memory_info()}"
-                                )
+                                pass
                         else:
                             if __debug__:
-                                print(
-                                    f"AppDrawer: Layer2 background already loaded, skipping: {display_path}"
-                                )
+                                pass
 
                     except Exception:
                         # Use pure black background as fallback
@@ -1618,14 +1499,8 @@ class MainScreen(Screen):
                             for i in range(len(black_image)):
                                 black_image[i] = 0x00
                             display.cover_background_set_image(bytes(black_image))
-                        log_with_timestamp(
-                            "AppDrawer: Layer2 fallback to black background"
-                        )
 
                 if hasattr(display, "cover_background_animate_to_y"):
-                    log_with_timestamp(
-                        "AppDrawer: Starting Layer2 slide down animation from top"
-                    )
 
                     self.parent.hidden_others(False)
                     if hasattr(self.parent, "prepare_title_fade_in"):
@@ -1636,31 +1511,19 @@ class MainScreen(Screen):
                         self.parent.bottom_tips.clear_flag(lv.obj.FLAG.HIDDEN)
                     if hasattr(self.parent, "dev_state"):
                         self.parent.dev_state.show()
-                    log_with_timestamp("AppDrawer: MainScreen elements shown")
 
                     display.cover_background_move_to_y(-800)
                     if hasattr(display, "cover_background_set_visible"):
                         display.cover_background_set_visible(True)
-                    log_with_timestamp("AppDrawer: Layer2 positioned above screen")
 
                     display.cover_background_animate_to_y(
                         0, 200
                     )  # Slide to screen center, fill screen (optimized response speed)
-                    log_with_timestamp(
-                        "AppDrawer: Layer2 sliding down to fill screen (200ms)"
-                    )
 
                     def prepare_mainscreen_after_coverage():
-                        log_with_timestamp(
-                            "AppDrawer: === prepare_mainscreen_after_coverage (50ms timer) ==="
-                        )
-                        log_with_timestamp("AppDrawer: Hiding AppDrawer")
                         self.add_flag(lv.obj.FLAG.HIDDEN)
                         self.visible = False
                         self.add_flag(lv.obj.FLAG.GESTURE_BUBBLE)
-                        log_with_timestamp(
-                            f"AppDrawer: Hidden flag set, visible={self.visible}"
-                        )
 
                         from storage import device
 
@@ -1669,19 +1532,11 @@ class MainScreen(Screen):
                             cached_style = get_cached_style(current_lockscreen)
                             if cached_style is not None:
                                 self.parent.add_style(cached_style, 0)
-                            log_with_timestamp(
-                                f"AppDrawer: MainScreen background set to lockscreen: {current_lockscreen}"
-                            )
 
                         lv.refr_now(None)
                         gc.collect()
                         if __debug__:
-                            print(
-                                f"AppDrawer: Memory after state preparation: {get_memory_info()}"
-                            )
-                        log_with_timestamp(
-                            "AppDrawer: MainScreen state prepared, AppDrawer hidden, LVGL refreshed, memory collected"
-                        )
+                            pass
 
                     prepare_timer = lv.timer_create(
                         lambda t: prepare_mainscreen_after_coverage(), 30, None
@@ -1690,39 +1545,23 @@ class MainScreen(Screen):
                     # Track timer
                     global _active_timers
                     _active_timers.append(prepare_timer)
-                    log_with_timestamp(
-                        "AppDrawer: MainScreen prepare timer created (30ms delay)"
-                    )
 
                     def on_animation_complete():
                         global _animation_in_progress
-                        log_with_timestamp(
-                            "AppDrawer: === on_animation_complete (200ms timer) ==="
-                        )
                         try:
                             if hasattr(display, "cover_background_hide"):
                                 display.cover_background_hide()
-                                log_with_timestamp(
-                                    "AppDrawer: Layer2 successfully hidden, MainScreen fully visible"
-                                )
                             if hasattr(self.parent, "start_title_fade_in"):
                                 self.parent.start_title_fade_in(duration=100)
                             _animation_in_progress = False
                             elapsed = get_timestamp() - _animation_start_time
-                            log_with_timestamp(
-                                f"AppDrawer: Animation completed, total time: {elapsed}ms, setting _animation_in_progress = False"
-                            )
                             # Clean timers and force memory cleanup
                             cleanup_timers()
                             force_memory_cleanup()
                             if __debug__:
-                                print(
-                                    f"AppDrawer: Memory after animation complete: {get_memory_info()}"
-                                )
+                                pass
                         except Exception as error:
-                            log_with_timestamp(
-                                f"AppDrawer: Error hiding Layer2: {error}"
-                            )
+                            pass
 
                     completion_timer = lv.timer_create(
                         lambda t: on_animation_complete(), 200, None
@@ -1734,12 +1573,8 @@ class MainScreen(Screen):
                     self.hide_to_mainscreen_fallback()
 
             except Exception as e:
-                log_with_timestamp(f"AppDrawer: Error in hide_to_mainscreen: {e}")
                 self.hide_to_mainscreen_fallback()
                 _animation_in_progress = False
-                log_with_timestamp(
-                    "AppDrawer: Fallback to simple hide, animation reset"
-                )
 
         def hide_to_mainscreen_fallback(self):
             """Backup simple hide method"""
@@ -1779,7 +1614,7 @@ class MainScreen(Screen):
             # Check if indicators exist before using them
             if not hasattr(self, "indicators") or not self.indicators:
                 if __debug__:
-                    print("AppDrawer: indicators not initialized, skipping page change")
+                    pass
                 return
 
             if _dir == lv.DIR.LEFT:
@@ -1857,7 +1692,7 @@ class MainScreen(Screen):
             if self.PRERENDER_ENABLED and self._prerender_manager:
                 cached_page = self._prerender_manager.get_cached_page(target_index)
                 if cached_page and __debug__:
-                    print(f"AppDrawer: Using cached content for page {target_index}")
+                    pass
 
             # Skip GC before animation to avoid stuttering
             # GC will be performed after animation completes
@@ -2071,34 +1906,30 @@ class MainScreen(Screen):
 
         def test_cover_background(self):
             """Test function for CoverBackground control"""
-            print("=== TEST COVER APP CLICKED ===")
             try:
                 # Direct access to hardware functions
                 from trezorui import Display
 
                 display = Display()
                 if hasattr(display, "cover_background_show"):
-                    print("TEST APP: Showing CoverBackground for 3 seconds...")
                     display.cover_background_show()
 
                     # Auto-hide after 3 seconds
                     def hide_bg():
                         try:
                             display.cover_background_hide()
-                            print("TEST APP: CoverBackground auto-hidden")
                         except Exception as e:
-                            print(f"TEST APP: Error hiding: {e}")
+                            pass
 
                     # Schedule hide
                     import trezor.loop as loop
 
                     loop.call_later(3000, hide_bg)  # 3 seconds
-                    print("TEST APP: CoverBackground shown - will auto-hide in 3s")
                 else:
-                    print("TEST APP: cover_background_show method not found")
+                    pass
 
             except Exception as e:
-                print(f"TEST APP: Error: {e}")
+                pass
 
         def on_click(self, event_obj):
             code = event_obj.code
@@ -2152,7 +1983,6 @@ class MainScreen(Screen):
                 self._prerender_manager.clear()
                 self._prerender_manager = None
 
-
 class PasskeysManager(AnimScreen):
     def __init__(self, prev_scr=None):
         if not hasattr(self, "_init"):
@@ -2189,7 +2019,6 @@ class PasskeysManager(AnimScreen):
         from .app_passkeys import PasskeysListItemBtn
 
         BATCH_SIZE = 5
-        # pyright: off
         stored_credentials = [None] * self.count
         for i, credential in enumerate(self.credentials):
             stored_credentials[i] = (
@@ -2212,7 +2041,6 @@ class PasskeysManager(AnimScreen):
             )
             if (i < BATCH_SIZE) or ((i + 1) % BATCH_SIZE == 0):
                 gc.collect()
-        # pyright: on
         self.container.refresh_self_size()
         del stored_credentials
         self.overlay.del_delayed(10)
@@ -2275,14 +2103,12 @@ class PasskeysManager(AnimScreen):
             )
 
     async def on_remove(self, i):
-        # pyright: off
         credential = self.listed_credentials.pop(i)
         from .app_passkeys import delete_credential
 
         delete_credential(credential.credential_index)
         item_height = credential.get_height()
         credential.delete()
-        # pyright: on
         self.fresh_show()
         self.auto_adjust_scroll(item_height)
 
@@ -2299,7 +2125,6 @@ class PasskeysManager(AnimScreen):
             elif target in self.listed_credentials:
                 for i, credential in enumerate(self.listed_credentials):
                     if target == credential:
-                        # pyright: off
                         workflow.spawn(
                             app_passkeys.request_credential_details(
                                 credential.app_name,
@@ -2307,7 +2132,6 @@ class PasskeysManager(AnimScreen):
                                 on_remove=lambda index=i: self.on_remove(index),
                             )
                         )
-                        # pyright: on
             elif hasattr(self, "rti_btn") and target == self.rti_btn:
                 FidoKeysSetting(self)
 
@@ -2319,7 +2143,6 @@ class PasskeysManager(AnimScreen):
 
     def _load_scr(self, scr: "Screen", back: bool = False) -> None:
         lv.scr_load(scr)
-
 
 class ShowAddress(AnimScreen):
     def __init__(self, prev_scr=None):
@@ -2361,10 +2184,7 @@ class ShowAddress(AnimScreen):
                 show_display=False,
                 script_type=InputScriptType.SPENDADDRESS,
             )
-            # pyright: off
             await btc_get_address(wire.QRContext(), msg)
-            # pyright: on
-
         except Exception:
             pass
 
@@ -2656,7 +2476,6 @@ class ShowAddress(AnimScreen):
         await coro
         self.init_ui()
 
-
 class IndexSelectionScreen(AnimScreen):
     def __init__(self, prev_scr=None):
         if not hasattr(self, "_init"):
@@ -2895,7 +2714,6 @@ class IndexSelectionScreen(AnimScreen):
         self.update_account_buttons()
         self.update_page_buttons()
 
-
 class NftGallery(Screen):
     def __init__(self, prev_scr=None):
         if not hasattr(self, "_init"):
@@ -3040,7 +2858,7 @@ class NftGallery(Screen):
                                 )
                             except BaseException as e:
                                 if __debug__:
-                                    print(f"Invalid json {e}")
+                                    pass
                             else:
                                 if all(
                                     key in metadata_load.keys()
@@ -3051,7 +2869,6 @@ class NftGallery(Screen):
 
     def _load_scr(self, scr: "Screen", back: bool = False) -> None:
         lv.scr_load(scr)
-
 
 class NftManager(AnimScreen):
     def __init__(self, prev_scr, nft_config, file_name):
@@ -3212,7 +3029,6 @@ class NftManager(AnimScreen):
                 elif target == self.btn_no:
                     self.destroy()
 
-
 class NftLockScreenPreview(AnimScreen):
     def __init__(self, prev_scr, nft_path, nft_config):
         super().__init__(
@@ -3225,7 +3041,7 @@ class NftLockScreenPreview(AnimScreen):
         self.nft_config = nft_config
 
         if __debug__:
-            print(f"[NftLockScreenPreview] Init with nft_path: {nft_path}")
+            pass
 
         # Disable scrollbars on content_area (inherited from AnimScreen)
         self.content_area.set_scrollbar_mode(lv.SCROLLBAR_MODE.OFF)
@@ -3342,21 +3158,13 @@ class NftLockScreenPreview(AnimScreen):
                     #     lockscreen_path = lockscreen_path.replace("A:1:", "A:")
 
                     if __debug__:
-                        print(f"[NftLockScreenPreview] Original path: {self.nft_path}")
-                        print(
-                            f"[NftLockScreenPreview] Setting lockscreen to: {lockscreen_path}"
-                        )
+                        pass
 
                     # For NFT lockscreens, we need to handle the square format differently
                     # NFTs are 456x456 but lockscreens expect 480x800 (or similar aspect ratio)
                     # For now, let LVGL handle the scaling, but mark it as NFT for special handling
                     if __debug__:
-                        print(
-                            f"[NftLockScreenPreview] Using NFT path: {lockscreen_path}"
-                        )
-                        print(
-                            f"[NftLockScreenPreview] Note: NFT is square format, lockscreen will scale/crop"
-                        )
+                        pass
 
                     try:
                         # First, verify the NFT file exists and is accessible
@@ -3367,26 +3175,15 @@ class NftLockScreenPreview(AnimScreen):
                                 stat_result[6] if len(stat_result) > 6 else "unknown"
                             )
                             if __debug__:
-                                print(
-                                    f"[NftLockScreenPreview] NFT file verified: {test_file_path}, size: {file_size}"
-                                )
+                                pass
                         except Exception as file_err:
                             if __debug__:
-                                print(
-                                    f"[NftLockScreenPreview] NFT file access error: {file_err}"
-                                )
-                                print(
-                                    f"[NftLockScreenPreview] Trying original path: {lockscreen_path}"
-                                )
+                                pass
 
                         storage_device.set_homescreen(lockscreen_path)
                         if __debug__:
-                            print(f"[NftLockScreenPreview] Lockscreen set successfully")
                             # Verify it was saved
                             saved_path = storage_device.get_homescreen()
-                            print(
-                                f"[NftLockScreenPreview] Verified saved path: {saved_path}"
-                            )
 
                         # Force refresh MainScreen background to apply new lockscreen
                         if hasattr(MainScreen, "_instance") and MainScreen._instance:
@@ -3397,17 +3194,13 @@ class NftLockScreenPreview(AnimScreen):
                                 0,
                             )
                             if __debug__:
-                                print(
-                                    f"[NftLockScreenPreview] MainScreen background refreshed"
-                                )
+                                pass
 
                             # Also refresh AppDrawer if it exists
                             if hasattr(main_screen, "apps") and main_screen.apps:
                                 main_screen.apps.refresh_background()
                                 if __debug__:
-                                    print(
-                                        f"[NftLockScreenPreview] AppDrawer background refreshed"
-                                    )
+                                    pass
 
                         # Force refresh LockScreen if it exists to apply new NFT background
                         try:
@@ -3419,9 +3212,7 @@ class NftLockScreenPreview(AnimScreen):
                             ):
                                 lock_screen = LockScreen._instance
                                 if __debug__:
-                                    print(
-                                        f"[NftLockScreenPreview] Found LockScreen instance: {lock_screen}"
-                                    )
+                                    pass
 
                                 # For NFT lockscreens, try different background image settings
                                 style = (
@@ -3437,9 +3228,7 @@ class NftLockScreenPreview(AnimScreen):
                                         lv.style_t, "set_bg_img_tiled"
                                     ):
                                         if __debug__:
-                                            print(
-                                                f"[NftLockScreenPreview] Trying tiled background mode"
-                                            )
+                                            pass
                                         # This might help with square images
                                 except:
                                     pass
@@ -3448,25 +3237,17 @@ class NftLockScreenPreview(AnimScreen):
                                 # Force invalidate to refresh the display
                                 lock_screen.invalidate()
                                 if __debug__:
-                                    print(
-                                        f"[NftLockScreenPreview] LockScreen refreshed and invalidated"
-                                    )
+                                    pass
                             else:
                                 if __debug__:
-                                    print(
-                                        f"[NftLockScreenPreview] No LockScreen instance found"
-                                    )
+                                    pass
                         except Exception as e:
                             if __debug__:
-                                print(
-                                    f"[NftLockScreenPreview] LockScreen refresh error: {e}"
-                                )
+                                pass
 
                     except Exception as e:
                         if __debug__:
-                            print(
-                                f"[NftLockScreenPreview] Error setting lockscreen: {e}"
-                            )
+                            pass
 
                     # Navigate back to MainScreen (AppDrawer) after setting lockscreen
                     # Find the root MainScreen instance
@@ -3477,14 +3258,11 @@ class NftLockScreenPreview(AnimScreen):
                         main_screen = MainScreen()
 
                     if __debug__:
-                        print(
-                            f"[NftLockScreenPreview] Navigating to MainScreen: {main_screen}"
-                        )
+                        pass
 
                     # Use AnimScreen's load_screen method for proper navigation
                     self.load_screen(main_screen, destroy_self=True)
                     return
-
 
 class NftHomeScreenPreview(AnimScreen):
     def __init__(self, prev_scr, nft_path, nft_config):
@@ -3681,18 +3459,14 @@ class NftHomeScreenPreview(AnimScreen):
             # Remove A:1: prefix and check if file exists
             file_path = blur_path.replace("A:1:", "1:")
             if __debug__:
-                print(
-                    f"[NftHomeScreenPreview] Checking blur file: {blur_path} -> {file_path}"
-                )
+                pass
             with io.fatfs.open(file_path, "r") as f:
                 if __debug__:
-                    print(f"[NftHomeScreenPreview] Blur file exists: {file_path}")
+                    pass
                 return True
         except Exception as e:
             if __debug__:
-                print(
-                    f"[NftHomeScreenPreview] Blur file not found: {file_path}, error: {e}"
-                )
+                pass
             return False
 
     def _update_blur_button_state(self):
@@ -3773,22 +3547,13 @@ class NftHomeScreenPreview(AnimScreen):
                     #     wallpaper_path = wallpaper_path.replace("A:1:", "A:")
 
                     if __debug__:
-                        print(
-                            f"[NftHomeScreenPreview] Original path: {self.current_wallpaper_path}"
-                        )
-                        print(
-                            f"[NftHomeScreenPreview] Setting homescreen to: {wallpaper_path}"
-                        )
+                        pass
 
                     try:
                         storage_device.set_appdrawer_background(wallpaper_path)
                         if __debug__:
-                            print(f"[NftHomeScreenPreview] Successfully set homescreen")
                             # Verify it was saved
                             saved_path = storage_device.get_homescreen()
-                            print(
-                                f"[NftHomeScreenPreview] Verified saved path: {saved_path}"
-                            )
 
                         # Force refresh MainScreen background to apply new homescreen
                         if hasattr(MainScreen, "_instance") and MainScreen._instance:
@@ -3801,23 +3566,17 @@ class NftHomeScreenPreview(AnimScreen):
                                     0,
                                 )
                                 if __debug__:
-                                    print(
-                                        f"[NftHomeScreenPreview] MainScreen background refreshed with lockscreen"
-                                    )
+                                    pass
 
                             # Also refresh AppDrawer if it exists
                             if hasattr(main_screen, "apps") and main_screen.apps:
                                 main_screen.apps.refresh_background()
                                 if __debug__:
-                                    print(
-                                        f"[NftHomeScreenPreview] AppDrawer background refreshed"
-                                    )
+                                    pass
 
                     except Exception as e:
                         if __debug__:
-                            print(
-                                f"[NftHomeScreenPreview] Error setting homescreen: {e}"
-                            )
+                            pass
 
                     # Navigate back to MainScreen (AppDrawer) after setting homescreen
                     # Find the root MainScreen instance
@@ -3828,9 +3587,7 @@ class NftHomeScreenPreview(AnimScreen):
                         main_screen = MainScreen()
 
                     if __debug__:
-                        print(
-                            f"[NftHomeScreenPreview] Navigating to MainScreen: {main_screen}"
-                        )
+                        pass
 
                     # Use AnimScreen's load_screen method for proper navigation
                     self.load_screen(main_screen, destroy_self=True)
@@ -3839,7 +3596,6 @@ class NftHomeScreenPreview(AnimScreen):
                 # Handle button clicks for Blur button only
                 if hasattr(self, "blur_button") and target == self.blur_button:
                     self.on_blur_clicked(event_obj)
-
 
 class SettingsScreen(AnimScreen):
     def collect_animation_targets(self) -> list:
@@ -3952,7 +3708,6 @@ class SettingsScreen(AnimScreen):
             elif not utils.PRODUCTION and target == self.fp_test:
                 FingerprintTest(self)
 
-
 class ConnectWalletWays(Screen):
     def __init__(self, prev_scr=None):
         if not hasattr(self, "_init"):
@@ -4021,7 +3776,6 @@ class ConnectWalletWays(Screen):
 
     def _load_scr(self, scr: "Screen", back: bool = False) -> None:
         lv.scr_load(scr)
-
 
 class ConnectWalletGuide(Screen):
     def __init__(self, c_type, prev_scr=None):
@@ -4179,7 +3933,6 @@ class ConnectWalletGuide(Screen):
     def _load_scr(self, scr: "Screen", back: bool = False) -> None:
         lv.scr_load(scr)
 
-
 class WalletList(Screen):
     def __init__(self, prev_scr=None):
         if not hasattr(self, "_init"):
@@ -4312,7 +4065,6 @@ class WalletList(Screen):
             "A:/res/mm-logo-96.png",
         )
 
-
 class BackupWallet(Screen):
     def __init__(self, prev_scr=None):
         if not hasattr(self, "_init"):
@@ -4382,15 +4134,12 @@ class BackupWallet(Screen):
                     utils.set_backup_lite()
                 elif target == self.keytag:
                     utils.set_backup_keytag()
-                # pyright: off
                 workflow.spawn(
                     recovery_device(
                         DUMMY_CONTEXT,
                         RecoveryDevice(dry_run=True, enforce_wordlist=True),
                     )
                 )
-                # pyright: on
-
     def _load_scr(self, scr: "Screen", back: bool = False) -> None:
         lv.scr_load(scr)
 
@@ -4402,7 +4151,6 @@ class BackupWallet(Screen):
             AirGapSetting(self)
         else:
             screen.destroy()
-
 
 class ConnectWallet(FullSizeWindow):
     def __init__(
@@ -4523,7 +4271,6 @@ class ConnectWallet(FullSizeWindow):
             assert self.encoder is not None
             qr_data = self.encoder.next_part()
             self.qr.update(qr_data, len(qr_data))
-
 
 class ScanScreen(Screen):
     SCAN_STATE_IDLE = 0
@@ -4713,7 +4460,6 @@ class ScanScreen(Screen):
 
     def _load_scr(self, scr: "Screen", back: bool = False) -> None:
         lv.scr_load(scr)
-
 
 if __debug__:
     from .common import SETTINGS_MOVE_TIME, SETTINGS_MOVE_DELAY
@@ -5090,44 +4836,36 @@ if __debug__:
             # _code = event_obj.code
             target = event_obj.get_target()
             if target == self.path_liner:
-                print("path_liner clicked")
                 if self.path_up.checkbox.get_state() & lv.STATE.CHECKED:
-                    print("path_up checked")
                     APP_DRAWER_UP_PATH_CB = PATH_LINEAR
                 if self.path_down.checkbox.get_state() & lv.STATE.CHECKED:
                     APP_DRAWER_DOWN_PATH_CB = PATH_LINEAR
             elif target == self.path_ease_in:
-                print("path_ease_in clicked")
                 if self.path_up.checkbox.get_state() & lv.STATE.CHECKED:
                     APP_DRAWER_UP_PATH_CB = PATH_EASE_IN
                 if self.path_down.checkbox.get_state() & lv.STATE.CHECKED:
                     APP_DRAWER_DOWN_PATH_CB = PATH_EASE_IN
             elif target == self.path_ease_out:
-                print("path_ease_out clicked")
                 if self.path_up.checkbox.get_state() & lv.STATE.CHECKED:
                     APP_DRAWER_UP_PATH_CB = PATH_EASE_OUT
                 if self.path_down.checkbox.get_state() & lv.STATE.CHECKED:
                     APP_DRAWER_DOWN_PATH_CB = PATH_EASE_OUT
             elif target == self.path_ease_in_out:
-                print("path_ease_in_out clicked")
                 if self.path_up.checkbox.get_state() & lv.STATE.CHECKED:
                     APP_DRAWER_UP_PATH_CB = PATH_EASE_IN_OUT
                 if self.path_down.checkbox.get_state() & lv.STATE.CHECKED:
                     APP_DRAWER_DOWN_PATH_CB = PATH_EASE_IN_OUT
             elif target == self.path_over_shoot:
-                print("path_over_shoot clicked")
                 if self.path_up.checkbox.get_state() & lv.STATE.CHECKED:
                     APP_DRAWER_UP_PATH_CB = PATH_OVER_SHOOT
                 if self.path_down.checkbox.get_state() & lv.STATE.CHECKED:
                     APP_DRAWER_DOWN_PATH_CB = PATH_OVER_SHOOT
             elif target == self.path_bounce:
-                print("path_bounce clicked")
                 if self.path_up.checkbox.get_state() & lv.STATE.CHECKED:
                     APP_DRAWER_UP_PATH_CB = PATH_BOUNCE
                 if self.path_down.checkbox.get_state() & lv.STATE.CHECKED:
                     APP_DRAWER_DOWN_PATH_CB = PATH_BOUNCE
             elif target == self.path_step:
-                print("path_step clicked")
                 if self.path_up.checkbox.get_state() & lv.STATE.CHECKED:
                     APP_DRAWER_UP_PATH_CB = PATH_STEP
                 if self.path_down.checkbox.get_state() & lv.STATE.CHECKED:
@@ -5205,7 +4943,6 @@ if __debug__:
                 value = target.get_value()
                 SETTINGS_MOVE_DELAY = value
                 self.percent5.set_text(f"{value} ms")
-
 
 class FingerprintTest(Screen):
     def __init__(self, prev_scr=None):
@@ -5325,7 +5062,6 @@ class FingerprintTest(Screen):
             self.percent1.set_text(f"{value}")
             fingerprint.set_sensitivity_and_area(self.sensitivity, value)
 
-
 class GeneralScreen(AnimScreen):
     cur_language = ""
 
@@ -5410,7 +5146,6 @@ class GeneralScreen(AnimScreen):
             PowerOff()
         else:
             pass
-
 
 class DisplayScreen(AnimScreen):
     def collect_animation_targets(self) -> list:
@@ -5530,7 +5265,7 @@ class DisplayScreen(AnimScreen):
         # Use simple positioning instead of align_to to avoid deadlock  
         self.device_name_description.set_pos(15, 550)  # Moved right (24) to match ListItem padding
         if __debug__:
-            print("DisplayScreen: Description label created with static positioning")
+            pass
 
         # Disable elastic scrolling and scrollbar to match other pages
         self.content_area.clear_flag(lv.obj.FLAG.SCROLL_ELASTIC)
@@ -5610,17 +5345,15 @@ class DisplayScreen(AnimScreen):
             code = event_obj.code
             if code == lv.EVENT.GESTURE:
                 _dir = lv.indev_get_act().get_gesture_dir()
-                print(f"[DISPLAY] GESTURE: direction={_dir}, RIGHT={lv.DIR.RIGHT}")
 
                 # If right swipe, try direct navigation
                 if _dir == lv.DIR.RIGHT and hasattr(self, "nav_back"):
-                    print(f"[DISPLAY] RIGHT swipe detected, triggering navigation")
                     try:
                         lv.event_send(self.nav_back.nav_btn, lv.EVENT.CLICKED, None)
                     except Exception as e:
-                        print(f"[DISPLAY] Navigation failed: {e}")
+                        pass
             else:
-                print(f"[DISPLAY] Event: {code}")
+                pass
 
     def debug_all_events_simplified(self, event_obj):
         """Monitor all events and simulate gesture detection"""
@@ -5630,17 +5363,13 @@ class DisplayScreen(AnimScreen):
             if code in [lv.EVENT.GESTURE, lv.EVENT.PRESSED, lv.EVENT.RELEASED]:
                 target = event_obj.get_target()
                 target_type = type(target).__name__
-                print(f"[DISPLAY] AllEvents: code={code}, target={target_type}")
 
                 # Special handling for gesture events
                 if code == lv.EVENT.GESTURE:
                     try:
                         _dir = lv.indev_get_act().get_gesture_dir()
-                        print(f"[DISPLAY] AllEvents: GESTURE direction={_dir}")
                     except Exception as e:
-                        print(
-                            f"[DISPLAY] AllEvents: Error getting gesture direction: {e}"
-                        )
+                        pass
 
                 # Simulate gesture detection using touch coordinates
                 elif code == lv.EVENT.PRESSED:
@@ -5657,9 +5386,8 @@ class DisplayScreen(AnimScreen):
                                 if hasattr(__builtins__, "get_timestamp")
                                 else 0
                             )
-                            print(f"[DISPLAY] PRESSED at ({point.x}, {point.y})")
                     except Exception as e:
-                        print(f"[DISPLAY] Error getting press coordinates: {e}")
+                        pass
 
                 elif code == lv.EVENT.RELEASED:
                     # Check for swipe gesture on release
@@ -5676,16 +5404,8 @@ class DisplayScreen(AnimScreen):
                             dy = release_y - self.press_start_y
                             distance = (dx * dx + dy * dy) ** 0.5
 
-                            print(f"[DISPLAY] RELEASED at ({release_x}, {release_y})")
-                            print(
-                                f"[DISPLAY] Swipe: dx={dx}, dy={dy}, distance={distance}"
-                            )
-
                             # Check for right swipe (dx > 50 and mostly horizontal)
                             if dx > 50 and abs(dy) < abs(dx) and distance > 50:
-                                print(
-                                    f"[DISPLAY] RIGHT SWIPE DETECTED! Triggering navigation..."
-                                )
                                 if hasattr(self, "nav_back"):
                                     try:
                                         lv.event_send(
@@ -5693,17 +5413,14 @@ class DisplayScreen(AnimScreen):
                                             lv.EVENT.CLICKED,
                                             None,
                                         )
-                                        print(
-                                            f"[DISPLAY] Navigation triggered successfully"
-                                        )
                                     except Exception as e:
-                                        print(f"[DISPLAY] Navigation failed: {e}")
+                                        pass
 
                             # Clean up
                             del self.press_start_x
                             del self.press_start_y
                     except Exception as e:
-                        print(f"[DISPLAY] Error processing release: {e}")
+                        pass
 
     def refresh_text(self):
         self.title.set_text(_(i18n_keys.TITLE__DISPLAY))
@@ -5734,10 +5451,7 @@ class DisplayScreen(AnimScreen):
 
             # Debug output
             if __debug__:
-                print(f"[DISPLAY] Switch changed to: {new_switch_checked}")
-                print(
-                    f"[DISPLAY] Storage setting is now: {storage_device.is_device_name_display_enabled()}"
-                )
+                pass
 
             # Update MainScreen display if it exists
             if hasattr(MainScreen, "_instance") and MainScreen._instance:
@@ -5746,15 +5460,7 @@ class DisplayScreen(AnimScreen):
                 real_ble_name = storage_device.get_ble_name() or uart.get_ble_name()
 
                 if __debug__:
-                    print(
-                        f"[DISPLAY] Updating MainScreen - show: {new_switch_checked}, device: {real_device_name}, ble: {real_ble_name}"
-                    )
-                    print(
-                        f"[DISPLAY] MainScreen title exists: {hasattr(main_screen, 'title')}"
-                    )
-                    print(
-                        f"[DISPLAY] MainScreen subtitle exists: {hasattr(main_screen, 'subtitle')}"
-                    )
+                    pass
 
                 if new_switch_checked:
                     # Show device names - ensure title/subtitle exist first
@@ -5775,10 +5481,9 @@ class DisplayScreen(AnimScreen):
                             0,
                         )
                     if __debug__:
-                        print(f"[DISPLAY] MainScreen titles shown (if they exist)")
+                        pass
                 else:
                     if __debug__:
-                        print(f"[DISPLAY] Attempting to hide MainScreen titles")
                         try:
                             if hasattr(main_screen, "title") and main_screen.title:
                                 current_title = (
@@ -5786,9 +5491,8 @@ class DisplayScreen(AnimScreen):
                                     if hasattr(main_screen.title, "get_text")
                                     else "N/A"
                                 )
-                                print(f"[DISPLAY] Title exists: '{current_title}'")
                             else:
-                                print(f"[DISPLAY] Title does not exist")
+                                pass
                             if (
                                 hasattr(main_screen, "subtitle")
                                 and main_screen.subtitle
@@ -5798,13 +5502,10 @@ class DisplayScreen(AnimScreen):
                                     if hasattr(main_screen.subtitle, "get_text")
                                     else "N/A"
                                 )
-                                print(
-                                    f"[DISPLAY] Subtitle exists: '{current_subtitle}'"
-                                )
                             else:
-                                print(f"[DISPLAY] Subtitle does not exist")
+                                pass
                         except:
-                            print(f"[DISPLAY] Could not get current text")
+                            pass
 
                     # Hide device names - only if title/subtitle exist
                     if hasattr(main_screen, "title") and main_screen.title:
@@ -5815,10 +5516,10 @@ class DisplayScreen(AnimScreen):
                         main_screen.subtitle.set_text("")
 
                     if __debug__:
-                        print(f"[DISPLAY] MainScreen titles hidden (if they existed)")
+                        pass
             else:
                 if __debug__:
-                    print(f"[DISPLAY] MainScreen instance not found or not available")
+                    pass
 
             # Update LockScreen display if it exists
             from .lockscreen import LockScreen
@@ -5829,15 +5530,7 @@ class DisplayScreen(AnimScreen):
                 real_ble_name = storage_device.get_ble_name() or uart.get_ble_name()
 
                 if __debug__:
-                    print(
-                        f"[DISPLAY] Updating LockScreen - show: {new_switch_checked}, device: {real_device_name}, ble: {real_ble_name}"
-                    )
-                    print(
-                        f"[DISPLAY] LockScreen title exists: {hasattr(lock_screen, 'title')}"
-                    )
-                    print(
-                        f"[DISPLAY] LockScreen subtitle exists: {hasattr(lock_screen, 'subtitle')}"
-                    )
+                    pass
 
                 if new_switch_checked:
                     # Show device names - ensure title/subtitle exist first
@@ -5862,7 +5555,7 @@ class DisplayScreen(AnimScreen):
                             0,
                         )
                     if __debug__:
-                        print(f"[DISPLAY] LockScreen titles shown (if they exist)")
+                        pass
                 else:
                     # Hide device names - only if title/subtitle exist
                     if hasattr(lock_screen, "title") and lock_screen.title:
@@ -5872,10 +5565,10 @@ class DisplayScreen(AnimScreen):
                         lock_screen.subtitle.add_flag(lv.obj.FLAG.HIDDEN)
                         lock_screen.subtitle.set_text("")
                     if __debug__:
-                        print(f"[DISPLAY] LockScreen titles hidden (if they existed)")
+                        pass
             else:
                 if __debug__:
-                    print(f"[DISPLAY] LockScreen instance not found or not available")
+                    pass
 
     def on_click(self, event_obj):
         code = event_obj.code
@@ -5892,7 +5585,6 @@ class DisplayScreen(AnimScreen):
                 # Go directly to shutdown time selection
                 AutoShutDownSetting(self)
             # Note: model_name_bt_id switch changes are handled by on_switch_change method
-
 
 class AutolockSetting(AnimScreen):
     cur_auto_lock = ""
@@ -5959,7 +5651,6 @@ class AutolockSetting(AnimScreen):
                 # Use the existing AutoLockSetting class
                 AutoLockSetting(self)
 
-
 class AppdrawerBackgroundSetting(AnimScreen):
     def collect_animation_targets(self) -> list:
         targets = []
@@ -5971,18 +5662,15 @@ class AppdrawerBackgroundSetting(AnimScreen):
         self, prev_scr=None, selected_wallpaper=None, return_from_wallpaper=False
     ):
         if __debug__:
-            print(f"[AppdrawerBackgroundSetting.__init__] Called with prev_scr: {prev_scr}")
-            print(f"[AppdrawerBackgroundSetting.__init__] selected_wallpaper: {selected_wallpaper}")
-            print(f"[AppdrawerBackgroundSetting.__init__] return_from_wallpaper: {return_from_wallpaper}")
-            print(f"[AppdrawerBackgroundSetting.__init__] Has _init: {hasattr(self, '_init')}")
+            pass
         
         if not hasattr(self, "_init"):
             if __debug__:
-                print("[AppdrawerBackgroundSetting.__init__] First time initialization")
+                pass
             self._init = True
         else:
             if __debug__:
-                print("[AppdrawerBackgroundSetting.__init__] Already initialized - updating")
+                pass
             # Even if already initialized, update the wallpaper if a new one is provided
             if selected_wallpaper:
                 self.selected_wallpaper = selected_wallpaper
@@ -5991,9 +5679,7 @@ class AppdrawerBackgroundSetting(AnimScreen):
                     # Use the selected wallpaper path directly (already in correct format)
                     self.lockscreen_preview.set_src(selected_wallpaper)
                     if __debug__:
-                        print(
-                            f"AppdrawerBackgroundSetting: Updated wallpaper to {selected_wallpaper}"
-                        )
+                        pass
             self.refresh_text()
             return
 
@@ -6012,16 +5698,13 @@ class AppdrawerBackgroundSetting(AnimScreen):
                 apply_animations(self.collect_animation_targets(), back=True)
             except Exception as e:
                 if __debug__:
-                    print(f"[AppdrawerBackgroundSetting] Return animation error: {e}")
+                    pass
 
         if __debug__:
-            print("LockScreenSetting initialized")
-            print(f"Has nav_back: {hasattr(self, 'nav_back')}")
-            print(f"Has rti_btn: {hasattr(self, 'rti_btn')}")
             if hasattr(self, "nav_back"):
-                print(f"nav_back: {self.nav_back}")
+                pass
             if hasattr(self, "rti_btn"):
-                print(f"rti_btn: {self.rti_btn}")
+                pass
 
         # Disable scrollbars on content_area (inherited from AnimScreen)
         self.content_area.set_scrollbar_mode(lv.SCROLLBAR_MODE.OFF)
@@ -6066,11 +5749,6 @@ class AppdrawerBackgroundSetting(AnimScreen):
             # Use selected wallpaper path directly - LVGL supports A:1: format
             display_path = self.selected_wallpaper
             if __debug__:
-                print(f"AppdrawerBackgroundSetting: Setting lockscreen preview")
-                print(
-                    f"AppdrawerBackgroundSetting: Original path: {self.selected_wallpaper}"
-                )
-                print(f"AppdrawerBackgroundSetting: Display path: {display_path}")
                 # Check if file exists using same method as HomeScreenSetting
                 try:
                     # Convert path for file system check
@@ -6087,16 +5765,11 @@ class AppdrawerBackgroundSetting(AnimScreen):
 
                     stat_info = io.fatfs.stat(file_check_path)
                     file_size = stat_info[0]  # First element is file size
-                    print(
-                        f"AppdrawerBackgroundSetting: File exists, size: {file_size} bytes"
-                    )
                 except Exception as e:
-                    print(f"AppdrawerBackgroundSetting: File check failed: {e}")
+                    pass
             self.lockscreen_preview.set_src(display_path)
             if __debug__:
-                print(
-                    f"AppdrawerBackgroundSetting: Preview src set, current_wallpaper_path: {self.current_wallpaper_path}"
-                )
+                pass
         else:
             # Get current lock screen image from storage
             lockscreen_path = storage_device.get_homescreen()
@@ -6235,30 +5908,26 @@ class AppdrawerBackgroundSetting(AnimScreen):
     def refresh_text(self):
         """Refresh display when returning to this screen"""
         if __debug__:
-            print("[AppdrawerBackgroundSetting.refresh_text] Refreshing display")
+            pass
         
-        # 确保界面正确显示
         try:
-            # 刷新壁纸预览
             if hasattr(self, "lockscreen_preview") and hasattr(self, "current_wallpaper_path"):
                 if self.current_wallpaper_path:
                     self.lockscreen_preview.set_src(self.current_wallpaper_path)
                     if __debug__:
-                        print(f"[AppdrawerBackgroundSetting.refresh_text] Preview updated to: {self.current_wallpaper_path}")
+                        pass
             
-            # 刷新容器显示
             if hasattr(self, "container"):
                 self.container.invalidate()
                 
-            # 刷新整个屏幕
             self.invalidate()
             
             if __debug__:
-                print("[AppdrawerBackgroundSetting.refresh_text] Refresh completed")
+                pass
                 
         except Exception as e:
             if __debug__:
-                print(f"[AppdrawerBackgroundSetting.refresh_text] Error during refresh: {e}")
+                pass
 
     def eventhandler(self, event_obj):
         """Override event handler to ensure clicks are handled"""
@@ -6266,36 +5935,34 @@ class AppdrawerBackgroundSetting(AnimScreen):
         target = event_obj.get_target()
 
         if __debug__:
-            print(
-                f"LockScreenSetting eventhandler: event={event}, target={target}, type={type(target)}"
-            )
+            pass
 
         if event == lv.EVENT.CLICKED:
             if __debug__:
-                print("CLICKED event detected")
+                pass
             if utils.lcd_resume():
                 return
 
             # Check if target is imgbtn (direct button click)
             if isinstance(target, lv.imgbtn):
                 if __debug__:
-                    print("Target is imgbtn!")
+                    pass
                 if hasattr(self, "nav_back") and target == self.nav_back.nav_btn:
                     if __debug__:
-                        print("Back button clicked!")
+                        pass
                     if self.prev_scr is not None:
                         self.load_screen(self.prev_scr, destroy_self=True)
                     return
                 elif hasattr(self, "rti_btn") and target == self.rti_btn:
                     if __debug__:
-                        print("Checkmark button clicked!")
+                        pass
                     self.on_click_ext(target)
                     return
 
             # Check if target is the navigation container (back button area)
             if hasattr(self, "nav_back") and target == self.nav_back:
                 if __debug__:
-                    print("Navigation container clicked - going back!")
+                    pass
                 if self.prev_scr is not None:
                     self.load_screen(self.prev_scr, destroy_self=True)
                 return
@@ -6306,60 +5973,38 @@ class AppdrawerBackgroundSetting(AnimScreen):
                 target, "_processed"
             ):
                 if __debug__:
-                    print("Calling parent eventhandler for button")
+                    pass
                 super().eventhandler(event_obj)
             else:
                 if __debug__:
-                    print(
-                        f"Skipping parent eventhandler for target type: {type(target)}"
-                    )
+                    pass
 
     def on_click_ext(self, target):
         """Handle checkmark icon click in the upper right corner"""
         if __debug__:
-            print(f"on_click_ext called with target: {target}")
-            print(f"Has rti_btn: {hasattr(self, 'rti_btn')}")
             if hasattr(self, "rti_btn"):
-                print(f"rti_btn: {self.rti_btn}")
-                print(f"target == rti_btn: {target == self.rti_btn}")
+                pass
 
         if hasattr(self, "rti_btn") and target == self.rti_btn:
             # Use the stored wallpaper path instead of get_src()
             current_wallpaper = getattr(self, "current_wallpaper_path", None)
             if __debug__:
-                print(
-                    f"AppdrawerBackgroundSetting: Checkmark clicked! Current wallpaper: {current_wallpaper}"
-                )
-                print(
-                    f"AppdrawerBackgroundSetting: selected_wallpaper: {getattr(self, 'selected_wallpaper', None)}"
-                )
-                print(
-                    f"AppdrawerBackgroundSetting: About to save lockscreen: {current_wallpaper}"
-                )
+                pass
             if current_wallpaper:
                 # Save the wallpaper path
                 try:
                     storage_device.set_homescreen(current_wallpaper)
                     if __debug__:
-                        print(
-                            f"AppdrawerBackgroundSetting: Lockscreen wallpaper saved successfully: {current_wallpaper}"
-                        )
                         # Verify it was saved correctly
                         saved_path = storage_device.get_homescreen()
-                        print(
-                            f"AppdrawerBackgroundSetting: Verified saved path: {saved_path}"
-                        )
                 except Exception as e:
                     if __debug__:
-                        print(
-                            f"AppdrawerBackgroundSetting: Error saving lockscreen: {e}"
-                        )
+                        pass
             # Go back to previous screen
             if self.prev_scr is not None:
                 if __debug__:
-                    print("AppdrawerBackgroundSetting: Going back to previous screen")
+                    pass
                 self.load_screen(self.prev_scr, destroy_self=True)
-
 
 class WallperChange(AnimScreen):
     def collect_animation_targets(self) -> list:
@@ -6373,13 +6018,10 @@ class WallperChange(AnimScreen):
 
     def __init__(self, prev_scr=None):
         if __debug__:
-            print(f"[WallperChange.__init__] Called with prev_scr: {prev_scr}")
-            print(
-                f"[WallperChange.__init__] Has _init attribute: {hasattr(self, '_init')}"
-            )
+            pass
         if not hasattr(self, "_init"):
             if __debug__:
-                print("[WallperChange.__init__] First time initialization")
+                pass
             self._init = True
             super().__init__(
                 prev_scr=prev_scr,
@@ -6388,22 +6030,17 @@ class WallperChange(AnimScreen):
             )
         else:
             if __debug__:
-                print(
-                    "[WallperChange.__init__] Already initialized - refreshing container"
-                )
-                print(
-                    f"[WallperChange.__init__] Has container: {hasattr(self, 'container')}"
-                )
+                pass
             # Already initialized - refresh the container and recreate content
             if hasattr(self, "container"):
                 if __debug__:
-                    print("[WallperChange.__init__] Deleting existing container")
+                    pass
                 self.container.delete()
             # Update prev_scr if provided
             if prev_scr is not None:
                 self.prev_scr = prev_scr
                 if __debug__:
-                    print(f"[WallperChange.__init__] Updated prev_scr to: {prev_scr}")
+                    pass
             # Don't return early - continue with full initialization to recreate content
 
         # Initialize edit mode state
@@ -6415,16 +6052,14 @@ class WallperChange(AnimScreen):
         file_name_list = []
         if not utils.EMULATOR:
             if __debug__:
-                print("[WallpaperChange] Starting wallpaper scan: 1:/res/wallpapers")
                 # Test io.fatfs availability
-                print(f"[WallpaperChange] io module: {io}")
-                print(f"[WallpaperChange] io.fatfs available: {hasattr(io, 'fatfs')}")
+                pass
             try:
                 scan_count = 0
                 for size, _attrs, name in io.fatfs.listdir("1:/res/wallpapers"):
                     scan_count += 1
                     if __debug__:
-                        print(f"[WallpaperChange] Found file: {name}, size: {size}")
+                        pass
                     # Optimized scanning - only collect valid wallpapers
                     if (
                         size > 0
@@ -6434,18 +6069,17 @@ class WallperChange(AnimScreen):
                     ):
                         file_name_list.append(name)
                         if __debug__:
-                            print(f"[WallpaperChange] Added to list: {name}")
+                            pass
                 if __debug__:
-                    print(
-                        f"[WallpaperChange] Scan completed. Found {scan_count} files total, {len(file_name_list)} valid wallpapers"
-                    )
+                    pass
 
             except Exception as e:
                 if __debug__:  # Enable error logging for debugging
-                    print(f"[WallpaperChange] Error accessing wallpapers: {e}")
-                    print(f"[WallpaperChange] Trying to scan: 1:/res/wallpapers")
 
         # If we found custom wallpapers but wp_cnts is 0, update the count to prevent deletion
+                    pass
+                pass
+            pass
         if len(file_name_list) > 0 and storage_device.get_wp_cnts() == 0:
             storage_device.increase_wp_cnts()
 
@@ -6626,9 +6260,7 @@ class WallperChange(AnimScreen):
         self.custom_wps = []  # Track custom wallpapers separately
         if file_name_list:
             if __debug__:
-                print(
-                    f"[WallperChange] Creating {len(file_name_list)} custom wallpapers"
-                )
+                pass
             for i, file_name in enumerate(file_name_list):
                 path_dir = "A:1:/res/wallpapers/"
                 # Use zoom- prefix like Collection wallpapers
@@ -6645,13 +6277,7 @@ class WallperChange(AnimScreen):
 
                 # Success: Using zoom- prefix files works correctly!
                 if __debug__:
-                    print(f"[WallperChange] Custom wallpaper created:")
-                    print(f"  - LVGL path: {current_wp.zoom_path}")
-                    print(f"  - Image path: {current_wp.img_path}")
                     # Test both path formats
-                    print(
-                        f"[WallperChange] Testing LVGL path access: {current_wp.zoom_path}"
-                    )
                     try:
                         # Test the LVGL path (should work now)
                         if current_wp.zoom_path.startswith("A:1:/"):
@@ -6661,11 +6287,8 @@ class WallperChange(AnimScreen):
                         else:
                             lvgl_file_path = current_wp.zoom_path
                         stat_result = io.fatfs.stat(lvgl_file_path)
-                        print(
-                            f"[WallperChange] LVGL path OK, size: {stat_result[6] if len(stat_result) > 6 else 'unknown'}"
-                        )
                     except Exception as e:
-                        print(f"[WallperChange] LVGL path access error: {e}")
+                        pass
                 self.wps.append(current_wp)
                 self.custom_wps.append(current_wp)
 
@@ -6880,7 +6503,7 @@ class WallperChange(AnimScreen):
                     wp.invalidate()
                 except Exception as e:
                     if __debug__:
-                        print(f"[WallperChange] Error refreshing wp: {e}")
+                        pass
 
         # Also refresh the container
         if hasattr(self, "container"):
@@ -6951,16 +6574,12 @@ class WallperChange(AnimScreen):
                             )
 
                             if __debug__:
-                                print(
-                                    f"WallperChange: Comparing wallpapers - selected_base: {selected_wallpaper_base}, current_base: {current_wallpaper_base}"
-                                )
+                                pass
 
                             if selected_wallpaper_base == current_wallpaper_base:
                                 # Same wallpaper selected, just close WallperChange without changing anything
                                 if __debug__:
-                                    print(
-                                        "WallperChange: Same wallpaper selected, closing wallpaper selection"
-                                    )
+                                    pass
 
                                 # Simply load the previous screen with return animation
                                 try:
@@ -6971,9 +6590,7 @@ class WallperChange(AnimScreen):
                                     self.del_delayed(100)
                                 except Exception as nav_error:
                                     if __debug__:
-                                        print(
-                                            f"WallperChange: Direct navigation failed: {nav_error}"
-                                        )
+                                        pass
                                     # Simple fallback to WallpaperScreen
                                     fallback_screen = WallpaperScreen()
                                     self._load_scr(fallback_screen, back=True)
@@ -6983,17 +6600,7 @@ class WallperChange(AnimScreen):
                             else:
                                 # Different wallpaper selected, create new screen
                                 if __debug__:
-                                    print(
-                                        "WallperChange: Different wallpaper selected, creating new screen"
-                                    )
-                                    print(
-                                        f"WallperChange: Creating HomeScreenSetting with:"
-                                    )
-                                    print(f"  - prev_scr: {self.prev_scr.prev_scr}")
-                                    print(f"  - selected_wallpaper: {wp.img_path}")
-                                    print(
-                                        f"  - preserve_blur_state: {current_blur_state}"
-                                    )
+                                    pass
                                 # Create new HomeScreenSetting with the selected wallpaper
                                 try:
                                     # Reset HomeScreenSetting singleton if it exists
@@ -7014,9 +6621,7 @@ class WallperChange(AnimScreen):
                                     self.del_delayed(100)
                                 except Exception as e:
                                     if __debug__:
-                                        print(
-                                            f"WallperChange: Failed to create HomeScreenSetting: {e}"
-                                        )
+                                        pass
                                     # Fallback to WallpaperScreen
                                     fallback_screen = WallpaperScreen()
                                     self._load_scr(fallback_screen, back=True)
@@ -7024,28 +6629,19 @@ class WallperChange(AnimScreen):
                                         del self.__class__._instance
                                     self.del_delayed(100)
                         elif self.prev_scr.__class__.__name__ == "AppdrawerBackgroundSetting":
-                            # Lock Screen设置页面 - 处理壁纸选择
                             if __debug__:
-                                print(
-                                    "WallperChange: Returning to AppdrawerBackgroundSetting with selected wallpaper"
-                                )
-                                print(
-                                    f"WallperChange: Selected wallpaper: {wp.img_path}"
-                                )
+                                pass
                             try:
-                                # 更新现有的AppdrawerBackgroundSetting实例
                                 self.prev_scr.selected_wallpaper = wp.img_path
                                 self.prev_scr.current_wallpaper_path = wp.img_path
                                 
                                 if hasattr(self.prev_scr, "lockscreen_preview"):
                                     self.prev_scr.lockscreen_preview.set_src(wp.img_path)
                                     if __debug__:
-                                        print(f"WallperChange: Updated lockscreen preview to {wp.img_path}")
+                                        pass
                                 
-                                # 直接返回到Lock Screen设置页面，使用返回动画
                                 self._load_scr(self.prev_scr, back=True)
                                 
-                                # 确保界面正确刷新
                                 if hasattr(self.prev_scr, 'refresh_text'):
                                     self.prev_scr.refresh_text()
                                 if hasattr(self.prev_scr, 'invalidate'):
@@ -7057,10 +6653,7 @@ class WallperChange(AnimScreen):
                                 self.del_delayed(100)
                             except Exception as e:
                                 if __debug__:
-                                    print(
-                                        f"WallperChange: Failed to update AppdrawerBackgroundSetting: {e}"
-                                    )
-                                # 后备方案：创建新的AppdrawerBackgroundSetting
+                                    pass
                                 try:
                                     new_screen = AppdrawerBackgroundSetting(
                                         self.prev_scr.prev_scr,
@@ -7073,18 +6666,15 @@ class WallperChange(AnimScreen):
                                     self.del_delayed(100)
                                 except Exception as fallback_e:
                                     if __debug__:
-                                        print(f"WallperChange: Fallback creation failed: {fallback_e}")
-                                    # 最终后备方案：返回到WallpaperScreen
+                                        pass
                                     fallback_screen = WallpaperScreen()
                                     self._load_scr(fallback_screen, back=True)
                                     if hasattr(self.__class__, "_instance"):
                                         del self.__class__._instance
                                     self.del_delayed(100)
                         else:
-                            # 其他类型的前一个页面
                             if __debug__:
-                                print(f"WallperChange: Unknown prev_scr type: {self.prev_scr.__class__.__name__}")
-                            # 尝试直接返回到前一个页面，使用返回动画
+                                pass
                             try:
                                 self._load_scr(self.prev_scr, back=True)
                                 if hasattr(self.__class__, "_instance"):
@@ -7092,7 +6682,7 @@ class WallperChange(AnimScreen):
                                 self.del_delayed(100)
                             except Exception as e:
                                 if __debug__:
-                                    print(f"WallperChange: Failed to return to unknown prev_scr: {e}")
+                                    pass
                                 # Fallback to WallpaperScreen
                                 fallback_screen = WallpaperScreen()
                                 self._load_scr(fallback_screen, back=True)
@@ -7143,7 +6733,7 @@ class WallperChange(AnimScreen):
             return
 
         if __debug__:
-            print("WallpaperChange: Edit button clicked - entering edit mode")
+            pass
 
         self._enter_edit_mode()
 
@@ -7153,7 +6743,7 @@ class WallperChange(AnimScreen):
             return
 
         if __debug__:
-            print(f"WallpaperChange: Delete button clicked - deleting {len(self.selected_wallpapers)} selected wallpapers")
+            pass
 
         # Move selected wallpapers to marked_for_deletion and delete immediately
         self.marked_for_deletion = self.selected_wallpapers.copy()
@@ -7169,10 +6759,9 @@ class WallperChange(AnimScreen):
             return
 
         if __debug__:
-            print("WallpaperChange: Done button clicked - exiting edit mode")
+            pass
 
         self._exit_edit_mode(commit=False)  # Exit without deleting
-
 
     def _enter_edit_mode(self):
         """Enable edit mode UI state"""
@@ -7198,17 +6787,15 @@ class WallperChange(AnimScreen):
                 wp.is_selected = False
                 wp.selection_checkbox_img.set_src("A:/res/unselect.png")
                 if __debug__:
-                    print(
-                        f"WallpaperChange: Showing selection_checkbox for wp[{i}]"
-                    )
+                    pass
             elif __debug__:
-                print(f"WallpaperChange: wp[{i}] has no selection_checkbox attribute")
+                pass
 
         # Clear any previous selections
         self.selected_wallpapers.clear()
 
         if __debug__:
-            print("WallpaperChange: Entered edit mode - showing selection checkboxes")
+            pass
 
     def _exit_edit_mode(self, *, commit: bool):
         """Disable edit mode UI state"""
@@ -7232,22 +6819,20 @@ class WallperChange(AnimScreen):
 
         if not commit:
             if __debug__:
-                print("WallpaperChange: Exit edit mode without committing deletions")
+                pass
             self.selected_wallpapers.clear()
             return
 
         # Delete selected wallpapers when committing
         if self.selected_wallpapers:
             if __debug__:
-                print(
-                    f"WallpaperChange: Exiting edit mode - deleting {len(self.selected_wallpapers)} selected files"
-                )
+                pass
             # Move selected wallpapers to marked_for_deletion for consistent deletion logic
             self.marked_for_deletion = self.selected_wallpapers.copy()
             self.delete_marked_files()
             self.selected_wallpapers.clear()
         elif __debug__:
-            print("WallpaperChange: Exiting edit mode - no files to delete")
+            pass
 
     def _highlight_active_wallpaper(self):
         """Update selection indicators based on the currently active wallpaper"""
@@ -7255,9 +6840,7 @@ class WallperChange(AnimScreen):
         active_normalized = self._normalize_wallpaper_path(active_path)
 
         if __debug__:
-            print(
-                f"WallpaperChange: Highlighting active wallpaper - path: {active_path}, normalized: {active_normalized}"
-            )
+            pass
 
         for wp in getattr(self, "wps", []):
             wp_normalized = self._normalize_wallpaper_path(getattr(wp, "img_path", ""))
@@ -7313,13 +6896,13 @@ class WallperChange(AnimScreen):
             self.selected_wallpapers.add(wallpaper)
             wallpaper.selection_checkbox_img.set_src("A:/res/selected.png")
             if __debug__:
-                print(f"WallpaperChange: Selected wallpaper {wallpaper.img_path}")
+                pass
         else:
             # Remove from selected set and change to unselected image
             self.selected_wallpapers.discard(wallpaper)
             wallpaper.selection_checkbox_img.set_src("A:/res/unselect.png")
             if __debug__:
-                print(f"WallpaperChange: Deselected wallpaper {wallpaper.img_path}")
+                pass
 
     def on_remove_icon_clicked(self, event_obj, wallpaper):
         """Handle remove icon click"""
@@ -7343,9 +6926,7 @@ class WallperChange(AnimScreen):
         import storage.device as storage_device
 
         if __debug__:
-            print(
-                f"WallpaperChange: Starting deletion of {len(self.marked_for_deletion)} files"
-            )
+            pass
 
         marked_count = len(self.marked_for_deletion)
 
@@ -7360,29 +6941,23 @@ class WallperChange(AnimScreen):
                     # Delete original file first
                     original_path = f"1:/res/wallpapers/{filename}"
                     if __debug__:
-                        print(
-                            f"WallpaperChange: Deleting original file: {original_path}"
-                        )
+                        pass
                     try:
                         io.fatfs.unlink(original_path)
                     except:
                         if __debug__:
-                            print(
-                                f"WallpaperChange: Original file {original_path} not found or already deleted"
-                            )
+                            pass
 
                     # Delete zoom file (add zoom- prefix)
                     zoom_filename = f"zoom-{filename}"
                     zoom_path = f"1:/res/wallpapers/{zoom_filename}"
                     if __debug__:
-                        print(f"WallpaperChange: Deleting zoom file: {zoom_path}")
+                        pass
                     try:
                         io.fatfs.unlink(zoom_path)
                     except:
                         if __debug__:
-                            print(
-                                f"WallpaperChange: Zoom file {zoom_path} not found or already deleted"
-                            )
+                            pass
 
                     # Delete blur file if it exists
                     blur_filename = filename.replace(".jpg", "-blur.jpg").replace(
@@ -7390,30 +6965,24 @@ class WallperChange(AnimScreen):
                     )
                     blur_path = f"1:/res/wallpapers/{blur_filename}"
                     if __debug__:
-                        print(
-                            f"WallpaperChange: Attempting to delete blur file: {blur_path}"
-                        )
+                        pass
                     try:
                         io.fatfs.unlink(blur_path)
                         if __debug__:
-                            print(
-                                f"WallpaperChange: Successfully deleted blur file: {blur_path}"
-                            )
+                            pass
                     except:
                         if __debug__:
-                            print(
-                                f"WallpaperChange: Blur file {blur_path} not found or already deleted"
-                            )
+                            pass
 
                     # Check if this wallpaper is currently in use and replace it
                     self.replace_if_in_use(img_path)
 
                     if __debug__:
-                        print(f"WallpaperChange: Successfully deleted {img_path}")
+                        pass
 
             except Exception as e:
                 if __debug__:
-                    print(f"WallpaperChange: Error deleting {wallpaper.img_path}: {e}")
+                    pass
 
         # Clear the marked for deletion set
         self.marked_for_deletion.clear()
@@ -7424,7 +6993,7 @@ class WallperChange(AnimScreen):
 
         # Refresh the screen to show updated wallpaper list
         if __debug__:
-            print("WallpaperChange: Refreshing screen after deletions")
+            pass
         self.__init__(self.prev_scr)
 
     def replace_if_in_use(self, deleted_path):
@@ -7439,76 +7008,59 @@ class WallperChange(AnimScreen):
             # Check homescreen
             if current_homescreen and deleted_path in current_homescreen:
                 if __debug__:
-                    print(
-                        f"WallpaperChange: Replacing homescreen wallpaper with {replacement_path}"
-                    )
+                    pass
                 storage_device.set_appdrawer_background(replacement_path)
 
             # Check lockscreen
             if current_lockscreen and deleted_path in current_lockscreen:
                 if __debug__:
-                    print(
-                        f"WallpaperChange: Replacing lockscreen wallpaper with {replacement_path}"
-                    )
+                    pass
                 storage_device.set_homescreen(replacement_path)
 
         except Exception as e:
             if __debug__:
-                print(
-                    f"WallpaperChange: Error checking/replacing wallpapers in use: {e}"
-                )
+                pass
 
     def eventhandler(self, event_obj):
         """Override eventhandler to handle navigation safely"""
         event = event_obj.code
         target = event_obj.get_target()
         if __debug__:
-            print(
-                f"WallperChange: Custom eventhandler called - event={event}, target={target}"
-            )
+            pass
         if event == lv.EVENT.CLICKED:
             if utils.lcd_resume():
                 return
             if isinstance(target, lv.imgbtn):
                 if hasattr(self, "nav_back") and target == self.nav_back.nav_btn:
                     if __debug__:
-                        print(
-                            "WallperChange: Back button clicked - navigating to previous screen"
-                        )
+                        pass
                     if self.prev_scr is not None:
-                        # 确保正确返回到调用WallperChange的页面
                         if __debug__:
-                            print(f"WallperChange: Returning to prev_scr: {self.prev_scr}")
-                            print(f"WallperChange: prev_scr type: {type(self.prev_scr)}")
+                            pass
                         try:
-                            # 检查前一个页面是否是AppdrawerBackgroundSetting (Lock Screen设置)
                             if hasattr(self.prev_scr, '__class__') and self.prev_scr.__class__.__name__ == 'AppdrawerBackgroundSetting':
                                 if __debug__:
-                                    print("WallperChange: Returning to AppdrawerBackgroundSetting (Lock Screen)")
-                                # 直接加载Lock Screen设置页面
+                                    pass
                                 self.load_screen(self.prev_scr, destroy_self=True)
                             elif hasattr(self.prev_scr, '__class__') and self.prev_scr.__class__.__name__ == 'HomeScreenSetting':
                                 if __debug__:
-                                    print("WallperChange: Returning to HomeScreenSetting")
-                                # 直接加载Home Screen设置页面  
+                                    pass
                                 self.load_screen(self.prev_scr, destroy_self=True)
                             else:
                                 if __debug__:
-                                    print("WallperChange: Using standard navigation")
+                                    pass
                                 self.load_screen(self.prev_scr, destroy_self=True)
                         except Exception as e:
                             if __debug__:
-                                print(f"WallperChange: Navigation failed: {e}")
-                            # 如果导航失败，尝试直接使用返回动画加载
+                                pass
                             try:
                                 if __debug__:
-                                    print("WallperChange: Trying direct load with return animation")
+                                    pass
                                 self._load_scr(self.prev_scr, back=True)
                                 self.del_delayed(100)
                             except Exception as fallback_e:
                                 if __debug__:
-                                    print(f"WallperChange: Direct load also failed: {fallback_e}")
-                                # 最后的后备方案：返回到设置主页面
+                                    pass
                                 try:
                                     from .homescreen import SettingsScreen
                                     settings_screen = SettingsScreen()
@@ -7516,7 +7068,7 @@ class WallperChange(AnimScreen):
                                     self.del_delayed(100)
                                 except Exception as final_e:
                                     if __debug__:
-                                        print(f"WallperChange: Final fallback failed: {final_e}")
+                                        pass
                     return
                 elif hasattr(self, "rti_btn") and target == self.rti_btn:
                     self.on_click_ext(target)
@@ -7527,7 +7079,6 @@ class WallperChange(AnimScreen):
         if event == lv.EVENT.CLICKED:
             # This should trigger the on_click method for wallpaper selections
             self.on_click(event_obj)
-
 
 class ShutdownSetting(AnimScreen):
     cur_auto_shutdown = ""
@@ -7596,12 +7147,11 @@ class ShutdownSetting(AnimScreen):
                 # Use the direct auto-shutdown setting screen
                 AutoShutDownSetting(self)
 
-
 def get_autolock_delay_str() -> str:
     """Get auto-lock delay as formatted string"""
     delay_ms = storage_device.get_autolock_delay_ms()
     if __debug__:
-        print(f"[get_autolock_delay_str] Input delay_ms: {delay_ms}")
+        pass
 
     if delay_ms == 0 or delay_ms == storage_device.AUTOLOCK_DELAY_MAXIMUM:
         result = _(i18n_keys.OPTION__NEVER)
@@ -7622,9 +7172,8 @@ def get_autolock_delay_str() -> str:
         ).format(hours)
 
     if __debug__:
-        print(f"[get_autolock_delay_str] Formatted result: '{result}'")
+        pass
     return result
-
 
 def get_autoshutdown_delay_str() -> str:
     """Get auto-shutdown delay as formatted string"""
@@ -7646,7 +7195,6 @@ def get_autoshutdown_delay_str() -> str:
         return _(
             i18n_keys.OPTION__STR_HOUR if hours == 1 else i18n_keys.OPTION__STR_HOURS
         ).format(hours)
-
 
 class Animations(AnimScreen):
     def collect_animation_targets(self) -> list:
@@ -7690,7 +7238,6 @@ class Animations(AnimScreen):
             if target == self.animation:
                 AnimationSetting(self)
 
-
 class Autolock_and_ShutingDown(AnimScreen):
     cur_auto_lock = ""
     cur_auto_lock_ms = 0
@@ -7718,12 +7265,7 @@ class Autolock_and_ShutingDown(AnimScreen):
         )
 
         if __debug__:
-            print(
-                f"[Autolock_and_ShutingDown.__init__] cur_auto_lock_ms: {Autolock_and_ShutingDown.cur_auto_lock_ms}"
-            )
-            print(
-                f"[Autolock_and_ShutingDown.__init__] cur_auto_lock formatted: '{Autolock_and_ShutingDown.cur_auto_lock}'"
-            )
+            pass
 
         if not hasattr(self, "_init"):
             self._init = True
@@ -7762,12 +7304,7 @@ class Autolock_and_ShutingDown(AnimScreen):
 
     def get_str_from_ms(self, time_ms) -> str:
         if __debug__:
-            print(
-                f"[Autolock_and_ShutingDown.get_str_from_ms] Input time_ms: {time_ms}"
-            )
-            print(
-                f"[Autolock_and_ShutingDown.get_str_from_ms] AUTOLOCK_DELAY_MAXIMUM: {storage_device.AUTOLOCK_DELAY_MAXIMUM}"
-            )
+            pass
 
         if time_ms == storage_device.AUTOLOCK_DELAY_MAXIMUM:
             text = _(i18n_keys.ITEM__STATUS__NEVER)
@@ -7792,9 +7329,7 @@ class Autolock_and_ShutingDown(AnimScreen):
                 ).format(value)
 
         if __debug__:
-            print(
-                f"[Autolock_and_ShutingDown.get_str_from_ms] Formatted result: '{text}'"
-            )
+            pass
         return text
 
     def on_click(self, event_obj):
@@ -7809,9 +7344,6 @@ class Autolock_and_ShutingDown(AnimScreen):
                 AutoShutDownSetting(self)
             else:
                 pass
-
-
-# pyright: off
 class AutoLockSetting(AnimScreen):
     def collect_animation_targets(self) -> list:
         targets = []
@@ -7834,13 +7366,7 @@ class AutoLockSetting(AnimScreen):
         )
 
         if __debug__:
-            print(f"[AutoLockSetting.__init__] Starting initialization")
-            print(
-                f"[AutoLockSetting.__init__] Current autolock delay ms: {storage_device.get_autolock_delay_ms()}"
-            )
-            print(
-                f"[AutoLockSetting.__init__] Autolock_and_ShutingDown.cur_auto_lock: '{Autolock_and_ShutingDown.cur_auto_lock}'"
-            )
+            pass
 
         if not hasattr(self, "_init"):
             self._init = True
@@ -7857,9 +7383,7 @@ class AutoLockSetting(AnimScreen):
         self.btns: [ListItemBtn] = [None] * (len(self.setting_items))
 
         if __debug__:
-            print(
-                f"[AutoLockSetting] Processing {len(self.setting_items)} setting items"
-            )
+            pass
 
         for index, item in enumerate(self.setting_items):
             if item is None:
@@ -7878,9 +7402,7 @@ class AutoLockSetting(AnimScreen):
                 item = _(i18n_keys.ITEM__STATUS__NEVER)
 
             if __debug__:
-                print(
-                    f"[AutoLockSetting] Item {index}: original='{original_item}', formatted='{item}'"
-                )
+                pass
 
             self.btns[index] = ListItemBtn(
                 self.container, item, has_next=False, use_transition=False
@@ -7892,29 +7414,19 @@ class AutoLockSetting(AnimScreen):
 
             # This is the key comparison logic
             if __debug__:
-                print(
-                    f"[AutoLockSetting] Comparing formatted item '{item}' with cur_auto_lock '{Autolock_and_ShutingDown.cur_auto_lock}'"
-                )
+                pass
 
             if item == Autolock_and_ShutingDown.cur_auto_lock:
                 has_custom = False
                 self.btns[index].set_checked()
                 self.checked_index = index
                 if __debug__:
-                    print(
-                        f"[AutoLockSetting] Found match at index {index}, has_custom set to False"
-                    )
+                    pass
 
         if has_custom:
             self.custom = storage_device.get_autolock_delay_ms()
             if __debug__:
-                print(
-                    f"[AutoLockSetting] Creating custom option because no match found"
-                )
-                print(f"[AutoLockSetting] Custom delay ms: {self.custom}")
-                print(
-                    f"[AutoLockSetting] Custom text will be: '{Autolock_and_ShutingDown.cur_auto_lock}({_(i18n_keys.OPTION__CUSTOM__INSERT)})'"
-                )
+                pass
 
             self.btns[-1] = ListItemBtn(
                 self.container,
@@ -7930,9 +7442,7 @@ class AutoLockSetting(AnimScreen):
             self.checked_index = -1
         else:
             if __debug__:
-                print(
-                    f"[AutoLockSetting] No custom option needed - found match in predefined values"
-                )
+                pass
         self.container.add_event_cb(self.on_click, lv.EVENT.CLICKED, None)
         self.tips = lv.label(self.content_area)
         self.tips.align_to(self.container, lv.ALIGN.OUT_BOTTOM_LEFT, 8, 0)
@@ -7990,9 +7500,6 @@ class AutoLockSetting(AnimScreen):
                         from apps.base import reload_settings_from_storage
 
                         reload_settings_from_storage()
-
-
-# pyright: on
 class LanguageSetting(AnimScreen):
     def collect_animation_targets(self) -> list:
         targets = []
@@ -8044,7 +7551,6 @@ class LanguageSetting(AnimScreen):
                     self.title.set_text(_(i18n_keys.TITLE__LANGUAGE))
                     self.check_index = idx
                     button.set_checked()
-
 
 class BacklightSetting(AnimScreen):
     @classmethod
@@ -8116,7 +7622,6 @@ class BacklightSetting(AnimScreen):
                         storage_device.set_brightness(self.temp_brightness)
             super().eventhandler(event_obj)
 
-
 class KeyboardHapticSetting(AnimScreen):
     def collect_animation_targets(self) -> list:
         targets = []
@@ -8175,7 +7680,6 @@ class KeyboardHapticSetting(AnimScreen):
                 else:
                     storage_device.toggle_keyboard_haptic(False)
 
-
 class AnimationSetting(AnimScreen):
     def collect_animation_targets(self) -> list:
         targets = []
@@ -8231,7 +7735,6 @@ class AnimationSetting(AnimScreen):
                 else:
                     storage_device.set_animation_enable(False)
                     self.tips.set_text(_(i18n_keys.CONTENT__ANIMATIONS__DISABLED_HINT))
-
 
 class TouchSetting(AnimScreen):
     def collect_animation_targets(self) -> list:
@@ -8344,7 +7847,6 @@ class TouchSetting(AnimScreen):
                     )
                     storage_device.set_tap_awake_enable(False)
 
-
 class AutoShutDownSetting(AnimScreen):
     def collect_animation_targets(self) -> list:
         targets = []
@@ -8367,13 +7869,12 @@ class AutoShutDownSetting(AnimScreen):
         cur_delay_ms = storage_device.get_autoshutdown_delay_ms()
 
         if __debug__:
-            print(f"[AutoShutDownSetting] Current shutdown delay ms: {cur_delay_ms}")
+            pass
 
         self.container = ContainerFlexCol(self.content_area, self.title, padding_row=2)
         self.setting_items = [1, 2, 5, 10, "Never", None]
         has_custom = True
         self.checked_index = 0
-        # pyright: off
         self.btns: [ListItemBtn] = [None] * (len(self.setting_items))
         for index, item in enumerate(self.setting_items):
             if item is None:
@@ -8389,9 +7890,7 @@ class AutoShutDownSetting(AnimScreen):
                 item = _(i18n_keys.ITEM__STATUS__NEVER)
 
             if __debug__:
-                print(
-                    f"[AutoShutDownSetting] Item {index}: original='{original_item}', formatted='{item}'"
-                )
+                pass
 
             self.btns[index] = ListItemBtn(
                 self.container, item, has_next=False, use_transition=False
@@ -8411,27 +7910,21 @@ class AutoShutDownSetting(AnimScreen):
                 )  # Convert minutes to milliseconds
 
             if __debug__:
-                print(
-                    f"[AutoShutDownSetting] Comparing cur_delay_ms={cur_delay_ms} with expected={expected_delay_ms}"
-                )
+                pass
 
             if cur_delay_ms == expected_delay_ms:
                 has_custom = False
                 self.btns[index].set_checked()
                 self.checked_index = index
                 if __debug__:
-                    print(
-                        f"[AutoShutDownSetting] Found match at index {index}, has_custom set to False"
-                    )
+                    pass
 
         if has_custom:
             self.custom = storage_device.get_autoshutdown_delay_ms()
             # Use get_autoshutdown_delay_str() for display
             cur_shutdown_str = get_autoshutdown_delay_str()
             if __debug__:
-                print(
-                    f"[AutoShutDownSetting] Creating custom option with text: '{cur_shutdown_str}'"
-                )
+                pass
             self.btns[-1] = ListItemBtn(
                 self.container,
                 f"{cur_shutdown_str}({_(i18n_keys.OPTION__CUSTOM__INSERT)})",
@@ -8443,10 +7936,7 @@ class AutoShutDownSetting(AnimScreen):
             self.checked_index = -1
         else:
             if __debug__:
-                print(
-                    f"[AutoShutDownSetting] No custom option needed - found match in predefined values"
-                )
-        # pyright: on
+                pass
         self.container.add_event_cb(self.on_click, lv.EVENT.CLICKED, None)
         self.tips = lv.label(self.content_area)
         self.tips.align_to(self.container, lv.ALIGN.OUT_BOTTOM_LEFT, 8, 0)
@@ -8505,7 +7995,6 @@ class AutoShutDownSetting(AnimScreen):
                         from apps.base import reload_settings_from_storage
 
                         reload_settings_from_storage()
-
 
 class PinMapSetting(AnimScreen):
     def collect_animation_targets(self) -> list:
@@ -8591,7 +8080,6 @@ class PinMapSetting(AnimScreen):
                 return
             self.fresh_tips()
 
-
 class ConnectSetting(Screen):
     def __init__(self, prev_scr=None):
         if not hasattr(self, "_init"):
@@ -8653,7 +8141,6 @@ class ConnectSetting(Screen):
             #         print("USB is on")
             #     else:
             #         print("USB is off")
-
 
 class AirGapSetting(AnimScreen):
     def collect_animation_targets(self) -> list:
@@ -8757,7 +8244,6 @@ class AirGapSetting(AnimScreen):
                 self.air_gap.add_state()
             else:
                 self.air_gap.clear_state()
-
 
 class AboutSetting(AnimScreen):
     def collect_animation_targets(self) -> list:
@@ -8882,7 +8368,6 @@ class AboutSetting(AnimScreen):
             #     self.board_loader.add_flag(lv.obj.FLAG.HIDDEN)
             GO2BoardLoader()
 
-
 class TrezorModeToggle(FullSizeWindow):
     def __init__(self, callback_obj, enable=False):
         super().__init__(
@@ -8930,7 +8415,6 @@ class TrezorModeToggle(FullSizeWindow):
                 storage_device.enable_trezor_compatible(self.enable)
                 workflow.spawn(restart_delay())
 
-
 class GO2BoardLoader(FullSizeWindow):
     def __init__(self):
         super().__init__(
@@ -8951,7 +8435,6 @@ class GO2BoardLoader(FullSizeWindow):
                 utils.reboot2boardloader()
             elif target == self.btn_no:
                 self.destroy(100)
-
 
 class Go2UpdateMode(Screen):
     def __init__(self, prev_scr):
@@ -8979,7 +8462,6 @@ class Go2UpdateMode(Screen):
                 utils.reboot_to_bootloader()
             elif target == self.btn_no:
                 self.load_screen(self.prev_scr, destroy_self=True)
-
 
 class PowerOff(FullSizeWindow):
     IS_ACTIVE = False
@@ -9045,7 +8527,6 @@ class PowerOff(FullSizeWindow):
                 else:
                     self.back()
 
-
 class ShutingDown(FullSizeWindow):
     def __init__(self):
         super().__init__(
@@ -9057,7 +8538,6 @@ class ShutingDown(FullSizeWindow):
             uart.ctrl_power_off()
 
         workflow.spawn(shutdown_delay())
-
 
 class WallpaperScreen(AnimScreen):
     cur_language = ""
@@ -9073,11 +8553,9 @@ class WallpaperScreen(AnimScreen):
             self._init = True
         else:
             self.refresh_text()
-            # 重新绑定事件处理器以确保Lock Screen按钮响应性
             if hasattr(self, 'content_area') and hasattr(self, 'on_click_event'):
                 self.content_area.add_event_cb(self.on_click_event, lv.EVENT.CLICKED, None)
             if not self.is_visible():
-                # 使用返回动画重新加载屏幕，确保正确的动画方向
                 self._load_scr(self, back=True)
             return
         super().__init__(
@@ -9097,32 +8575,27 @@ class WallpaperScreen(AnimScreen):
         self.home_screen.label_left.set_text(_(i18n_keys.BUTTON__HOME_SCREEN))
         # self.power.align_to(self.container, lv.ALIGN.OUT_BOTTOM_MID, 0, 12)
         
-        # 确保事件处理器正常工作，防止Lock Screen按钮无响应
         if hasattr(self, 'content_area') and hasattr(self, 'on_click_event'):
-            # 重新绑定事件处理器
             self.content_area.add_event_cb(self.on_click_event, lv.EVENT.CLICKED, None)
 
     def on_click_event(self, event_obj):
         target = event_obj.get_target()
         if target == self.lock_screen:
             if __debug__:
-                print("[WallpaperScreen] Lock Screen clicked")
-            # 确保创建新的AppdrawerBackgroundSetting实例
+                pass
             try:
-                # 重置单例状态以确保新实例创建
                 if hasattr(AppdrawerBackgroundSetting, "_instance"):
                     if __debug__:
-                        print("[WallpaperScreen] Resetting AppdrawerBackgroundSetting singleton")
+                        pass
                     del AppdrawerBackgroundSetting._instance
                 AppdrawerBackgroundSetting(self)
             except Exception as e:
                 if __debug__:
-                    print(f"[WallpaperScreen] Error creating AppdrawerBackgroundSetting: {e}")
+                    pass
         elif target == self.home_screen:
             HomeScreenSetting(self)
         else:
             pass
-
 
 class HomeScreenSetting(AnimScreen):
     # Class variable: track all active instances for batch refresh
@@ -9142,15 +8615,7 @@ class HomeScreenSetting(AnimScreen):
         return_from_wallpaper=False,
     ):
         if __debug__:
-            print(
-                f"[HomeScreenSetting.__init__] called, prev_scr={prev_scr}, selected_wallpaper={selected_wallpaper}, preserve_blur_state={preserve_blur_state}"
-            )
-            print(
-                f"[HomeScreenSetting.__init__] Current stored homescreen: {storage_device.get_homescreen()}"
-            )
-            print(
-                f"[HomeScreenSetting.__init__] Current stored appdrawer_background: {storage_device.get_appdrawer_background()}"
-            )
+            pass
 
         if not hasattr(self, "_init"):
             self._init = True
@@ -9158,9 +8623,7 @@ class HomeScreenSetting(AnimScreen):
             # Even if already initialized, update the wallpaper if a new one is provided
             if selected_wallpaper:
                 if __debug__:
-                    print(
-                        f"[HomeScreenSetting.__init__] Updating existing instance with selected_wallpaper: {selected_wallpaper}"
-                    )
+                    pass
 
                 self.selected_wallpaper = selected_wallpaper
                 self.original_wallpaper_path = selected_wallpaper
@@ -9173,9 +8636,7 @@ class HomeScreenSetting(AnimScreen):
                             "A:/res/wallpapers/", "A:1:/res/wallpapers/"
                         )
                     if __debug__:
-                        print(
-                            f"[HomeScreenSetting.__init__] Converted path for display: {display_path}"
-                        )
+                        pass
 
                 # Handle blur state preservation
                 self.is_blur_active = False  # Default to original
@@ -9186,16 +8647,12 @@ class HomeScreenSetting(AnimScreen):
                     blur_path = self._get_blur_wallpaper_path(display_path)
                     if blur_path and self._blur_wallpaper_exists(blur_path):
                         if __debug__:
-                            print(
-                                f"[HomeScreenSetting.__init__] Blur version exists, using blur: {blur_path}"
-                            )
+                            pass
                         final_display_path = blur_path
                         self.is_blur_active = True
                     else:
                         if __debug__:
-                            print(
-                                f"[HomeScreenSetting.__init__] No blur version available for new wallpaper, showing original"
-                            )
+                            pass
 
                 self.current_wallpaper_path = final_display_path
 
@@ -9204,15 +8661,12 @@ class HomeScreenSetting(AnimScreen):
                     self.homescreen_preview.set_src(final_display_path)
                     if __debug__:
                         blur_status = "blur" if self.is_blur_active else "original"
-                        print(
-                            f"[HomeScreenSetting.__init__] Updated preview to {blur_status} version: {final_display_path}"
-                        )
 
                 # Update blur button state
                 if hasattr(self, "blur_button"):
                     self._update_blur_button_state()
                     if __debug__:
-                        print("[HomeScreenSetting.__init__] Updated blur button state")
+                        pass
 
             return
 
@@ -9223,7 +8677,7 @@ class HomeScreenSetting(AnimScreen):
         self.selected_wallpaper = selected_wallpaper
 
         if __debug__:
-            print("[HomeScreenSetting.__init__] First time initialization")
+            pass
         super().__init__(
             prev_scr=prev_scr, nav_back=True, rti_path="A:/res/checkmark.png"
         )
@@ -9237,7 +8691,7 @@ class HomeScreenSetting(AnimScreen):
                 apply_animations(self.collect_animation_targets(), back=True)
             except Exception as e:
                 if __debug__:
-                    print(f"[HomeScreenSetting] Return animation error: {e}")
+                    pass
 
         # Disable scrollbars on content_area (inherited from AnimScreen)
         self.content_area.set_scrollbar_mode(lv.SCROLLBAR_MODE.OFF)
@@ -9276,12 +8730,7 @@ class HomeScreenSetting(AnimScreen):
         # Home screen preview image
         self.homescreen_preview = lv.img(self.preview_container)
         if __debug__:
-            print(
-                f"[HomeScreenSetting.__init__] Created homescreen_preview: {self.homescreen_preview}"
-            )
-            print(
-                f"[HomeScreenSetting.__init__] Preview container: {self.preview_container}"
-            )
+            pass
 
         # Initialize blur cache first
         self._blur_cache = {}
@@ -9289,12 +8738,7 @@ class HomeScreenSetting(AnimScreen):
         # Use selected wallpaper if provided, otherwise load blur state from storage
         if self.selected_wallpaper:
             if __debug__:
-                print(
-                    f"[HomeScreenSetting.__init__] Using selected_wallpaper: {self.selected_wallpaper}"
-                )
-                print(
-                    f"[HomeScreenSetting.__init__] preserve_blur_state: {preserve_blur_state}"
-                )
+                pass
             self.original_wallpaper_path = self.selected_wallpaper
 
             # For Custom wallpapers, need to convert path for display
@@ -9309,9 +8753,7 @@ class HomeScreenSetting(AnimScreen):
                         "A:/res/wallpapers/", "A:1:/res/wallpapers/"
                     )
                 if __debug__:
-                    print(
-                        f"[HomeScreenSetting.__init__] Converted path for display: {display_path}"
-                    )
+                    pass
 
             # Handle blur state preservation
             self.is_blur_active = False  # Default to original
@@ -9322,42 +8764,24 @@ class HomeScreenSetting(AnimScreen):
                 blur_path = self._get_blur_wallpaper_path(display_path)
                 if blur_path and self._blur_wallpaper_exists(blur_path):
                     if __debug__:
-                        print(
-                            f"[HomeScreenSetting.__init__] Blur version exists, using blur: {blur_path}"
-                        )
+                        pass
                     final_display_path = blur_path
                     self.is_blur_active = True
                 else:
                     if __debug__:
-                        print(
-                            f"[HomeScreenSetting.__init__] No blur version available for new wallpaper, showing original"
-                        )
+                        pass
 
             self.current_wallpaper_path = final_display_path
             self.homescreen_preview.set_src(final_display_path)
             if __debug__:
                 blur_status = "blur" if self.is_blur_active else "original"
-                print(
-                    f"[HomeScreenSetting.__init__] Set preview src to {blur_status} version: {final_display_path}"
-                )
-                print(
-                    f"[HomeScreenSetting.__init__] Preview object: {self.homescreen_preview}"
-                )
         else:
             if __debug__:
-                print(
-                    "[HomeScreenSetting.__init__] No selected_wallpaper, loading blur state from storage"
-                )
+                pass
             # Load blur state from storage - this sets all wallpaper paths and blur state
             self._load_blur_state()
             # Set preview to current wallpaper (might be blur or original)
             if __debug__:
-                print(
-                    f"[HomeScreenSetting.__init__] Setting preview src to: {self.current_wallpaper_path}"
-                )
-                print(
-                    f"[HomeScreenSetting.__init__] Testing filesystem before set_src..."
-                )
                 # Test direct file access
                 try:
                     file_path = (
@@ -9366,68 +8790,38 @@ class HomeScreenSetting(AnimScreen):
                         else self.current_wallpaper_path
                     )
                     stat_result = io.fatfs.stat(file_path)
-                    print(
-                        f"[HomeScreenSetting.__init__] File {file_path} exists, size: {stat_result[6]}"
-                    )
                 except Exception as file_error:
-                    print(
-                        f"[HomeScreenSetting.__init__] File access error: {file_error}"
-                    )
+                    pass
 
                 # Test simple image creation
                 try:
                     test_img = lv.img(None)
                     test_img.set_src("A:/res/up-home.png")  # PNG test
                     test_src = test_img.get_src()
-                    print(
-                        f"[HomeScreenSetting.__init__] PNG test: {test_src}, type: {type(test_src)}"
-                    )
                     test_img.delete()
 
                     test_img2 = lv.img(None)
                     test_img2.set_src("A:/res/wallpaper-2.jpg")  # JPG test
                     test_src2 = test_img2.get_src()
-                    print(
-                        f"[HomeScreenSetting.__init__] JPG test: {test_src2}, type: {type(test_src2)}"
-                    )
                     test_img2.delete()
                 except Exception as test_error:
-                    print(
-                        f"[HomeScreenSetting.__init__] Simple test error: {test_error}"
-                    )
+                    pass
 
             self.homescreen_preview.set_src(self.current_wallpaper_path)
             if __debug__:
-                print(f"[HomeScreenSetting.__init__] Preview src set successfully")
                 # Check state after initial setup
                 try:
                     initial_src = self.homescreen_preview.get_src()
-                    print(
-                        f"[HomeScreenSetting.__init__] After initial set_src - actual src: {initial_src}"
-                    )
-                    print(
-                        f"[HomeScreenSetting.__init__] After initial set_src - actual type: {type(initial_src)}"
-                    )
 
                     # Blob object is actually normal! Check if null
                     if initial_src is None:
-                        print(
-                            f"[HomeScreenSetting.__init__] Image source is null - this indicates a real problem"
-                        )
                         # If really null, try again
                         self.homescreen_preview.set_src(self.current_wallpaper_path)
                         retry_src = self.homescreen_preview.get_src()
-                        print(
-                            f"[HomeScreenSetting.__init__] After retry - src: {retry_src}"
-                        )
                     else:
-                        print(
-                            f"[HomeScreenSetting.__init__] Image source loaded successfully (Blob is normal data)"
-                        )
+                        pass
                 except Exception as e:
-                    print(
-                        f"[HomeScreenSetting.__init__] Error checking initial src state: {e}"
-                    )
+                    pass
 
         # Use zoom scaling instead of set_size to avoid jagged edges
         self.homescreen_preview.set_size(lv.SIZE.CONTENT, lv.SIZE.CONTENT)
@@ -9482,7 +8876,7 @@ class HomeScreenSetting(AnimScreen):
             self.app_icons.append(icon_img)
         # Create button group
         if __debug__:
-            print("[HomeScreenSetting.__init__] Creating buttons")
+            pass
         self._create_buttons()
 
         # Simplified button positioning - use relative position instead of absolute position
@@ -9499,16 +8893,14 @@ class HomeScreenSetting(AnimScreen):
         self.blur_label.align_to(self.blur_button, lv.ALIGN.OUT_BOTTOM_MID, 0, 4)
 
         if __debug__:
-            print("[HomeScreenSetting.__init__] Loading screen and collecting garbage")
+            pass
         self.load_screen(self)
         gc.collect()
 
     def _create_button_with_label(self, icon_path, text, callback):
         """Create a button with icon and label"""
         if __debug__:
-            print(
-                f"[HomeScreenSetting._create_button_with_label] Creating button with text='{text}', icon='{icon_path}'"
-            )
+            pass
 
         # Create button
         button = lv.btn(self.container)
@@ -9536,22 +8928,13 @@ class HomeScreenSetting(AnimScreen):
             if __debug__:
                 try:
                     actual_icon_src = icon.get_src()
-                    print(
-                        f"[HomeScreenSetting._create_button_with_label] Icon src: {actual_icon_src}, type: {type(actual_icon_src)}"
-                    )
                     # Blob object is actually normal! Not an error!
                     if actual_icon_src is not None:
-                        print(
-                            f"[HomeScreenSetting._create_button_with_label] Button icon loaded (Blob is normal!)"
-                        )
+                        pass
                     else:
-                        print(
-                            f"[HomeScreenSetting._create_button_with_label] Button icon failed - null source"
-                        )
+                        pass
                 except Exception as icon_error:
-                    print(
-                        f"[HomeScreenSetting._create_button_with_label] Icon verification error: {icon_error}"
-                    )
+                    pass
         icon.align(lv.ALIGN.CENTER, 0, 0)
 
         # Create label
@@ -9573,16 +8956,14 @@ class HomeScreenSetting(AnimScreen):
         button.add_event_cb(callback, lv.EVENT.CLICKED, None)
 
         if __debug__:
-            print(
-                f"[HomeScreenSetting._create_button_with_label] Button created successfully, callback added"
-            )
+            pass
 
         return button, icon, label
 
     def _create_buttons(self):
         """Create Change and Blur buttons"""
         if __debug__:
-            print("[HomeScreenSetting._create_buttons] Starting to create buttons...")
+            pass
 
         # Create Change button
         (
@@ -9608,16 +8989,12 @@ class HomeScreenSetting(AnimScreen):
         self._update_blur_button_state()
 
         if __debug__:
-            print(
-                f"[HomeScreenSetting._create_buttons] Buttons created - Change: {self.change_button}, Blur: {self.blur_button}"
-            )
+            pass
 
     def _update_wallpaper(self, wallpaper_path, preserve_blur_state=None):
         """Simplified wallpaper update method"""
         if __debug__:
-            print(
-                f"[HomeScreenSetting._update_wallpaper] Updating wallpaper to {wallpaper_path}, preserve_blur_state: {preserve_blur_state}"
-            )
+            pass
         self.selected_wallpaper = wallpaper_path
         self.original_wallpaper_path = wallpaper_path
 
@@ -9630,9 +9007,7 @@ class HomeScreenSetting(AnimScreen):
                     "A:/res/wallpapers/", "A:1:/res/wallpapers/"
                 )
             if __debug__:
-                print(
-                    f"[HomeScreenSetting._update_wallpaper] Converted path for display: {display_path}"
-                )
+                pass
 
         # Handle blur state preservation
         self.is_blur_active = False  # Default to original
@@ -9643,42 +9018,27 @@ class HomeScreenSetting(AnimScreen):
             blur_path = self._get_blur_wallpaper_path(display_path)
             if blur_path and self._blur_wallpaper_exists(blur_path):
                 if __debug__:
-                    print(
-                        f"[HomeScreenSetting._update_wallpaper] Blur version exists, using blur: {blur_path}"
-                    )
+                    pass
                 final_display_path = blur_path
                 self.is_blur_active = True
             else:
                 if __debug__:
-                    print(
-                        f"[HomeScreenSetting._update_wallpaper] No blur version available for new wallpaper, showing original"
-                    )
+                    pass
 
         self.current_wallpaper_path = final_display_path
         if hasattr(self, "homescreen_preview"):
             if __debug__:
                 blur_status = "blur" if self.is_blur_active else "original"
-                print(
-                    f"[HomeScreenSetting._update_wallpaper] Before set_src - preview: {self.homescreen_preview}"
-                )
-                print(
-                    f"[HomeScreenSetting._update_wallpaper] Setting src to {blur_status} version: {final_display_path}"
-                )
             self.homescreen_preview.set_src(final_display_path)
             if __debug__:
-                print(f"[HomeScreenSetting._update_wallpaper] After set_src - done")
+                pass
         if hasattr(self, "_update_blur_button_state"):
             self._update_blur_button_state()
 
     def on_select_clicked(self, event_obj):
         """Handle Change button click - navigate to wallpaper selection"""
         if __debug__:
-            print(
-                "[HomeScreenSetting.on_select_clicked] Change button clicked - navigating to wallpaper selection"
-            )
-            print(
-                f"[HomeScreenSetting.on_select_clicked] About to create WallperChange with prev_scr: {self}"
-            )
+            pass
         # Navigate to WallperChange for wallpaper selection - pass self as prev_scr
         WallperChange(prev_scr=self)
 
@@ -9687,68 +9047,54 @@ class HomeScreenSetting(AnimScreen):
         event = event_obj.code
         target = event_obj.get_target()
         if __debug__:
-            print(f"[HomeScreenSetting.eventhandler] Event: {event}, Target: {target}")
+            pass
 
         if event == lv.EVENT.CLICKED:
             if utils.lcd_resume():
                 if __debug__:
-                    print("[HomeScreenSetting.eventhandler] LCD resume, returning")
+                    pass
                 return
 
             # Handle navigation buttons
             if isinstance(target, lv.imgbtn):
                 if hasattr(self, "nav_back") and target == self.nav_back.nav_btn:
                     if __debug__:
-                        print("[HomeScreenSetting.eventhandler] Back button clicked")
-                        print(
-                            f"[HomeScreenSetting.eventhandler] prev_scr: {self.prev_scr}"
-                        )
-                        print(
-                            f"[HomeScreenSetting.eventhandler] prev_scr class: {self.prev_scr.__class__.__name__ if hasattr(self.prev_scr, '__class__') else 'Unknown'}"
-                        )
+                        pass
 
                     if self.prev_scr is not None:
                         try:
                             self.load_screen(self.prev_scr, destroy_self=True)
                         except Exception as e:
                             if __debug__:
-                                print(
-                                    f"[HomeScreenSetting.eventhandler] Error loading previous screen: {e}"
-                                )
+                                pass
                             # Fallback: Try to go to WallpaperScreen
                             try:
                                 fallback_screen = WallpaperScreen()
                                 if __debug__:
-                                    print(
-                                        "[HomeScreenSetting.eventhandler] Using fallback: WallpaperScreen"
-                                    )
+                                    pass
                                 self.load_screen(fallback_screen, destroy_self=True)
                             except Exception as fallback_error:
                                 if __debug__:
-                                    print(
-                                        f"[HomeScreenSetting.eventhandler] Fallback also failed: {fallback_error}"
-                                    )
+                                    pass
                     else:
                         if __debug__:
-                            print(
-                                "[HomeScreenSetting.eventhandler] No previous screen to return to!"
-                            )
+                            pass
                     return
                 elif hasattr(self, "rti_btn") and target == self.rti_btn:
                     if __debug__:
-                        print("[HomeScreenSetting.eventhandler] RTI button clicked")
+                        pass
                     self.on_click_ext(target)
                     return
 
         # Other events handled by parent class
         if __debug__:
-            print("[HomeScreenSetting.eventhandler] Passing event to super")
+            pass
         super().eventhandler(event_obj)
 
     def refresh_text(self):
         """Refresh text elements when language changes"""
         if __debug__:
-            print("[HomeScreenSetting.refresh_text] Refreshing text")
+            pass
         if hasattr(self, "change_label"):
             self.change_label.set_text(_(i18n_keys.BUTTON__CHANGE))
 
@@ -9758,18 +9104,14 @@ class HomeScreenSetting(AnimScreen):
         This method will be called by AppDrawer's on_animation_complete callback
         """
         if __debug__:
-            print(
-                f"[HomeScreenSetting.refresh_images_after_animation] Starting refresh for instance {id(self)}"
-            )
+            pass
 
         try:
             if hasattr(self, "homescreen_preview") and self.homescreen_preview:
                 # Check current image source state
                 current_src = self.homescreen_preview.get_src()
                 if __debug__:
-                    print(
-                        f"[HomeScreenSetting.refresh_images_after_animation] Current src: {current_src}, type: {type(current_src)}"
-                    )
+                    pass
 
                 # If Blob object is returned, image object needs to be rebuilt
                 if (
@@ -9778,22 +9120,16 @@ class HomeScreenSetting(AnimScreen):
                     or current_src == ""
                 ):
                     if __debug__:
-                        print(
-                            f"[HomeScreenSetting.refresh_images_after_animation] Detected Blob/null source, rebuilding image object..."
-                        )
+                        pass
 
                     self._rebuild_image_object()
                 else:
                     if __debug__:
-                        print(
-                            f"[HomeScreenSetting.refresh_images_after_animation] Source OK, no refresh needed"
-                        )
+                        pass
 
         except Exception as e:
             if __debug__:
-                print(
-                    f"[HomeScreenSetting.refresh_images_after_animation] Error during refresh: {e}"
-                )
+                pass
 
     def __del__(self):
         """Remove from active list when cleaning up"""
@@ -9808,9 +9144,7 @@ class HomeScreenSetting(AnimScreen):
         Recreate image display using the same method as button icons
         """
         if __debug__:
-            print(
-                f"[HomeScreenSetting._rebuild_image_object] Using button-style image creation..."
-            )
+            pass
 
         try:
             if hasattr(self, "homescreen_preview") and hasattr(
@@ -9846,129 +9180,70 @@ class HomeScreenSetting(AnimScreen):
                 self.homescreen_preview.set_src(target_path)
 
                 if __debug__:
-                    print(
-                        f"[HomeScreenSetting._rebuild_image_object] Button-style image created for: {target_path}"
-                    )
                     # Verify result (if possible)
                     try:
                         test_src = self.homescreen_preview.get_src()
-                        print(
-                            f"[HomeScreenSetting._rebuild_image_object] Result: {test_src}, type: {type(test_src)}"
-                        )
                         if str(test_src).lower() != "blob":
-                            print(
-                                f"[HomeScreenSetting._rebuild_image_object] SUCCESS! Image loaded properly!"
-                            )
+                            pass
                         else:
-                            print(
-                                f"[HomeScreenSetting._rebuild_image_object] Still Blob - deeper issue"
-                            )
+                            pass
                     except Exception as verify_error:
-                        print(
-                            f"[HomeScreenSetting._rebuild_image_object] Verify error: {verify_error}"
-                        )
+                        pass
 
         except Exception as e:
             if __debug__:
-                print(
-                    f"[HomeScreenSetting._rebuild_image_object] Button-style creation error: {e}"
-                )
+                pass
         if hasattr(self, "blur_label"):
             self.blur_label.set_text("Blur")
 
     def on_click_ext(self, target):
         """Handle right navigation button (checkmark) click"""
         if __debug__:
-            print("[HomeScreenSetting.on_click_ext] Right button clicked (checkmark)")
-            print(
-                f"[HomeScreenSetting.on_click_ext] Current blur state: is_blur_active={getattr(self, 'is_blur_active', False)}"
-            )
-            print(
-                f"[HomeScreenSetting.on_click_ext] Original wallpaper path: {getattr(self, 'original_wallpaper_path', 'None')}"
-            )
-            print(
-                f"[HomeScreenSetting.on_click_ext] Current wallpaper path: {getattr(self, 'current_wallpaper_path', 'None')}"
-            )
+            pass
         # Save current wallpaper and return to previous screen
         if hasattr(self, "current_wallpaper_path") and self.current_wallpaper_path:
             storage_device.set_appdrawer_background(self.current_wallpaper_path)
             if __debug__:
-                print(
-                    f"[HomeScreenSetting.on_click_ext] Saved homescreen wallpaper: {self.current_wallpaper_path}"
-                )
                 # Verify what was actually saved - check both storage locations
                 appdrawer_path = storage_device.get_appdrawer_background()
                 homescreen_path = storage_device.get_homescreen()
-                print(
-                    f"[HomeScreenSetting.on_click_ext] Verified appdrawer_background: {appdrawer_path}"
-                )
-                print(
-                    f"[HomeScreenSetting.on_click_ext] Verified homescreen: {homescreen_path}"
-                )
-                print(
-                    f"[HomeScreenSetting.on_click_ext] Appdrawer path contains -blur: {'-blur.' in str(appdrawer_path) if appdrawer_path else False}"
-                )
-                print(
-                    f"[HomeScreenSetting.on_click_ext] Homescreen path contains -blur: {'-blur.' in str(homescreen_path) if homescreen_path else False}"
-                )
 
         # Return to previous screen
         if self.prev_scr is not None:
             if __debug__:
-                print(
-                    f"[HomeScreenSetting.on_click_ext] Returning to previous screen: {self.prev_scr}"
-                )
-                print(
-                    f"[HomeScreenSetting.on_click_ext] Previous screen class: {self.prev_scr.__class__.__name__ if hasattr(self.prev_scr, '__class__') else 'Unknown'}"
-                )
                 # Check if the previous screen is still valid
                 try:
                     if hasattr(self.prev_scr, "is_deleted") and callable(
                         self.prev_scr.is_deleted
                     ):
                         is_deleted = self.prev_scr.is_deleted()
-                        print(
-                            f"[HomeScreenSetting.on_click_ext] Previous screen is_deleted: {is_deleted}"
-                        )
                 except Exception as e:
-                    print(
-                        f"[HomeScreenSetting.on_click_ext] Error checking prev_scr validity: {e}"
-                    )
+                    pass
 
             # Try to load the previous screen
             try:
                 self.load_screen(self.prev_scr, destroy_self=True)
             except Exception as e:
                 if __debug__:
-                    print(
-                        f"[HomeScreenSetting.on_click_ext] Error loading previous screen: {e}"
-                    )
+                    pass
                 # Fallback: Try to go to main wallpaper settings screen
                 try:
                     # Create a new WallpaperScreen instance
                     fallback_screen = WallpaperScreen()
                     if __debug__:
-                        print(
-                            "[HomeScreenSetting.on_click_ext] Using fallback: WallpaperScreen"
-                        )
+                        pass
                     self.load_screen(fallback_screen, destroy_self=True)
                 except Exception as fallback_error:
                     if __debug__:
-                        print(
-                            f"[HomeScreenSetting.on_click_ext] Fallback also failed: {fallback_error}"
-                        )
+                        pass
         else:
             if __debug__:
-                print(
-                    "[HomeScreenSetting.on_click_ext] No previous screen to return to!"
-                )
+                pass
 
     def _get_blur_wallpaper_path(self, original_path):
         """Generate the blur version path from original wallpaper path"""
         if __debug__:
-            print(
-                f"[HomeScreenSetting._get_blur_wallpaper_path] original_path={original_path}"
-            )
+            pass
         if not original_path:
             return None
 
@@ -9980,13 +9255,13 @@ class HomeScreenSetting(AnimScreen):
             blur_path = f"{original_path}-blur"
 
         if __debug__:
-            print(f"[HomeScreenSetting._get_blur_wallpaper_path] blur_path={blur_path}")
+            pass
         return blur_path
 
     def _blur_wallpaper_exists(self, blur_path):
         """Simple check if blur wallpaper exists"""
         if __debug__:
-            print(f"[HomeScreenSetting._blur_wallpaper_exists] blur_path={blur_path}")
+            pass
         if not blur_path:
             return False
 
@@ -10009,30 +9284,22 @@ class HomeScreenSetting(AnimScreen):
             # Directly check if file exists
             io.fatfs.stat(file_path)
             if __debug__:
-                print(
-                    f"[HomeScreenSetting._blur_wallpaper_exists] Blur file exists: {file_path}"
-                )
+                pass
             return True
 
         except Exception as e:
             if __debug__:
-                print(
-                    f"[HomeScreenSetting._blur_wallpaper_exists] Blur file does not exist: {blur_path}, error: {e}"
-                )
+                pass
             # File does not exist or other error
             return False
 
     def _update_blur_button_state(self):
         """Update blur button state"""
         if __debug__:
-            print(
-                "[HomeScreenSetting._update_blur_button_state] Updating blur button state"
-            )
+            pass
         if not hasattr(self, "original_wallpaper_path"):
             if __debug__:
-                print(
-                    "[HomeScreenSetting._update_blur_button_state] No original_wallpaper_path"
-                )
+                pass
             return
 
         blur_path = self._get_blur_wallpaper_path(self.original_wallpaper_path)
@@ -10047,9 +9314,7 @@ class HomeScreenSetting(AnimScreen):
             self.blur_button.set_style_bg_opa(lv.OPA.TRANSP, 0)
             self.blur_button.set_style_border_width(0, 0)
             if __debug__:
-                print(
-                    "[HomeScreenSetting._update_blur_button_state] Blur not available - disabled button"
-                )
+                pass
         else:
             # Has blur version: clickable, restore styles
             self.blur_button.add_flag(lv.obj.FLAG.CLICKABLE)
@@ -10060,32 +9325,26 @@ class HomeScreenSetting(AnimScreen):
             if getattr(self, "is_blur_active", False):
                 icon_path = "A:/res/blur_selected.png"
                 if __debug__:
-                    print(
-                        "[HomeScreenSetting._update_blur_button_state] Blur active - selected state"
-                    )
+                    pass
             else:
                 icon_path = "A:/res/blur_no_selected.png"
                 if __debug__:
-                    print(
-                        "[HomeScreenSetting._update_blur_button_state] Blur available - unselected state"
-                    )
+                    pass
 
         if __debug__:
-            print(
-                f"[HomeScreenSetting._update_blur_button_state] Setting blur_button_icon to {icon_path}"
-            )
+            pass
         self.blur_button_icon.set_src(icon_path)
 
     def on_blur_clicked(self, event_obj):
         """Blur button click - toggle between original and blur images"""
         if __debug__:
-            print("[HomeScreenSetting.on_blur_clicked] Blur button clicked")
+            pass
 
         blur_path = self._get_blur_wallpaper_path(self.original_wallpaper_path)
 
         if not blur_path or not self._blur_wallpaper_exists(blur_path):
             if __debug__:
-                print("[HomeScreenSetting.on_blur_clicked] No blur version available")
+                pass
             return  # No blur version, return directly
 
         # Toggle state
@@ -10108,9 +9367,7 @@ class HomeScreenSetting(AnimScreen):
                         "1:/res/wallpapers/", "A:1:/res/wallpapers/"
                     )
                 if __debug__:
-                    print(
-                        f"[HomeScreenSetting.on_blur_clicked] Using A:1: prefix for ORIGINAL (non-blur): {test_path}"
-                    )
+                    pass
             else:
                 # Blur files use A:1: prefix (consistent with original image)
                 if test_path.startswith("A:/res/wallpapers/"):
@@ -10122,32 +9379,15 @@ class HomeScreenSetting(AnimScreen):
                         "1:/res/wallpapers/", "A:1:/res/wallpapers/"
                     )
                 if __debug__:
-                    print(
-                        f"[HomeScreenSetting.on_blur_clicked] Using A:1: prefix for blur (same as original): {test_path}"
-                    )
+                    pass
 
         if __debug__:
             blur_status = "blur" if self.is_blur_active else "original"
-            print(
-                f"[HomeScreenSetting.on_blur_clicked] Switching to {blur_status} image: {test_path}"
-            )
 
         self.current_wallpaper_path = test_path
-        print(
-            f"[HomeScreenSetting.on_blur_clicked] current_wallpaper_path: {self.current_wallpaper_path}"
-        )
 
         # Add detailed logging
         if __debug__:
-            print(
-                f"[HomeScreenSetting.on_blur_clicked] Before set_src - preview object: {self.homescreen_preview}"
-            )
-            print(
-                f"[HomeScreenSetting.on_blur_clicked] Before set_src - preview parent: {self.homescreen_preview.get_parent()}"
-            )
-            print(
-                f"[HomeScreenSetting.on_blur_clicked] Before set_src - preview size: {self.homescreen_preview.get_width()}x{self.homescreen_preview.get_height()}"
-            )
 
             # Check if file exists and get detailed information
             try:
@@ -10166,66 +9406,34 @@ class HomeScreenSetting(AnimScreen):
 
                 stat_info = io.fatfs.stat(file_path)
                 file_size = stat_info[0]  # First element is file size
-                print(
-                    f"[HomeScreenSetting.on_blur_clicked] File check passed - path: {file_path}, size: {file_size}"
-                )
 
                 # For blur files, skip file header check (file confirmed to exist)
                 if "-blur." in file_path:
-                    print(
-                        f"[HomeScreenSetting.on_blur_clicked] Blur file found and accessible"
-                    )
+                    pass
 
             except Exception as e:
-                print(
-                    f"[HomeScreenSetting.on_blur_clicked] File exists check FAILED for: {file_path}, error: {e}"
-                )
+                pass
 
         # Since it may have become a label, need to check type
         if hasattr(self.homescreen_preview, "set_src"):
             # Use set_src directly, no need to recreate object
             if __debug__:
-                print(
-                    f"[HomeScreenSetting.on_blur_clicked] Setting image src to: {self.current_wallpaper_path}"
-                )
+                pass
             self.homescreen_preview.set_src(self.current_wallpaper_path)
 
-            # 添加显示层面的调试信息
             if __debug__:
-                print(
-                    f"[HomeScreenSetting.on_blur_clicked] Preview object after set_src: {self.homescreen_preview}"
-                )
-                print(
-                    f"[HomeScreenSetting.on_blur_clicked] Preview parent: {self.homescreen_preview.get_parent()}"
-                )
-                print(
-                    f"[HomeScreenSetting.on_blur_clicked] Preview has HIDDEN flag: {self.homescreen_preview.has_flag(lv.obj.FLAG.HIDDEN)}"
-                )
-                print(
-                    f"[HomeScreenSetting.on_blur_clicked] Preview opacity: {self.homescreen_preview.get_style_opa(0)}"
-                )
 
                 # Check container state
                 if hasattr(self, "preview_container"):
-                    print(
-                        f"[HomeScreenSetting.on_blur_clicked] Container has HIDDEN flag: {self.preview_container.has_flag(lv.obj.FLAG.HIDDEN)}"
-                    )
-                    print(
-                        f"[HomeScreenSetting.on_blur_clicked] Container size: {self.preview_container.get_width()}x{self.preview_container.get_height()}"
-                    )
+                    pass
 
                 # Force refresh display
                 try:
                     self.homescreen_preview.invalidate()
                     if hasattr(self, "preview_container"):
                         self.preview_container.invalidate()
-                    print(
-                        f"[HomeScreenSetting.on_blur_clicked] Display refresh triggered"
-                    )
                 except Exception as refresh_error:
-                    print(
-                        f"[HomeScreenSetting.on_blur_clicked] Refresh error: {refresh_error}"
-                    )
+                    pass
         else:
             # Already a label, update text
             filename = (
@@ -10237,42 +9445,22 @@ class HomeScreenSetting(AnimScreen):
             self.homescreen_preview.set_text(display_text)
 
         if __debug__:
-            print(
-                f"[HomeScreenSetting.on_blur_clicked] Set preview to: {self.current_wallpaper_path}"
-            )
             # Check actual state after setting
             try:
                 actual_src = self.homescreen_preview.get_src()
-                print(
-                    f"[HomeScreenSetting.on_blur_clicked] After set_src - actual src: {actual_src}"
-                )
-                print(
-                    f"[HomeScreenSetting.on_blur_clicked] After set_src - actual type: {type(actual_src)}"
-                )
 
                 # Blob is normal, no need to rebuild
                 if actual_src is not None:
-                    print(
-                        f"[HomeScreenSetting.on_blur_clicked] Image source set successfully (Blob is normal)"
-                    )
+                    pass
                 else:
-                    print(
-                        f"[HomeScreenSetting.on_blur_clicked] WARNING: Image source is null"
-                    )
+                    pass
             except Exception as e:
-                print(
-                    f"[HomeScreenSetting.on_blur_clicked] Error checking src state: {e}"
-                )
+                pass
 
         self.invalidate()
 
         if __debug__:
-            print(
-                f"[HomeScreenSetting.on_blur_clicked] Switched to {'blur' if self.is_blur_active else 'original'} wallpaper: {self.current_wallpaper_path}"
-            )
-            print(
-                f"[HomeScreenSetting.on_blur_clicked] NOTE: This change will be saved when user clicks the checkmark button"
-            )
+            pass
 
         # Update button state
         self._update_blur_button_state()
@@ -10288,18 +9476,7 @@ class HomeScreenSetting(AnimScreen):
             )
 
             if __debug__:
-                print(
-                    f"[HomeScreenSetting._load_blur_state] Loading blur state from appdrawer_background: {storage_device.get_appdrawer_background()}"
-                )
-                print(
-                    f"[HomeScreenSetting._load_blur_state] Loading blur state from homescreen: {storage_device.get_homescreen()}"
-                )
-                print(
-                    f"[HomeScreenSetting._load_blur_state] Using final path: {current_homescreen}"
-                )
-                print(
-                    f"[HomeScreenSetting._load_blur_state] Path contains -blur: {'-blur.' in current_homescreen}"
-                )
+                pass
 
             # Check if current homescreen is a blur version (contains '-blur')
             if "-blur." in current_homescreen:
@@ -10320,28 +9497,18 @@ class HomeScreenSetting(AnimScreen):
                 else:
                     self.original_wallpaper_path = current_homescreen  # Fallback
                 if __debug__:
-                    print(f"[HomeScreenSetting._load_blur_state] Detected blur mode")
-                    print(
-                        f"[HomeScreenSetting._load_blur_state] Current (blur): {current_homescreen}"
-                    )
-                    print(
-                        f"[HomeScreenSetting._load_blur_state] Original: {self.original_wallpaper_path}"
-                    )
+                    pass
             else:
                 # Currently showing original version
                 self.is_blur_active = False
                 self.original_wallpaper_path = current_homescreen
                 self.current_wallpaper_path = current_homescreen
                 if __debug__:
-                    print(
-                        f"[HomeScreenSetting._load_blur_state] Detected original mode - path: {self.original_wallpaper_path}"
-                    )
+                    pass
 
         except Exception as e:
             if __debug__:
-                print(
-                    f"[HomeScreenSetting._load_blur_state] Error loading blur state: {e}"
-                )
+                pass
             # Fallback to safe defaults
             current_homescreen = "A:/res/wallpaper-2.jpg"
             self.original_wallpaper_path = current_homescreen
@@ -10351,9 +9518,7 @@ class HomeScreenSetting(AnimScreen):
     def set_wallpaper(self, wallpaper_path):
         """Set wallpaper and update blur button state"""
         if __debug__:
-            print(
-                f"[HomeScreenSetting.set_wallpaper] Setting wallpaper to {wallpaper_path}"
-            )
+            pass
         if wallpaper_path:
             self.original_wallpaper_path = wallpaper_path
             self.current_wallpaper_path = wallpaper_path
@@ -10361,10 +9526,7 @@ class HomeScreenSetting(AnimScreen):
             self.homescreen_preview.set_src(wallpaper_path)
             self._update_blur_button_state()
             if __debug__:
-                print(
-                    f"[HomeScreenSetting.set_wallpaper] Wallpaper set to {wallpaper_path}"
-                )
-
+                pass
 
 class WallPaperManage(Screen):
     def __init__(
@@ -10459,7 +9621,6 @@ class WallPaperManage(Screen):
                         confirm_del_wallpaper(DUMMY_CONTEXT, self.del_callback)
                     )
 
-
 class SecurityScreen(AnimScreen):
     def collect_animation_targets(self) -> list:
         targets = []
@@ -10501,7 +9662,6 @@ class SecurityScreen(AnimScreen):
     def on_click(self, event_obj):
         code = event_obj.code
         target = event_obj.get_target()
-        # pyright: off
         if code == lv.EVENT.CLICKED:
             from trezor.wire import DUMMY_CONTEXT
 
@@ -10549,10 +9709,7 @@ class SecurityScreen(AnimScreen):
                 SafetyCheckSetting(self)
             else:
                 if __debug__:
-                    print("unknown")
-        # pyright: on
-
-
+                    pass
 class DeviceAuthScreen(AnimScreen):
     def collect_animation_targets(self) -> list:
         targets = []
@@ -10624,7 +9781,6 @@ class DeviceAuthScreen(AnimScreen):
         if target == self.btn:
             DeviceAuthTutorial(self)
 
-
 class DeviceAuthTutorial(AnimScreen):
     def collect_animation_targets(self) -> list:
         targets = []
@@ -10687,7 +9843,6 @@ class DeviceAuthTutorial(AnimScreen):
         self.load_screen(self)
         gc.collect()
 
-
 class UsbLockSetting(AnimScreen):
     def collect_animation_targets(self) -> list:
         targets = []
@@ -10745,7 +9900,6 @@ class UsbLockSetting(AnimScreen):
                     )
                     storage_device.set_usb_lock_enable(False)
 
-
 class FingerprintSetting(AnimScreen):
     def __init__(self, prev_scr=None):
         if not hasattr(self, "_init"):
@@ -10784,10 +9938,7 @@ class FingerprintSetting(AnimScreen):
         valid_fps = [fp for fp in self.fingerprint_list if fp is not None]
 
         if __debug__:
-            print(f"fingerprint_list: {self.fingerprint_list}")
-            print(f"group_data: {group_data}")
-            print(f"valid_fps: {valid_fps}")
-            print(f"counter: {counter}")
+            pass
 
         def _filter_and_pad_group(grp, valid_fps):
             if not grp:
@@ -10834,7 +9985,7 @@ class FingerprintSetting(AnimScreen):
                 self.groups = []
 
         if __debug__:
-            print(f"groups: {self.groups}")
+            pass
 
         self.added_fingerprints = []
         if not self.data_new_version:
@@ -10954,7 +10105,6 @@ class FingerprintSetting(AnimScreen):
                 else:
                     storage_device.enable_fingerprint_unlock(False)
 
-
 class SafetyCheckSetting(AnimScreen):
     def collect_animation_targets(self) -> list:
         targets = []
@@ -11048,7 +10198,6 @@ class SafetyCheckSetting(AnimScreen):
         elif code == lv.EVENT.READY:
             self.retrieval_state()
 
-
 class SafetyCheckStrictConfirm(FullSizeWindow):
     def __init__(self, callback_obj):
         super().__init__(
@@ -11070,7 +10219,6 @@ class SafetyCheckStrictConfirm(FullSizeWindow):
                 return
             lv.event_send(self.callback, lv.EVENT.READY, None)
             self.destroy(0)
-
 
 class SafetyCheckPromptConfirm(FullSizeWindow):
     def __init__(self, callback_obj):
@@ -11107,7 +10255,6 @@ class SafetyCheckPromptConfirm(FullSizeWindow):
                 safety_checks.apply_setting(SafetyCheckLevel.PromptTemporarily)
                 self.destroy(0)
         lv.event_send(self.callback, lv.EVENT.READY, None)
-
 
 class WalletScreen(AnimScreen):
     def collect_animation_targets(self) -> list:
@@ -11172,14 +10319,12 @@ class WalletScreen(AnimScreen):
                 from trezor.messages import RecoveryDevice
 
                 utils.set_backup_none()
-                # pyright: off
                 workflow.spawn(
                     recovery_device(
                         DUMMY_CONTEXT,
                         RecoveryDevice(dry_run=True, enforce_wordlist=True),
                     )
                 )
-                # pyright: on
             elif hasattr(self, "mul_share_bk") and target == self.mul_share_bk:
                 from apps.management.recovery_device.create_mul_shares import (
                     create_multi_share_backup,
@@ -11208,7 +10353,6 @@ class WalletScreen(AnimScreen):
             self.trezor_mode.add_state()
         else:
             self.trezor_mode.clear_state()
-
 
 class FidoKeysSetting(AnimScreen):
     def collect_animation_targets(self) -> list:
@@ -11261,7 +10405,6 @@ class FidoKeysSetting(AnimScreen):
             if target == self.fido.switch:
                 FidoKeysToggle(self, not storage_device.is_fido_enabled())
 
-
 class FidoKeysToggle(FullSizeWindow):
     def __init__(self, callback_obj, enable=False):
         super().__init__(
@@ -11293,7 +10436,6 @@ class FidoKeysToggle(FullSizeWindow):
                 loop.pop_tasks_on_iface(io.UART | io.POLL_READ)
                 storage_device.set_fido_enable(self.enable)
                 workflow.spawn(restart_delay())
-
 
 class PassphraseScreen(AnimScreen):
     def collect_animation_targets(self) -> list:
@@ -11513,7 +10655,6 @@ class PassphraseScreen(AnimScreen):
 
                 workflow.spawn(handle_attach_to_pin())
 
-
 class PassphraseTipsConfirm(FullSizeWindow):
     def __init__(
         self,
@@ -11549,7 +10690,6 @@ class PassphraseTipsConfirm(FullSizeWindow):
                 return
             self.show_dismiss_anim()
 
-
 class CryptoScreen(Screen):
     def __init__(self, prev_scr=None):
         if not hasattr(self, "_init"):
@@ -11571,7 +10711,6 @@ class CryptoScreen(Screen):
                 EthereumSetting(self)
             elif target == self.solana:
                 SolanaSetting(self)
-
 
 class TurboModeScreen(AnimScreen):
     def collect_animation_targets(self) -> list:
@@ -11640,7 +10779,6 @@ class TurboModeScreen(AnimScreen):
     def reset_switch(self):
         self.turbo_mode.clear_state()
 
-
 class TurboModeConfirm(FullSizeWindow):
     def __init__(self, callback_obj, enable=False):
         if enable:
@@ -11705,7 +10843,6 @@ class TurboModeConfirm(FullSizeWindow):
             self.slider.clear_flag(lv.obj.FLAG.CLICKABLE)
             self.slider.enable(False)
 
-
 class EthereumSetting(Screen):
     def __init__(self, prev_scr=None):
         if not hasattr(self, "_init"):
@@ -11729,7 +10866,6 @@ class EthereumSetting(Screen):
             if target == self.blind_sign:
                 BlindSign(self, coin_type=_(i18n_keys.TITLE__ETHEREUM))
 
-
 class SolanaSetting(Screen):
     def __init__(self, prev_scr=None):
         if not hasattr(self, "_init"):
@@ -11752,7 +10888,6 @@ class SolanaSetting(Screen):
         if code == lv.EVENT.CLICKED:
             if target == self.blind_sign:
                 BlindSign(self, coin_type=_(i18n_keys.TITLE__SOLANA))
-
 
 class BlindSign(Screen):
     def __init__(self, prev_scr=None, coin_type: str = _(i18n_keys.TITLE__ETHEREUM)):
@@ -11793,7 +10928,6 @@ class BlindSign(Screen):
                     )
                 else:
                     pass
-
 
 class UserGuide(AnimScreen):
     def collect_animation_targets(self) -> list:
@@ -11854,7 +10988,7 @@ class UserGuide(AnimScreen):
                 HelpDetails()
             else:
                 if __debug__:
-                    print("Unknown")
+                    pass
 
     def _load_scr(self, scr: "AnimScreen", back: bool = False) -> None:
         if self.from_appdrawer:
@@ -11862,7 +10996,6 @@ class UserGuide(AnimScreen):
             lv.scr_load(scr)
         else:
             super()._load_scr(scr, back)
-
 
 class BaseTutorial(AnimScreen):
     def collect_animation_targets(self) -> list:
@@ -11926,8 +11059,7 @@ class BaseTutorial(AnimScreen):
                 RecoveryPhraseDetails()
             else:
                 if __debug__:
-                    print("Unknown")
-
+                    pass
 
 class SecurityProtection(AnimScreen):
     def collect_animation_targets(self) -> list:
@@ -12015,8 +11147,7 @@ class SecurityProtection(AnimScreen):
                 PasskeysRegister()
             else:
                 if __debug__:
-                    print("Unknown")
-
+                    pass
 
 class AttachToPinDetails(FullSizeWindow):
     def __init__(self):
@@ -12036,7 +11167,6 @@ class AttachToPinDetails(FullSizeWindow):
         self.item.label.set_style_text_color(lv_colors.WHITE_2, 0)
         self.item.label.align_to(self.item.label_top, lv.ALIGN.OUT_BOTTOM_LEFT, 0, 16)
         self.item.label.set_long_mode(lv.label.LONG.WRAP)
-
 
 class PowerOnOffDetails(FullSizeWindow):
     def __init__(self):
@@ -12058,7 +11188,6 @@ class PowerOnOffDetails(FullSizeWindow):
 
     # def destroy(self, _delay):
     #     return self.delete()
-
 
 class RecoveryPhraseDetails(FullSizeWindow):
     def __init__(self):
@@ -12082,7 +11211,6 @@ class RecoveryPhraseDetails(FullSizeWindow):
     # def destroy(self, _delay):
     #     return self.delete()
 
-
 class PinProtectionDetails(FullSizeWindow):
     def __init__(self):
         super().__init__(
@@ -12105,7 +11233,6 @@ class PinProtectionDetails(FullSizeWindow):
     # def destroy(self, _delay):
     #     return self.delete()
 
-
 class FingerprintDetails(FullSizeWindow):
     def __init__(self):
         super().__init__(
@@ -12125,7 +11252,6 @@ class FingerprintDetails(FullSizeWindow):
         self.item.label_top.set_style_text_color(lv_colors.WHITE, 0)
         self.item.label.set_style_text_color(lv_colors.WHITE_2, 0)
         self.item.label.set_long_mode(lv.label.LONG.WRAP)
-
 
 class HardwareWalletDetails(FullSizeWindow):
     def __init__(self):
@@ -12149,7 +11275,6 @@ class HardwareWalletDetails(FullSizeWindow):
     # def destroy(self, _delay):
     #     return self.delete()
 
-
 class PassphraseDetails(FullSizeWindow):
     def __init__(self):
         super().__init__(
@@ -12171,7 +11296,6 @@ class PassphraseDetails(FullSizeWindow):
 
     # def destroy(self, _delay):
     #     return self.delete()
-
 
 class HelpDetails(FullSizeWindow):
     def __init__(self):
