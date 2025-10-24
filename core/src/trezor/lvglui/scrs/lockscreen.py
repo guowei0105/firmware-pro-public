@@ -334,11 +334,16 @@ class LockScreen(Screen):
     def eventhandler(self, event_obj: lv.event_t):
         code = event_obj.code
         if code == lv.EVENT.CLICKED:
+            if __debug__:
+                print("[LOCKSCREEN] eventhandler: CLICKED event received")
+
             if self.channel.takers:
                 self.channel.publish("clicked")
             else:
                 if not ui.display.backlight():
                     if not storage_device.is_tap_awake_enabled():
+                        if __debug__:
+                            print("[LOCKSCREEN] Tap awake disabled, ignoring click")
                         return
                     else:
                         indev = lv.indev_get_act()
@@ -346,29 +351,78 @@ class LockScreen(Screen):
                         indev.get_point(point)
                         is_double = self.double_click.handle_click(point)
                         if not is_double:
+                            if __debug__:
+                                print("[LOCKSCREEN] Not a double click, ignoring")
                             return
 
                 if utils.turn_on_lcd_if_possible():
+                    if __debug__:
+                        print("[LOCKSCREEN] LCD turned on")
                     return
-                from trezor import workflow
-                from apps.base import unlock_device
 
-                workflow.spawn(unlock_device())
-                import storage.cache
+                # Avoid circular import by deferring the import
+                try:
+                    if __debug__:
+                        print("[LOCKSCREEN] Starting unlock process")
+                    from trezor import workflow
 
-                storage.cache.start_session()
+                    # Schedule unlock_device to run asynchronously to avoid blocking
+                    def start_unlock():
+                        try:
+                            from apps.base import unlock_device
+                            workflow.spawn(unlock_device())
+                            if __debug__:
+                                print("[LOCKSCREEN] Unlock workflow spawned")
+                        except Exception as e:
+                            if __debug__:
+                                print(f"[LOCKSCREEN] Error spawning unlock workflow: {e}")
+
+                    # Use schedule to run the unlock process in the next event loop iteration
+                    from trezor import loop
+                    loop.schedule(start_unlock())
+
+                    import storage.cache
+                    storage.cache.start_session()
+                    if __debug__:
+                        print("[LOCKSCREEN] Cache session started")
+                except Exception as e:
+                    if __debug__:
+                        print(f"[LOCKSCREEN] Error in unlock process: {e}")
 
     def on_slide_up(self, event_obj: lv.event_t):
         code = event_obj.code
         if code == lv.EVENT.GESTURE:
             _dir = lv.indev_get_act().get_gesture_dir()
             if _dir == lv.DIR.TOP:
-                if not ui.display.backlight():
-                    return
-                from trezor import workflow
-                from apps.base import unlock_device
+                if __debug__:
+                    print("[LOCKSCREEN] Slide up gesture detected")
 
-                workflow.spawn(unlock_device())
+                if not ui.display.backlight():
+                    if __debug__:
+                        print("[LOCKSCREEN] Display backlight off, ignoring gesture")
+                    return
+
+                # Avoid circular import by deferring the import
+                try:
+                    if __debug__:
+                        print("[LOCKSCREEN] Starting unlock via slide up")
+                    from trezor import workflow
+
+                    def start_unlock_slide():
+                        try:
+                            from apps.base import unlock_device
+                            workflow.spawn(unlock_device())
+                            if __debug__:
+                                print("[LOCKSCREEN] Unlock via slide spawned")
+                        except Exception as e:
+                            if __debug__:
+                                print(f"[LOCKSCREEN] Error in slide unlock: {e}")
+
+                    from trezor import loop
+                    loop.schedule(start_unlock_slide())
+                except Exception as e:
+                    if __debug__:
+                        print(f"[LOCKSCREEN] Error processing slide up: {e}")
 
     def _load_scr(self, scr: "Screen", back: bool = False) -> None:
         lv.scr_load(scr)
