@@ -5988,12 +5988,18 @@ class AppdrawerBackgroundSetting(AnimScreen):
                 self.selected_wallpaper = selected_wallpaper
                 self.current_wallpaper_path = selected_wallpaper
                 if hasattr(self, "lockscreen_preview"):
-                    # Use the selected wallpaper path directly (already in correct format)
-                    self.lockscreen_preview.set_src(selected_wallpaper)
+                    # IMPORTANT: Check for A:1: prefix to prevent LVGL crash
+                    safe_preview_path = selected_wallpaper
+                    if selected_wallpaper and selected_wallpaper.startswith("A:1:"):
+                        if __debug__:
+                            print(f"AppdrawerBackgroundSetting: Re-init WARNING - A:1: path detected: {selected_wallpaper}")
+                            print("AppdrawerBackgroundSetting: Using default for preview to prevent crash")
+                        safe_preview_path = utils.get_default_wallpaper()
+
+                    self.lockscreen_preview.set_src(safe_preview_path)
                     if __debug__:
-                        print(
-                            f"AppdrawerBackgroundSetting: Updated wallpaper to {selected_wallpaper}"
-                        )
+                        print(f"AppdrawerBackgroundSetting: Updated preview to safe path: {safe_preview_path}")
+                        print(f"AppdrawerBackgroundSetting: Original path kept: {selected_wallpaper}")
             self.refresh_text()
             return
 
@@ -6092,17 +6098,37 @@ class AppdrawerBackgroundSetting(AnimScreen):
                     )
                 except Exception as e:
                     print(f"AppdrawerBackgroundSetting: File check failed: {e}")
-            self.lockscreen_preview.set_src(display_path)
+            # IMPORTANT: Cannot use A:1: paths with LVGL - will cause crash
+            # For preview, we need to handle this carefully
+            safe_preview_path = display_path
+            if display_path and display_path.startswith("A:1:"):
+                if __debug__:
+                    print(f"AppdrawerBackgroundSetting: WARNING - A:1: path detected in preview: {display_path}")
+                    print("AppdrawerBackgroundSetting: Using default wallpaper for preview to prevent crash")
+                # Use default wallpaper for preview to prevent LVGL crash
+                safe_preview_path = utils.get_default_wallpaper()
+                # Show a warning or indication that custom wallpaper preview is not available
+                # But still keep the original path for saving if user confirms
+
+            self.lockscreen_preview.set_src(safe_preview_path)
             if __debug__:
-                print(
-                    f"AppdrawerBackgroundSetting: Preview src set, current_wallpaper_path: {self.current_wallpaper_path}"
-                )
+                print(f"AppdrawerBackgroundSetting: Preview src set to safe path: {safe_preview_path}")
+                print(f"AppdrawerBackgroundSetting: Original path kept for saving: {self.current_wallpaper_path}")
         else:
             # Get current lock screen image from storage
             lockscreen_path = storage_device.get_homescreen()
             if lockscreen_path:
                 self.current_wallpaper_path = lockscreen_path
-                self.lockscreen_preview.set_src(lockscreen_path)
+                # IMPORTANT: Check for A:1: prefix to prevent LVGL crash
+                safe_preview_path = lockscreen_path
+                if lockscreen_path.startswith("A:1:"):
+                    if __debug__:
+                        print(f"AppdrawerBackgroundSetting: Current lockscreen has A:1: path: {lockscreen_path}")
+                        print("AppdrawerBackgroundSetting: Using default for preview to prevent crash")
+                    safe_preview_path = utils.get_default_wallpaper()
+                self.lockscreen_preview.set_src(safe_preview_path)
+                if __debug__:
+                    print(f"AppdrawerBackgroundSetting: Preview using safe path: {safe_preview_path}")
             else:
                 # Use default wallpaper if no custom lockscreen is set
                 self.current_wallpaper_path = "A:/res/wallpaper-2.jpg"
@@ -9161,21 +9187,24 @@ class HomeScreenSetting(AnimScreen):
                 self.selected_wallpaper = selected_wallpaper
                 self.original_wallpaper_path = selected_wallpaper
 
-                # Convert path if needed for custom wallpapers
+                # IMPORTANT: Do NOT convert A: to A:1: - LVGL cannot handle A:1: paths!
+                # Check if this is a custom wallpaper with A:1: prefix that needs protection
                 display_path = selected_wallpaper
-                if selected_wallpaper and "/res/wallpapers/" in selected_wallpaper:
-                    if selected_wallpaper.startswith("A:/res/wallpapers/"):
-                        display_path = selected_wallpaper.replace(
-                            "A:/res/wallpapers/", "A:1:/res/wallpapers/"
-                        )
+                safe_display_path = display_path
+
+                if display_path and display_path.startswith("A:1:"):
                     if __debug__:
-                        print(
-                            f"[HomeScreenSetting.__init__] Converted path for display: {display_path}"
-                        )
+                        print(f"[HomeScreenSetting.__init__] WARNING: A:1: path detected: {display_path}")
+                        print("[HomeScreenSetting.__init__] Using default wallpaper for preview to prevent crash")
+                    # Cannot use A:1: paths with LVGL - use default for preview
+                    safe_display_path = utils.get_default_wallpaper()
+                else:
+                    if __debug__:
+                        print(f"[HomeScreenSetting.__init__] Safe path for display: {display_path}")
 
                 # Handle blur state preservation
                 self.is_blur_active = False  # Default to original
-                final_display_path = display_path
+                final_display_path = safe_display_path
 
                 # If we should preserve blur state and it was active, check for blur version
                 if preserve_blur_state and preserve_blur_state is True:
@@ -9293,43 +9322,53 @@ class HomeScreenSetting(AnimScreen):
                 )
             self.original_wallpaper_path = self.selected_wallpaper
 
-            # For Custom wallpapers, need to convert path for display
+            # IMPORTANT: Do NOT convert A: to A:1: - LVGL cannot handle A:1: paths!
+            # Check for A:1: prefix and use default wallpaper for preview if found
             display_path = self.selected_wallpaper
-            if (
-                self.selected_wallpaper
-                and "/res/wallpapers/" in self.selected_wallpaper
-            ):
-                # Use A:1: prefix (previously worked)
-                if self.selected_wallpaper.startswith("A:/res/wallpapers/"):
-                    display_path = self.selected_wallpaper.replace(
-                        "A:/res/wallpapers/", "A:1:/res/wallpapers/"
-                    )
+            safe_display_path = display_path
+
+            if display_path and display_path.startswith("A:1:"):
                 if __debug__:
-                    print(
-                        f"[HomeScreenSetting.__init__] Converted path for display: {display_path}"
-                    )
+                    print(f"[HomeScreenSetting.__init__] WARNING: A:1: path detected: {display_path}")
+                    print("[HomeScreenSetting.__init__] Using default wallpaper for preview to prevent crash")
+                # Cannot use A:1: paths with LVGL - use default for preview
+                safe_display_path = utils.get_default_wallpaper()
+                # Keep original path for saving later if user confirms
+            else:
+                if __debug__:
+                    print(f"[HomeScreenSetting.__init__] Safe path for display: {display_path}")
 
             # Handle blur state preservation
             self.is_blur_active = False  # Default to original
-            final_display_path = display_path
+            final_display_path = safe_display_path
 
             # If we should preserve blur state and it was active, check for blur version
             if preserve_blur_state and preserve_blur_state is True:
                 blur_path = self._get_blur_wallpaper_path(display_path)
                 if blur_path and self._blur_wallpaper_exists(blur_path):
-                    if __debug__:
-                        print(
-                            f"[HomeScreenSetting.__init__] Blur version exists, using blur: {blur_path}"
-                        )
-                    final_display_path = blur_path
-                    self.is_blur_active = True
+                    # Check if blur path has A:1: prefix
+                    if blur_path.startswith("A:1:"):
+                        if __debug__:
+                            print(f"[HomeScreenSetting.__init__] Blur path has A:1: prefix: {blur_path}")
+                            print("[HomeScreenSetting.__init__] Cannot use blur version, using default")
+                        # Keep default wallpaper for safety
+                    else:
+                        if __debug__:
+                            print(f"[HomeScreenSetting.__init__] Blur version exists and safe, using blur: {blur_path}")
+                        final_display_path = blur_path
+                        self.is_blur_active = True
                 else:
                     if __debug__:
-                        print(
-                            f"[HomeScreenSetting.__init__] No blur version available for new wallpaper, showing original"
-                        )
+                        print(f"[HomeScreenSetting.__init__] No blur version available for new wallpaper, showing original")
 
             self.current_wallpaper_path = final_display_path
+
+            # Final safety check before setting preview
+            if final_display_path and final_display_path.startswith("A:1:"):
+                if __debug__:
+                    print(f"[HomeScreenSetting.__init__] Final path still has A:1:, using default: {final_display_path}")
+                final_display_path = utils.get_default_wallpaper()
+
             self.homescreen_preview.set_src(final_display_path)
             if __debug__:
                 blur_status = "blur" if self.is_blur_active else "original"
@@ -9392,9 +9431,17 @@ class HomeScreenSetting(AnimScreen):
                         f"[HomeScreenSetting.__init__] Simple test error: {test_error}"
                     )
 
-            self.homescreen_preview.set_src(self.current_wallpaper_path)
+            # Final safety check before setting preview
+            safe_preview_path = self.current_wallpaper_path
+            if self.current_wallpaper_path and self.current_wallpaper_path.startswith("A:1:"):
+                if __debug__:
+                    print(f"[HomeScreenSetting.__init__] Current path has A:1: prefix: {self.current_wallpaper_path}")
+                    print("[HomeScreenSetting.__init__] Using default wallpaper for preview")
+                safe_preview_path = utils.get_default_wallpaper()
+
+            self.homescreen_preview.set_src(safe_preview_path)
             if __debug__:
-                print(f"[HomeScreenSetting.__init__] Preview src set successfully")
+                print(f"[HomeScreenSetting.__init__] Preview src set to safe path: {safe_preview_path}")
                 # Check state after initial setup
                 try:
                     initial_src = self.homescreen_preview.get_src()
