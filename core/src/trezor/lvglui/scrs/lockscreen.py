@@ -32,6 +32,51 @@ class LockScreen(Screen):
 
     def __init__(self, device_name, ble_name="", dev_state=None):
         lockscreen = storage_device.get_homescreen()
+
+        # Fix for custom wallpaper path format issue that causes crash
+        # Validate and convert wallpaper paths to prevent system crash
+        if lockscreen:
+            # Check if it's a custom wallpaper path
+            if lockscreen.startswith("A:1:/res/wallpapers/"):
+                # Custom wallpaper from external storage
+                try:
+                    # Verify the file exists by checking with fatfs
+                    # Convert A:1:/res/wallpapers/ to 1:/res/wallpapers/ for fatfs
+                    fatfs_path = lockscreen.replace("A:1:/res/wallpapers/", "1:/res/wallpapers/")
+                    if fatfs_path.startswith("A:"):
+                        fatfs_path = lockscreen[2:]  # Remove A: prefix
+
+                    # Try to stat the file to verify it exists
+                    import io
+                    stat_info = io.fatfs.stat(fatfs_path)
+                    if __debug__:
+                        print(f"[LOCKSCREEN] Custom wallpaper verified: {lockscreen}, size: {stat_info[0]} bytes")
+                    # File exists, keep the original path
+                    # LVGL should handle A:1: paths for custom wallpapers
+                except Exception as e:
+                    # File doesn't exist or path is invalid
+                    if __debug__:
+                        print(f"[LOCKSCREEN] Custom wallpaper not found or invalid: {lockscreen}")
+                        print(f"[LOCKSCREEN] Error: {e}")
+                        print(f"[LOCKSCREEN] Falling back to default wallpaper")
+                    lockscreen = utils.get_default_wallpaper()
+            elif lockscreen.startswith("A:1:/res/nfts/"):
+                # NFT wallpaper path - these should be kept as is
+                if __debug__:
+                    print(f"[LOCKSCREEN] NFT wallpaper detected: {lockscreen}")
+                # Keep the original path for NFTs
+            elif not lockscreen.startswith("A:/res/"):
+                # Invalid path format, use default
+                if __debug__:
+                    print(f"[LOCKSCREEN] Invalid wallpaper path format: {lockscreen}")
+                    print(f"[LOCKSCREEN] Using default wallpaper")
+                lockscreen = utils.get_default_wallpaper()
+        else:
+            # No wallpaper set, use default
+            lockscreen = utils.get_default_wallpaper()
+            if __debug__:
+                print(f"[LOCKSCREEN] No wallpaper set, using default: {lockscreen}")
+
         self.double_click = DoubleClickDetector(click_timeout=800, click_dist=50)
         if not hasattr(self, "_init"):
             self._init = True
@@ -70,6 +115,36 @@ class LockScreen(Screen):
                         f"[LOCKSCREEN] Not showing device names, initialized without title/subtitle"
                     )
         else:
+            # Re-validate wallpaper path when re-initializing (same logic as above)
+            if lockscreen:
+                if lockscreen.startswith("A:1:/res/wallpapers/"):
+                    try:
+                        fatfs_path = lockscreen.replace("A:1:/res/wallpapers/", "1:/res/wallpapers/")
+                        if fatfs_path.startswith("A:"):
+                            fatfs_path = lockscreen[2:]
+                        import io
+                        stat_info = io.fatfs.stat(fatfs_path)
+                        if __debug__:
+                            print(f"[LOCKSCREEN] Re-init: Custom wallpaper verified: {lockscreen}, size: {stat_info[0]} bytes")
+                    except Exception as e:
+                        if __debug__:
+                            print(f"[LOCKSCREEN] Re-init: Custom wallpaper not found: {lockscreen}")
+                            print(f"[LOCKSCREEN] Re-init: Error: {e}")
+                            print(f"[LOCKSCREEN] Re-init: Falling back to default wallpaper")
+                        lockscreen = utils.get_default_wallpaper()
+                elif lockscreen.startswith("A:1:/res/nfts/"):
+                    if __debug__:
+                        print(f"[LOCKSCREEN] Re-init: NFT wallpaper detected: {lockscreen}")
+                elif not lockscreen.startswith("A:/res/"):
+                    if __debug__:
+                        print(f"[LOCKSCREEN] Re-init: Invalid wallpaper path: {lockscreen}")
+                        print(f"[LOCKSCREEN] Re-init: Using default wallpaper")
+                    lockscreen = utils.get_default_wallpaper()
+            else:
+                lockscreen = utils.get_default_wallpaper()
+                if __debug__:
+                    print(f"[LOCKSCREEN] Re-init: No wallpaper set, using default: {lockscreen}")
+
             # Check if device name display setting has changed
             show_device_names = storage_device.is_device_name_display_enabled()
 
