@@ -31,46 +31,64 @@ class LockScreen(Screen):
         return False, None
 
     def __init__(self, device_name, ble_name="", dev_state=None):
-        lockscreen = storage_device.get_homescreen()
+        if __debug__:
+            print(f"[LOCKSCREEN] __init__ starting with device_name: {device_name}")
+
+        # Protect against infinite recursion during storage access
+        try:
+            lockscreen = storage_device.get_homescreen()
+            if __debug__:
+                print(f"[LOCKSCREEN] Retrieved homescreen path: {lockscreen}")
+        except Exception as e:
+            if __debug__:
+                print(f"[LOCKSCREEN] ERROR getting homescreen: {e}")
+            lockscreen = None
 
         # Fix for custom wallpaper path format issue that causes crash
-        # Validate and convert wallpaper paths to prevent system crash
+        # IMPORTANT: LVGL cannot handle A:1: prefix paths - must use default wallpaper
         if lockscreen:
-            # Check if it's a custom wallpaper path
-            if lockscreen.startswith("A:1:/res/wallpapers/"):
-                # Custom wallpaper from external storage
-                try:
-                    # Verify the file exists by checking with fatfs
-                    # Convert A:1:/res/wallpapers/ to 1:/res/wallpapers/ for fatfs
-                    fatfs_path = lockscreen.replace("A:1:/res/wallpapers/", "1:/res/wallpapers/")
-                    if fatfs_path.startswith("A:"):
-                        fatfs_path = lockscreen[2:]  # Remove A: prefix
+            original_lockscreen = lockscreen  # Keep original for debugging
 
-                    # Try to stat the file to verify it exists
-                    import io
-                    stat_info = io.fatfs.stat(fatfs_path)
-                    if __debug__:
-                        print(f"[LOCKSCREEN] Custom wallpaper verified: {lockscreen}, size: {stat_info[0]} bytes")
-                    # File exists, keep the original path
-                    # LVGL should handle A:1: paths for custom wallpapers
-                except Exception as e:
-                    # File doesn't exist or path is invalid
-                    if __debug__:
-                        print(f"[LOCKSCREEN] Custom wallpaper not found or invalid: {lockscreen}")
-                        print(f"[LOCKSCREEN] Error: {e}")
-                        print(f"[LOCKSCREEN] Falling back to default wallpaper")
-                    lockscreen = utils.get_default_wallpaper()
-            elif lockscreen.startswith("A:1:/res/nfts/"):
-                # NFT wallpaper path - these should be kept as is
+            # Check if it's a custom wallpaper or NFT path with A:1: prefix
+            if lockscreen.startswith("A:1:"):
+                # LVGL crashes with A:1: paths - must use a safe fallback
+                # This includes custom wallpapers (A:1:/res/wallpapers/) and NFTs (A:1:/res/nfts/)
                 if __debug__:
-                    print(f"[LOCKSCREEN] NFT wallpaper detected: {lockscreen}")
-                # Keep the original path for NFTs
+                    print(f"[LOCKSCREEN] WARNING: Custom path detected that crashes LVGL: {lockscreen}")
+                    print(f"[LOCKSCREEN] Using default wallpaper to prevent crash")
+
+                # Use default wallpaper to prevent system crash
+                lockscreen = utils.get_default_wallpaper()
+
+                # Try to verify the original file exists (for debugging)
+                if __debug__:
+                    try:
+                        # Convert for fatfs verification
+                        if original_lockscreen.startswith("A:1:/res/wallpapers/"):
+                            fatfs_path = original_lockscreen.replace("A:1:/res/wallpapers/", "1:/res/wallpapers/")
+                        elif original_lockscreen.startswith("A:1:/res/nfts/"):
+                            fatfs_path = original_lockscreen.replace("A:1:/res/nfts/", "1:/res/nfts/")
+                        else:
+                            fatfs_path = original_lockscreen[2:]  # Remove A: prefix
+
+                        import io
+                        stat_info = io.fatfs.stat(fatfs_path)
+                        print(f"[LOCKSCREEN] Original file exists: {original_lockscreen}, size: {stat_info[0]} bytes")
+                        print(f"[LOCKSCREEN] But cannot use it due to LVGL A:1: path crash issue")
+                    except Exception as e:
+                        print(f"[LOCKSCREEN] Original file not found: {original_lockscreen}")
+                        print(f"[LOCKSCREEN] Error: {e}")
+
             elif not lockscreen.startswith("A:/res/"):
                 # Invalid path format, use default
                 if __debug__:
                     print(f"[LOCKSCREEN] Invalid wallpaper path format: {lockscreen}")
                     print(f"[LOCKSCREEN] Using default wallpaper")
                 lockscreen = utils.get_default_wallpaper()
+            else:
+                # Valid system wallpaper path (A:/res/wallpaper-x.jpg)
+                if __debug__:
+                    print(f"[LOCKSCREEN] Using system wallpaper: {lockscreen}")
         else:
             # No wallpaper set, use default
             lockscreen = utils.get_default_wallpaper()
@@ -117,29 +135,46 @@ class LockScreen(Screen):
         else:
             # Re-validate wallpaper path when re-initializing (same logic as above)
             if lockscreen:
-                if lockscreen.startswith("A:1:/res/wallpapers/"):
-                    try:
-                        fatfs_path = lockscreen.replace("A:1:/res/wallpapers/", "1:/res/wallpapers/")
-                        if fatfs_path.startswith("A:"):
-                            fatfs_path = lockscreen[2:]
-                        import io
-                        stat_info = io.fatfs.stat(fatfs_path)
-                        if __debug__:
-                            print(f"[LOCKSCREEN] Re-init: Custom wallpaper verified: {lockscreen}, size: {stat_info[0]} bytes")
-                    except Exception as e:
-                        if __debug__:
-                            print(f"[LOCKSCREEN] Re-init: Custom wallpaper not found: {lockscreen}")
-                            print(f"[LOCKSCREEN] Re-init: Error: {e}")
-                            print(f"[LOCKSCREEN] Re-init: Falling back to default wallpaper")
-                        lockscreen = utils.get_default_wallpaper()
-                elif lockscreen.startswith("A:1:/res/nfts/"):
+                original_lockscreen = lockscreen  # Keep original for debugging
+
+                # Check if it's a custom wallpaper or NFT path with A:1: prefix
+                if lockscreen.startswith("A:1:"):
+                    # LVGL crashes with A:1: paths - must use a safe fallback
                     if __debug__:
-                        print(f"[LOCKSCREEN] Re-init: NFT wallpaper detected: {lockscreen}")
+                        print(f"[LOCKSCREEN] Re-init WARNING: Custom path detected that crashes LVGL: {lockscreen}")
+                        print(f"[LOCKSCREEN] Re-init: Using default wallpaper to prevent crash")
+
+                    # Use default wallpaper to prevent system crash
+                    lockscreen = utils.get_default_wallpaper()
+
+                    # Debug verification
+                    if __debug__:
+                        try:
+                            if original_lockscreen.startswith("A:1:/res/wallpapers/"):
+                                fatfs_path = original_lockscreen.replace("A:1:/res/wallpapers/", "1:/res/wallpapers/")
+                            elif original_lockscreen.startswith("A:1:/res/nfts/"):
+                                fatfs_path = original_lockscreen.replace("A:1:/res/nfts/", "1:/res/nfts/")
+                            else:
+                                fatfs_path = original_lockscreen[2:]
+
+                            import io
+                            stat_info = io.fatfs.stat(fatfs_path)
+                            print(f"[LOCKSCREEN] Re-init: Original file exists: {original_lockscreen}, size: {stat_info[0]} bytes")
+                            print(f"[LOCKSCREEN] Re-init: But cannot use it due to LVGL A:1: path crash issue")
+                        except Exception as e:
+                            print(f"[LOCKSCREEN] Re-init: Original file not found: {original_lockscreen}")
+                            print(f"[LOCKSCREEN] Re-init: Error: {e}")
+
                 elif not lockscreen.startswith("A:/res/"):
+                    # Invalid path format, use default
                     if __debug__:
                         print(f"[LOCKSCREEN] Re-init: Invalid wallpaper path: {lockscreen}")
                         print(f"[LOCKSCREEN] Re-init: Using default wallpaper")
                     lockscreen = utils.get_default_wallpaper()
+                else:
+                    # Valid system wallpaper path
+                    if __debug__:
+                        print(f"[LOCKSCREEN] Re-init: Using system wallpaper: {lockscreen}")
             else:
                 lockscreen = utils.get_default_wallpaper()
                 if __debug__:

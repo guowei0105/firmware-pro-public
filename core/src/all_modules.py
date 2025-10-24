@@ -165,24 +165,8 @@ trezor.lvglui.i18n.keys
 import trezor.lvglui.i18n.keys
 trezor.lvglui.i18n.locales
 import trezor.lvglui.i18n.locales
-trezor.lvglui.i18n.locales.de
-import trezor.lvglui.i18n.locales.de
 trezor.lvglui.i18n.locales.en
 import trezor.lvglui.i18n.locales.en
-trezor.lvglui.i18n.locales.es
-import trezor.lvglui.i18n.locales.es
-trezor.lvglui.i18n.locales.fr
-import trezor.lvglui.i18n.locales.fr
-trezor.lvglui.i18n.locales.it
-import trezor.lvglui.i18n.locales.it
-trezor.lvglui.i18n.locales.ja
-import trezor.lvglui.i18n.locales.ja
-trezor.lvglui.i18n.locales.ko
-import trezor.lvglui.i18n.locales.ko
-trezor.lvglui.i18n.locales.pt_br
-import trezor.lvglui.i18n.locales.pt_br
-trezor.lvglui.i18n.locales.ru
-import trezor.lvglui.i18n.locales.ru
 trezor.lvglui.i18n.locales.zh_cn
 import trezor.lvglui.i18n.locales.zh_cn
 trezor.lvglui.i18n.locales.zh_hk
