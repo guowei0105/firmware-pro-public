@@ -65,6 +65,32 @@ _busy_show_delay_ms = 800  # Delay before showing Processing text
 _restore_timer = None  # LVGL timer for debounced restore to AppDrawer
 
 
+def _lvgl_safe_wallpaper_src(path: str | None, context: str = "") -> str:
+    """
+    Return wallpaper path for LVGL usage.
+
+    LVGL natively supports both A: and A:1: path formats through lv_fs_get_real_path().
+    No conversion needed - pass paths through as-is.
+
+    Path formats (all supported):
+    - A:/res/... = Built-in resources (ROM/Flash)
+    - A:1:/res/... = External storage (SD card/fatfs)
+    """
+    if not path:
+        return utils.get_default_wallpaper()
+
+    if isinstance(path, bytes):
+        try:
+            path = path.decode()
+        except Exception:
+            if __debug__:
+                print(f"[WallpaperSafePath] {context} failed to decode path, using default")
+            return utils.get_default_wallpaper()
+
+    # Return path as-is - LVGL handles all path formats natively
+    return path
+
+
 def get_timestamp():
     """Get current timestamp in milliseconds"""
     return utime.ticks_ms()
@@ -135,13 +161,27 @@ def force_memory_cleanup():
 
 
 def get_cached_style(image_src):
-    """Get cached style objects to avoid repeated creation - TEMPORARILY DISABLED"""
-    print(f"[get_cached_style] DISABLED: Called with {image_src}")
-    
-    # TEMPORARY FIX: Return None to completely avoid StyleWrapper issues
-    # This will cause calling code to fail gracefully or skip style application
-    print("[get_cached_style] DISABLED: Returning None for stability")
-    return None
+    """Get cached style objects to avoid repeated creation"""
+    global _cached_styles
+
+    # Convert path to safe filesystem path if needed
+    safe_src = _lvgl_safe_wallpaper_src(image_src, "get_cached_style")
+
+    if __debug__:
+        print(f"[get_cached_style] Called with {image_src}, using safe path: {safe_src}")
+
+    # Check if we already have a cached style for this path
+    if safe_src not in _cached_styles:
+        try:
+            _cached_styles[safe_src] = StyleWrapper().bg_img_src(safe_src).border_width(0)
+            if __debug__:
+                print(f"[get_cached_style] Created new style for {safe_src}")
+        except Exception as e:
+            if __debug__:
+                print(f"[get_cached_style] Failed to create style for {safe_src}: {e}")
+            return None
+
+    return _cached_styles[safe_src]
 
 
 def get_memory_info():
@@ -430,6 +470,7 @@ class MainScreen(Screen):
 
         # homescreen = storage_device.get_homescreen()
         lockscreen = storage_device.get_homescreen()
+        safe_lockscreen = _lvgl_safe_wallpaper_src(lockscreen, "MainScreen.init")
         if not hasattr(self, "_init"):
             self._init = True
             # self._cached_lockscreen = lockscreen
@@ -455,7 +496,7 @@ class MainScreen(Screen):
 
             # Set background for first-time initialization
             self.add_style(
-                StyleWrapper().bg_img_src(lockscreen),
+                StyleWrapper().bg_img_src(safe_lockscreen),
                 0,
             )
         else:
@@ -491,8 +532,9 @@ class MainScreen(Screen):
             # ):
             #     self._cached_lockscreen = lockscreen
             lockscreen = storage_device.get_homescreen()
+            safe_lockscreen = _lvgl_safe_wallpaper_src(lockscreen, "MainScreen.update")
             self.add_style(
-                StyleWrapper().bg_img_src(lockscreen),
+                StyleWrapper().bg_img_src(safe_lockscreen),
                 0,
             )
             if hasattr(self, "dev_state"):
@@ -531,7 +573,11 @@ class MainScreen(Screen):
                 self.dev_state.align_to(self.content_area, lv.ALIGN.TOP_MID, 0, 124)
             self.dev_state.show(dev_state)
         self.add_style(
-            StyleWrapper().bg_img_src(storage_device.get_homescreen()),
+            StyleWrapper().bg_img_src(
+                _lvgl_safe_wallpaper_src(
+                    storage_device.get_homescreen(), "MainScreen.post_init"
+                )
+            ),
             0,
         )
         self.clear_flag(lv.obj.FLAG.SCROLLABLE)
@@ -1003,7 +1049,11 @@ class MainScreen(Screen):
                         current_homescreen = storage_device.get_appdrawer_background()
                         self.apps.add_style(
                             StyleWrapper()
-                            .bg_img_src(current_homescreen)
+                            .bg_img_src(
+                                _lvgl_safe_wallpaper_src(
+                                    current_homescreen, "MainScreen.layer2"
+                                )
+                            )
                             .border_width(0),
                             0,
                         )
@@ -1263,9 +1313,12 @@ class MainScreen(Screen):
                 0,
             )
             homescreen = storage_device.get_appdrawer_background()
+            safe_homescreen = _lvgl_safe_wallpaper_src(
+                homescreen, "AppDrawer.init"
+            ) if homescreen else None
             if homescreen:
                 self.add_style(
-                    StyleWrapper().bg_img_src(homescreen).border_width(0),
+                    StyleWrapper().bg_img_src(safe_homescreen).border_width(0),
                     0,
                 )
             # If homescreen is empty, keep the existing black background
@@ -2020,9 +2073,14 @@ class MainScreen(Screen):
         def refresh_background(self):
             """Refresh AppDrawer background image"""
             homescreen = storage_device.get_appdrawer_background()
+            safe_homescreen = (
+                _lvgl_safe_wallpaper_src(homescreen, "AppDrawer.refresh")
+                if homescreen
+                else None
+            )
             if homescreen:
                 self.add_style(
-                    StyleWrapper().bg_img_src(homescreen).border_width(0),
+                    StyleWrapper().bg_img_src(safe_homescreen).border_width(0),
                     0,
                 )
             else:
@@ -3391,9 +3449,12 @@ class NftLockScreenPreview(AnimScreen):
                         # Force refresh MainScreen background to apply new lockscreen
                         if hasattr(MainScreen, "_instance") and MainScreen._instance:
                             main_screen = MainScreen._instance
+                            safe_unlock_path = _lvgl_safe_wallpaper_src(
+                                lockscreen_path, "NftLockScreenPreview.MainScreen"
+                            )
                             # Refresh the background with new lockscreen
                             main_screen.add_style(
-                                StyleWrapper().bg_img_src(lockscreen_path),
+                                StyleWrapper().bg_img_src(safe_unlock_path),
                                 0,
                             )
                             if __debug__:
@@ -3426,7 +3487,12 @@ class NftLockScreenPreview(AnimScreen):
                                 # For NFT lockscreens, try different background image settings
                                 style = (
                                     StyleWrapper()
-                                    .bg_img_src(lockscreen_path)
+                                    .bg_img_src(
+                                        _lvgl_safe_wallpaper_src(
+                                            lockscreen_path,
+                                            "NftLockScreenPreview.LockScreen",
+                                        )
+                                    )
                                     .bg_img_opa(lv.OPA._40)
                                 )
 
@@ -3796,8 +3862,12 @@ class NftHomeScreenPreview(AnimScreen):
                             # Refresh the background with new homescreen (lockscreen still used for background)
                             lockscreen_path = storage_device.get_homescreen()
                             if lockscreen_path:
+                                safe_lock_path = _lvgl_safe_wallpaper_src(
+                                    lockscreen_path,
+                                    "NftHomeScreenPreview.MainScreen",
+                                )
                                 main_screen.add_style(
-                                    StyleWrapper().bg_img_src(lockscreen_path),
+                                    StyleWrapper().bg_img_src(safe_lock_path),
                                     0,
                                 )
                                 if __debug__:
@@ -5962,10 +6032,12 @@ class AutolockSetting(AnimScreen):
 
 class AppdrawerBackgroundSetting(AnimScreen):
     def collect_animation_targets(self) -> list:
-        targets = []
-        if hasattr(self, "container") and self.container:
-            targets.append(self.container)
-        return targets
+        # Disable animations for lock screen preview
+        return []
+
+    def _safe_preview_src(self, path: str | None, context: str = "AppdrawerPreview") -> str:
+        """Return an LVGL-safe preview path while preserving the original for storage."""
+        return _lvgl_safe_wallpaper_src(path, context)
 
     def __init__(
         self, prev_scr=None, selected_wallpaper=None, return_from_wallpaper=False
@@ -5988,18 +6060,10 @@ class AppdrawerBackgroundSetting(AnimScreen):
                 self.selected_wallpaper = selected_wallpaper
                 self.current_wallpaper_path = selected_wallpaper
                 if hasattr(self, "lockscreen_preview"):
-                    # IMPORTANT: Check for A:1: prefix to prevent LVGL crash
-                    safe_preview_path = selected_wallpaper
-                    if selected_wallpaper and selected_wallpaper.startswith("A:1:"):
-                        if __debug__:
-                            print(f"AppdrawerBackgroundSetting: Re-init WARNING - A:1: path detected: {selected_wallpaper}")
-                            print("AppdrawerBackgroundSetting: Using default for preview to prevent crash")
-                        safe_preview_path = utils.get_default_wallpaper()
-
-                    self.lockscreen_preview.set_src(safe_preview_path)
+                    # lv.img.set_src() supports A:1: format directly
+                    self.lockscreen_preview.set_src(selected_wallpaper)
                     if __debug__:
-                        print(f"AppdrawerBackgroundSetting: Updated preview to safe path: {safe_preview_path}")
-                        print(f"AppdrawerBackgroundSetting: Original path kept: {selected_wallpaper}")
+                        print(f"AppdrawerBackgroundSetting: Updated preview directly to: {selected_wallpaper}")
             self.refresh_text()
             return
 
@@ -6009,16 +6073,7 @@ class AppdrawerBackgroundSetting(AnimScreen):
             prev_scr=prev_scr, nav_back=True, rti_path="A:/res/checkmark.png"
         )
 
-        # Handle return animation from wallpaper selection
-        if return_from_wallpaper:
-            # Trigger return animation
-            from .common import apply_animations
-
-            try:
-                apply_animations(self.collect_animation_targets(), back=True)
-            except Exception as e:
-                if __debug__:
-                    print(f"[AppdrawerBackgroundSetting] Return animation error: {e}")
+        # Animations disabled for lock screen preview
 
         if __debug__:
             print("LockScreenSetting initialized")
@@ -6069,66 +6124,25 @@ class AppdrawerBackgroundSetting(AnimScreen):
         # Use selected wallpaper if provided, otherwise use current lock screen
         if self.selected_wallpaper:
             self.current_wallpaper_path = self.selected_wallpaper
-            # Use selected wallpaper path directly - LVGL supports A:1: format
-            display_path = self.selected_wallpaper
+            # IMPORTANT: lv.img.set_src() supports A:1: format directly
+            # ImgGridItem uses A:1: paths successfully (listitem.py:307)
+            # No conversion needed for image widgets!
             if __debug__:
                 print(f"AppdrawerBackgroundSetting: Setting lockscreen preview")
-                print(
-                    f"AppdrawerBackgroundSetting: Original path: {self.selected_wallpaper}"
-                )
-                print(f"AppdrawerBackgroundSetting: Display path: {display_path}")
-                # Check if file exists using same method as HomeScreenSetting
-                try:
-                    # Convert path for file system check
-                    if display_path.startswith("A:1:/res/wallpapers/"):
-                        file_check_path = display_path.replace(
-                            "A:1:/res/wallpapers/", "1:/res/wallpapers/"
-                        )
-                    elif display_path.startswith("A:/res/wallpapers/"):
-                        file_check_path = display_path.replace(
-                            "A:/res/wallpapers/", "1:/res/wallpapers/"
-                        )
-                    else:
-                        file_check_path = display_path
+                print(f"AppdrawerBackgroundSetting: Using path: {self.selected_wallpaper}")
 
-                    stat_info = io.fatfs.stat(file_check_path)
-                    file_size = stat_info[0]  # First element is file size
-                    print(
-                        f"AppdrawerBackgroundSetting: File exists, size: {file_size} bytes"
-                    )
-                except Exception as e:
-                    print(f"AppdrawerBackgroundSetting: File check failed: {e}")
-            # IMPORTANT: Cannot use A:1: paths with LVGL - will cause crash
-            # For preview, we need to handle this carefully
-            safe_preview_path = display_path
-            if display_path and display_path.startswith("A:1:"):
-                if __debug__:
-                    print(f"AppdrawerBackgroundSetting: WARNING - A:1: path detected in preview: {display_path}")
-                    print("AppdrawerBackgroundSetting: Using default wallpaper for preview to prevent crash")
-                # Use default wallpaper for preview to prevent LVGL crash
-                safe_preview_path = utils.get_default_wallpaper()
-                # Show a warning or indication that custom wallpaper preview is not available
-                # But still keep the original path for saving if user confirms
-
-            self.lockscreen_preview.set_src(safe_preview_path)
+            self.lockscreen_preview.set_src(self.selected_wallpaper)
             if __debug__:
-                print(f"AppdrawerBackgroundSetting: Preview src set to safe path: {safe_preview_path}")
-                print(f"AppdrawerBackgroundSetting: Original path kept for saving: {self.current_wallpaper_path}")
+                print(f"AppdrawerBackgroundSetting: Preview src set directly to: {self.selected_wallpaper}")
         else:
             # Get current lock screen image from storage
             lockscreen_path = storage_device.get_homescreen()
             if lockscreen_path:
                 self.current_wallpaper_path = lockscreen_path
-                # IMPORTANT: Check for A:1: prefix to prevent LVGL crash
-                safe_preview_path = lockscreen_path
-                if lockscreen_path.startswith("A:1:"):
-                    if __debug__:
-                        print(f"AppdrawerBackgroundSetting: Current lockscreen has A:1: path: {lockscreen_path}")
-                        print("AppdrawerBackgroundSetting: Using default for preview to prevent crash")
-                    safe_preview_path = utils.get_default_wallpaper()
-                self.lockscreen_preview.set_src(safe_preview_path)
+                # lv.img.set_src() supports A:1: format directly
+                self.lockscreen_preview.set_src(lockscreen_path)
                 if __debug__:
-                    print(f"AppdrawerBackgroundSetting: Preview using safe path: {safe_preview_path}")
+                    print(f"AppdrawerBackgroundSetting: Preview using: {lockscreen_path}")
             else:
                 # Use default wallpaper if no custom lockscreen is set
                 self.current_wallpaper_path = "A:/res/wallpaper-2.jpg"
@@ -6262,26 +6276,26 @@ class AppdrawerBackgroundSetting(AnimScreen):
         """Refresh display when returning to this screen"""
         if __debug__:
             print("[AppdrawerBackgroundSetting.refresh_text] Refreshing display")
-        
+
         # 确保界面正确显示
         try:
-            # 刷新壁纸预览
+            # 刷新壁纸预览 - lv.img.set_src() supports A:1: format directly
             if hasattr(self, "lockscreen_preview") and hasattr(self, "current_wallpaper_path"):
                 if self.current_wallpaper_path:
                     self.lockscreen_preview.set_src(self.current_wallpaper_path)
                     if __debug__:
                         print(f"[AppdrawerBackgroundSetting.refresh_text] Preview updated to: {self.current_wallpaper_path}")
-            
+
             # 刷新容器显示
             if hasattr(self, "container"):
                 self.container.invalidate()
-                
+
             # 刷新整个屏幕
             self.invalidate()
-            
+
             if __debug__:
                 print("[AppdrawerBackgroundSetting.refresh_text] Refresh completed")
-                
+
         except Exception as e:
             if __debug__:
                 print(f"[AppdrawerBackgroundSetting.refresh_text] Error during refresh: {e}")
@@ -6363,7 +6377,9 @@ class AppdrawerBackgroundSetting(AnimScreen):
                     f"AppdrawerBackgroundSetting: About to save lockscreen: {current_wallpaper}"
                 )
             if current_wallpaper:
-                # Save the wallpaper path
+                # Save the wallpaper path - keep original format (A:1: for custom, A: for built-in)
+                # The storage layer will handle the path as-is
+                # When reading back, _lvgl_safe_wallpaper_src() will convert A:1: -> 1: for bg_img_src
                 try:
                     storage_device.set_homescreen(current_wallpaper)
                     if __debug__:
@@ -6375,6 +6391,60 @@ class AppdrawerBackgroundSetting(AnimScreen):
                         print(
                             f"AppdrawerBackgroundSetting: Verified saved path: {saved_path}"
                         )
+
+                    # Force refresh MainScreen background to apply new lockscreen
+                    if hasattr(MainScreen, "_instance") and MainScreen._instance:
+                        main_screen = MainScreen._instance
+                        # Use original path - _lvgl_safe_wallpaper_src() will convert A:1: -> 1: if needed
+                        safe_unlock_path = _lvgl_safe_wallpaper_src(
+                            current_wallpaper, "AppdrawerBackgroundSetting.MainScreen"
+                        )
+                        # Refresh the background with new lockscreen
+                        main_screen.add_style(
+                            StyleWrapper().bg_img_src(safe_unlock_path),
+                            0,
+                        )
+                        # Force invalidate to ensure refresh
+                        main_screen.invalidate()
+                        if __debug__:
+                            print(
+                                f"[AppdrawerBackgroundSetting] MainScreen background refreshed with: {safe_unlock_path}"
+                            )
+
+                        # Note: AppDrawer uses get_appdrawer_background() for home screen wallpaper,
+                        # not lockscreen wallpaper. No need to refresh AppDrawer when setting lockscreen.
+
+                    # Force refresh LockScreen if it exists to apply new background
+                    try:
+                        from .lockscreen import LockScreen
+
+                        if (
+                            hasattr(LockScreen, "_instance")
+                            and LockScreen._instance
+                        ):
+                            lock_screen = LockScreen._instance
+                            # Use original path - _lvgl_safe_wallpaper_src() will convert A:1: -> 1: if needed
+                            safe_lock_path = _lvgl_safe_wallpaper_src(
+                                current_wallpaper,
+                                "AppdrawerBackgroundSetting.LockScreen",
+                            )
+                            style = (
+                                StyleWrapper()
+                                .bg_img_src(safe_lock_path)
+                                .bg_img_opa(lv.OPA._40)
+                            )
+                            lock_screen.add_style(style, 0)
+                            lock_screen.invalidate()
+                            if __debug__:
+                                print(
+                                    f"[AppdrawerBackgroundSetting] LockScreen refreshed with: {safe_lock_path}"
+                                )
+                    except Exception as lock_error:
+                        if __debug__:
+                            print(
+                                f"[AppdrawerBackgroundSetting] LockScreen refresh error: {lock_error}"
+                            )
+
                 except Exception as e:
                     if __debug__:
                         print(
@@ -7062,11 +7132,14 @@ class WallperChange(AnimScreen):
                                 # 更新现有的AppdrawerBackgroundSetting实例
                                 self.prev_scr.selected_wallpaper = wp.img_path
                                 self.prev_scr.current_wallpaper_path = wp.img_path
-                                
+
                                 if hasattr(self.prev_scr, "lockscreen_preview"):
+                                    # lv.img.set_src() supports A:1: format directly
                                     self.prev_scr.lockscreen_preview.set_src(wp.img_path)
                                     if __debug__:
-                                        print(f"WallperChange: Updated lockscreen preview to {wp.img_path}")
+                                        print(
+                                            f"WallperChange: Updated lockscreen preview directly to {wp.img_path}"
+                                        )
                                 
                                 # 直接返回到Lock Screen设置页面，使用返回动画
                                 self._load_scr(self.prev_scr, back=True)
@@ -8869,14 +8942,13 @@ class AboutSetting(AnimScreen):
             label_align=lv.ALIGN.LEFT_MID,
         )
         self.certification.align_to(self.container, lv.ALIGN.OUT_BOTTOM_LEFT, 0, 8)
-        if __debug__:
-            self.firmware_update = NormalButton(
-                self.content_area, _(i18n_keys.BUTTON__SYSTEM_UPDATE)
-            )
-            self.firmware_update.align_to(
-                self.certification, lv.ALIGN.OUT_BOTTOM_LEFT, 0, 8
-            )
-            self.firmware_update.add_event_cb(self.on_click, lv.EVENT.CLICKED, None)
+        self.firmware_update = NormalButton(
+            self.content_area, _(i18n_keys.BUTTON__SYSTEM_UPDATE)
+        )
+        self.firmware_update.align_to(
+            self.certification, lv.ALIGN.OUT_BOTTOM_LEFT, 0, 8
+        )
+        self.firmware_update.add_event_cb(self.on_click, lv.EVENT.CLICKED, None)
 
         self.serial.add_event_cb(self.on_long_pressed, lv.EVENT.LONG_PRESSED, None)
         self.container.add_event_cb(self.on_click, lv.EVENT.CLICKED, None)
@@ -8892,7 +8964,7 @@ class AboutSetting(AnimScreen):
             from .template import CertificationInfo
 
             CertificationInfo()
-        elif __debug__ and target == self.firmware_update:
+        elif target == self.firmware_update:
             Go2UpdateMode(self)
 
     def on_long_pressed(self, event_obj):
@@ -9151,10 +9223,8 @@ class HomeScreenSetting(AnimScreen):
     _active_instances = []
 
     def collect_animation_targets(self) -> list:
-        targets = []
-        if hasattr(self, "container") and self.container:
-            targets.append(self.container)
-        return targets
+        # Disable animations for home screen preview
+        return []
 
     def __init__(
         self,
@@ -9187,24 +9257,14 @@ class HomeScreenSetting(AnimScreen):
                 self.selected_wallpaper = selected_wallpaper
                 self.original_wallpaper_path = selected_wallpaper
 
-                # IMPORTANT: Do NOT convert A: to A:1: - LVGL cannot handle A:1: paths!
-                # Check if this is a custom wallpaper with A:1: prefix that needs protection
+                # lv.img.set_src() supports A:1: paths directly (proven by ImgGridItem)
                 display_path = selected_wallpaper
-                safe_display_path = display_path
-
-                if display_path and display_path.startswith("A:1:"):
-                    if __debug__:
-                        print(f"[HomeScreenSetting.__init__] WARNING: A:1: path detected: {display_path}")
-                        print("[HomeScreenSetting.__init__] Using default wallpaper for preview to prevent crash")
-                    # Cannot use A:1: paths with LVGL - use default for preview
-                    safe_display_path = utils.get_default_wallpaper()
-                else:
-                    if __debug__:
-                        print(f"[HomeScreenSetting.__init__] Safe path for display: {display_path}")
+                if __debug__:
+                    print(f"[HomeScreenSetting.__init__] Using path directly: {display_path}")
 
                 # Handle blur state preservation
                 self.is_blur_active = False  # Default to original
-                final_display_path = safe_display_path
+                final_display_path = display_path
 
                 # If we should preserve blur state and it was active, check for blur version
                 if preserve_blur_state and preserve_blur_state is True:
@@ -9253,16 +9313,7 @@ class HomeScreenSetting(AnimScreen):
             prev_scr=prev_scr, nav_back=True, rti_path="A:/res/checkmark.png"
         )
 
-        # Handle return animation from wallpaper selection
-        if return_from_wallpaper:
-            # Trigger return animation
-            from .common import apply_animations
-
-            try:
-                apply_animations(self.collect_animation_targets(), back=True)
-            except Exception as e:
-                if __debug__:
-                    print(f"[HomeScreenSetting] Return animation error: {e}")
+        # Animations disabled for home screen preview
 
         # Disable scrollbars on content_area (inherited from AnimScreen)
         self.content_area.set_scrollbar_mode(lv.SCROLLBAR_MODE.OFF)
@@ -9322,53 +9373,30 @@ class HomeScreenSetting(AnimScreen):
                 )
             self.original_wallpaper_path = self.selected_wallpaper
 
-            # IMPORTANT: Do NOT convert A: to A:1: - LVGL cannot handle A:1: paths!
-            # Check for A:1: prefix and use default wallpaper for preview if found
+            # lv.img.set_src() supports A:1: paths directly (proven by ImgGridItem)
             display_path = self.selected_wallpaper
-            safe_display_path = display_path
-
-            if display_path and display_path.startswith("A:1:"):
-                if __debug__:
-                    print(f"[HomeScreenSetting.__init__] WARNING: A:1: path detected: {display_path}")
-                    print("[HomeScreenSetting.__init__] Using default wallpaper for preview to prevent crash")
-                # Cannot use A:1: paths with LVGL - use default for preview
-                safe_display_path = utils.get_default_wallpaper()
-                # Keep original path for saving later if user confirms
-            else:
-                if __debug__:
-                    print(f"[HomeScreenSetting.__init__] Safe path for display: {display_path}")
+            if __debug__:
+                print(f"[HomeScreenSetting.__init__] Using path directly: {display_path}")
 
             # Handle blur state preservation
             self.is_blur_active = False  # Default to original
-            final_display_path = safe_display_path
+            final_display_path = display_path
 
             # If we should preserve blur state and it was active, check for blur version
             if preserve_blur_state and preserve_blur_state is True:
                 blur_path = self._get_blur_wallpaper_path(display_path)
                 if blur_path and self._blur_wallpaper_exists(blur_path):
-                    # Check if blur path has A:1: prefix
-                    if blur_path.startswith("A:1:"):
-                        if __debug__:
-                            print(f"[HomeScreenSetting.__init__] Blur path has A:1: prefix: {blur_path}")
-                            print("[HomeScreenSetting.__init__] Cannot use blur version, using default")
-                        # Keep default wallpaper for safety
-                    else:
-                        if __debug__:
-                            print(f"[HomeScreenSetting.__init__] Blur version exists and safe, using blur: {blur_path}")
-                        final_display_path = blur_path
-                        self.is_blur_active = True
+                    if __debug__:
+                        print(f"[HomeScreenSetting.__init__] Blur version exists, using blur: {blur_path}")
+                    final_display_path = blur_path
+                    self.is_blur_active = True
                 else:
                     if __debug__:
                         print(f"[HomeScreenSetting.__init__] No blur version available for new wallpaper, showing original")
 
             self.current_wallpaper_path = final_display_path
 
-            # Final safety check before setting preview
-            if final_display_path and final_display_path.startswith("A:1:"):
-                if __debug__:
-                    print(f"[HomeScreenSetting.__init__] Final path still has A:1:, using default: {final_display_path}")
-                final_display_path = utils.get_default_wallpaper()
-
+            # lv.img.set_src() supports A:1: paths - no safety check needed
             self.homescreen_preview.set_src(final_display_path)
             if __debug__:
                 blur_status = "blur" if self.is_blur_active else "original"
@@ -9431,17 +9459,10 @@ class HomeScreenSetting(AnimScreen):
                         f"[HomeScreenSetting.__init__] Simple test error: {test_error}"
                     )
 
-            # Final safety check before setting preview
-            safe_preview_path = self.current_wallpaper_path
-            if self.current_wallpaper_path and self.current_wallpaper_path.startswith("A:1:"):
-                if __debug__:
-                    print(f"[HomeScreenSetting.__init__] Current path has A:1: prefix: {self.current_wallpaper_path}")
-                    print("[HomeScreenSetting.__init__] Using default wallpaper for preview")
-                safe_preview_path = utils.get_default_wallpaper()
-
-            self.homescreen_preview.set_src(safe_preview_path)
+            # lv.img.set_src() natively supports A:1: paths - no conversion needed
+            self.homescreen_preview.set_src(self.current_wallpaper_path)
             if __debug__:
-                print(f"[HomeScreenSetting.__init__] Preview src set to safe path: {safe_preview_path}")
+                print(f"[HomeScreenSetting.__init__] Preview src set to: {self.current_wallpaper_path}")
                 # Check state after initial setup
                 try:
                     initial_src = self.homescreen_preview.get_src()
@@ -9934,6 +9955,9 @@ class HomeScreenSetting(AnimScreen):
             )
         # Save current wallpaper and return to previous screen
         if hasattr(self, "current_wallpaper_path") and self.current_wallpaper_path:
+            # Save the wallpaper path - keep original format (A:1: for custom, A: for built-in)
+            # The storage layer will handle the path as-is
+            # When reading back, _lvgl_safe_wallpaper_src() will convert A:1: -> 1: for bg_img_src
             storage_device.set_appdrawer_background(self.current_wallpaper_path)
             if __debug__:
                 print(
@@ -9954,6 +9978,26 @@ class HomeScreenSetting(AnimScreen):
                 print(
                     f"[HomeScreenSetting.on_click_ext] Homescreen path contains -blur: {'-blur.' in str(homescreen_path) if homescreen_path else False}"
                 )
+
+            # Force refresh AppDrawer background to apply new homescreen wallpaper
+            if hasattr(MainScreen, "_instance") and MainScreen._instance:
+                main_screen = MainScreen._instance
+                if hasattr(main_screen, "apps") and main_screen.apps:
+                    # Use original path - _lvgl_safe_wallpaper_src() will convert A:1: -> 1: if needed
+                    safe_homescreen_path = _lvgl_safe_wallpaper_src(
+                        self.current_wallpaper_path, "HomeScreenSetting.AppDrawer"
+                    )
+                    # Refresh AppDrawer background with new homescreen
+                    main_screen.apps.add_style(
+                        StyleWrapper().bg_img_src(safe_homescreen_path).border_width(0),
+                        0,
+                    )
+                    # Force invalidate to ensure refresh
+                    main_screen.apps.invalidate()
+                    if __debug__:
+                        print(
+                            f"[HomeScreenSetting.on_click_ext] AppDrawer background refreshed with: {safe_homescreen_path}"
+                        )
 
         # Return to previous screen
         if self.prev_scr is not None:

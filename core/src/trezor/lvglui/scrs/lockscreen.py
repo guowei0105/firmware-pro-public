@@ -31,196 +31,33 @@ class LockScreen(Screen):
         return False, None
 
     def __init__(self, device_name, ble_name="", dev_state=None):
-        if __debug__:
-            print(f"[LOCKSCREEN] __init__ starting with device_name: {device_name}")
-
-        # Protect against infinite recursion during storage access
-        try:
-            lockscreen = storage_device.get_homescreen()
-            if __debug__:
-                print(f"[LOCKSCREEN] Retrieved homescreen path: {lockscreen}")
-        except Exception as e:
-            if __debug__:
-                print(f"[LOCKSCREEN] ERROR getting homescreen: {e}")
-            lockscreen = None
-
-        # Fix for custom wallpaper path format issue that causes crash
-        # IMPORTANT: LVGL cannot handle A:1: prefix paths - must use default wallpaper
-        if lockscreen:
-            original_lockscreen = lockscreen  # Keep original for debugging
-
-            # Check if it's a custom wallpaper or NFT path with A:1: prefix
-            if lockscreen.startswith("A:1:"):
-                # LVGL crashes with A:1: paths - must use a safe fallback
-                # This includes custom wallpapers (A:1:/res/wallpapers/) and NFTs (A:1:/res/nfts/)
-                if __debug__:
-                    print(f"[LOCKSCREEN] WARNING: Custom path detected that crashes LVGL: {lockscreen}")
-                    print(f"[LOCKSCREEN] Using default wallpaper to prevent crash")
-
-                # Use default wallpaper to prevent system crash
-                lockscreen = utils.get_default_wallpaper()
-
-                # Try to verify the original file exists (for debugging)
-                if __debug__:
-                    try:
-                        # Convert for fatfs verification
-                        if original_lockscreen.startswith("A:1:/res/wallpapers/"):
-                            fatfs_path = original_lockscreen.replace("A:1:/res/wallpapers/", "1:/res/wallpapers/")
-                        elif original_lockscreen.startswith("A:1:/res/nfts/"):
-                            fatfs_path = original_lockscreen.replace("A:1:/res/nfts/", "1:/res/nfts/")
-                        else:
-                            fatfs_path = original_lockscreen[2:]  # Remove A: prefix
-
-                        import io
-                        stat_info = io.fatfs.stat(fatfs_path)
-                        print(f"[LOCKSCREEN] Original file exists: {original_lockscreen}, size: {stat_info[0]} bytes")
-                        print(f"[LOCKSCREEN] But cannot use it due to LVGL A:1: path crash issue")
-                    except Exception as e:
-                        print(f"[LOCKSCREEN] Original file not found: {original_lockscreen}")
-                        print(f"[LOCKSCREEN] Error: {e}")
-
-            elif not lockscreen.startswith("A:/res/"):
-                # Invalid path format, use default
-                if __debug__:
-                    print(f"[LOCKSCREEN] Invalid wallpaper path format: {lockscreen}")
-                    print(f"[LOCKSCREEN] Using default wallpaper")
-                lockscreen = utils.get_default_wallpaper()
-            else:
-                # Valid system wallpaper path (A:/res/wallpaper-x.jpg)
-                if __debug__:
-                    print(f"[LOCKSCREEN] Using system wallpaper: {lockscreen}")
-        else:
-            # No wallpaper set, use default
-            lockscreen = utils.get_default_wallpaper()
-            if __debug__:
-                print(f"[LOCKSCREEN] No wallpaper set, using default: {lockscreen}")
-
+        lockscreen = storage_device.get_homescreen()
         self.double_click = DoubleClickDetector(click_timeout=800, click_dist=50)
         if not hasattr(self, "_init"):
             self._init = True
-
-            # Check if device name display is enabled
-            show_device_names = storage_device.is_device_name_display_enabled()
-
-            if show_device_names:
-                # Get real device names
-                real_device_name = storage_device.get_label()  # User custom label
-                real_ble_name = storage_device.get_ble_name()
-                from trezor import uart
-
-                if not real_ble_name:
-                    real_ble_name = uart.get_ble_name()
-
-                super().__init__(title=real_device_name, subtitle=real_ble_name)
-                self.title.add_style(
-                    StyleWrapper()
-                    .text_align_center()
-                    .text_opa(int(lv.OPA.COVER * 0.85)),
-                    0,
-                )
-                self.subtitle.add_style(
-                    StyleWrapper()
-                    .text_align_center()
-                    .text_color(lv_colors.WHITE)
-                    .text_opa(int(lv.OPA.COVER * 0.85)),
-                    0,
-                )
-            else:
-                # Don't pass any title/subtitle to avoid "Text" defaults
-                super().__init__()
-                if __debug__:
-                    print(
-                        f"[LOCKSCREEN] Not showing device names, initialized without title/subtitle"
-                    )
+            super().__init__(title=device_name, subtitle=ble_name)
+            self.title.add_style(
+                StyleWrapper().text_align_center().text_opa(int(lv.OPA.COVER * 0.85)), 0
+            )
+            self.subtitle.add_style(
+                StyleWrapper()
+                .text_align_center()
+                .text_color(lv_colors.WHITE)
+                .text_opa(int(lv.OPA.COVER * 0.85)),
+                0,
+            )
         else:
-            # Re-validate wallpaper path when re-initializing (same logic as above)
-            if lockscreen:
-                original_lockscreen = lockscreen  # Keep original for debugging
-
-                # Check if it's a custom wallpaper or NFT path with A:1: prefix
-                if lockscreen.startswith("A:1:"):
-                    # LVGL crashes with A:1: paths - must use a safe fallback
-                    if __debug__:
-                        print(f"[LOCKSCREEN] Re-init WARNING: Custom path detected that crashes LVGL: {lockscreen}")
-                        print(f"[LOCKSCREEN] Re-init: Using default wallpaper to prevent crash")
-
-                    # Use default wallpaper to prevent system crash
-                    lockscreen = utils.get_default_wallpaper()
-
-                    # Debug verification
-                    if __debug__:
-                        try:
-                            if original_lockscreen.startswith("A:1:/res/wallpapers/"):
-                                fatfs_path = original_lockscreen.replace("A:1:/res/wallpapers/", "1:/res/wallpapers/")
-                            elif original_lockscreen.startswith("A:1:/res/nfts/"):
-                                fatfs_path = original_lockscreen.replace("A:1:/res/nfts/", "1:/res/nfts/")
-                            else:
-                                fatfs_path = original_lockscreen[2:]
-
-                            import io
-                            stat_info = io.fatfs.stat(fatfs_path)
-                            print(f"[LOCKSCREEN] Re-init: Original file exists: {original_lockscreen}, size: {stat_info[0]} bytes")
-                            print(f"[LOCKSCREEN] Re-init: But cannot use it due to LVGL A:1: path crash issue")
-                        except Exception as e:
-                            print(f"[LOCKSCREEN] Re-init: Original file not found: {original_lockscreen}")
-                            print(f"[LOCKSCREEN] Re-init: Error: {e}")
-
-                elif not lockscreen.startswith("A:/res/"):
-                    # Invalid path format, use default
-                    if __debug__:
-                        print(f"[LOCKSCREEN] Re-init: Invalid wallpaper path: {lockscreen}")
-                        print(f"[LOCKSCREEN] Re-init: Using default wallpaper")
-                    lockscreen = utils.get_default_wallpaper()
-                else:
-                    # Valid system wallpaper path
-                    if __debug__:
-                        print(f"[LOCKSCREEN] Re-init: Using system wallpaper: {lockscreen}")
-            else:
-                lockscreen = utils.get_default_wallpaper()
-                if __debug__:
-                    print(f"[LOCKSCREEN] Re-init: No wallpaper set, using default: {lockscreen}")
-
-            # Check if device name display setting has changed
-            show_device_names = storage_device.is_device_name_display_enabled()
-
-            if show_device_names:
-                # Get real device names and show them
-                real_device_name = storage_device.get_label()  # User custom label
-                real_ble_name = storage_device.get_ble_name()
-                from trezor import uart
-
-                if not real_ble_name:
-                    real_ble_name = uart.get_ble_name()
-
-                if hasattr(self, "title") and self.title:
-                    self.title.set_text(real_device_name)
-                    self.title.clear_flag(lv.obj.FLAG.HIDDEN)
-                if hasattr(self, "subtitle") and self.subtitle:
-                    self.subtitle.set_text(real_ble_name)
-                    self.subtitle.clear_flag(lv.obj.FLAG.HIDDEN)
-            else:
-                # Hide device names if they exist
-                if hasattr(self, "title") and self.title:
-                    self.title.add_flag(lv.obj.FLAG.HIDDEN)
-                if hasattr(self, "subtitle") and self.subtitle:
-                    self.subtitle.add_flag(lv.obj.FLAG.HIDDEN)
-
             self.add_style(
                 StyleWrapper().bg_img_src(lockscreen).bg_img_opa(lv.OPA._40),
                 0,
             )
+            if ble_name:
+                self.subtitle.set_text(ble_name)
             self.show_tips()
             return
         self.set_scrollbar_mode(lv.SCROLLBAR_MODE.OFF)
-        # Align title and subtitle if they exist
-        if hasattr(self, "title") and self.title:
-            self.title.align_to(self.content_area, lv.ALIGN.TOP_MID, 0, 76)
-        if hasattr(self, "subtitle") and self.subtitle:
-            if hasattr(self, "title") and self.title:
-                self.subtitle.align_to(self.title, lv.ALIGN.OUT_BOTTOM_MID, 0, 16)
-            else:
-                self.subtitle.align_to(self.content_area, lv.ALIGN.TOP_MID, 0, 76)
-        # Apply lockscreen background (works for all wallpaper types including NFTs)
+        self.title.align_to(self.content_area, lv.ALIGN.TOP_MID, 0, 76)
+        self.subtitle.align_to(self.title, lv.ALIGN.OUT_BOTTOM_MID, 0, 16)
         self.add_style(
             StyleWrapper().bg_img_src(lockscreen).bg_img_opa(lv.OPA._40),
             0,
@@ -334,16 +171,11 @@ class LockScreen(Screen):
     def eventhandler(self, event_obj: lv.event_t):
         code = event_obj.code
         if code == lv.EVENT.CLICKED:
-            if __debug__:
-                print("[LOCKSCREEN] eventhandler: CLICKED event received")
-
             if self.channel.takers:
                 self.channel.publish("clicked")
             else:
                 if not ui.display.backlight():
                     if not storage_device.is_tap_awake_enabled():
-                        if __debug__:
-                            print("[LOCKSCREEN] Tap awake disabled, ignoring click")
                         return
                     else:
                         indev = lv.indev_get_act()
@@ -351,78 +183,29 @@ class LockScreen(Screen):
                         indev.get_point(point)
                         is_double = self.double_click.handle_click(point)
                         if not is_double:
-                            if __debug__:
-                                print("[LOCKSCREEN] Not a double click, ignoring")
                             return
 
                 if utils.turn_on_lcd_if_possible():
-                    if __debug__:
-                        print("[LOCKSCREEN] LCD turned on")
                     return
+                from trezor import workflow
+                from apps.base import unlock_device
 
-                # Avoid circular import by deferring the import
-                try:
-                    if __debug__:
-                        print("[LOCKSCREEN] Starting unlock process")
-                    from trezor import workflow
+                workflow.spawn(unlock_device())
+                import storage.cache
 
-                    # Schedule unlock_device to run asynchronously to avoid blocking
-                    def start_unlock():
-                        try:
-                            from apps.base import unlock_device
-                            workflow.spawn(unlock_device())
-                            if __debug__:
-                                print("[LOCKSCREEN] Unlock workflow spawned")
-                        except Exception as e:
-                            if __debug__:
-                                print(f"[LOCKSCREEN] Error spawning unlock workflow: {e}")
-
-                    # Use schedule to run the unlock process in the next event loop iteration
-                    from trezor import loop
-                    loop.schedule(start_unlock())
-
-                    import storage.cache
-                    storage.cache.start_session()
-                    if __debug__:
-                        print("[LOCKSCREEN] Cache session started")
-                except Exception as e:
-                    if __debug__:
-                        print(f"[LOCKSCREEN] Error in unlock process: {e}")
+                storage.cache.start_session()
 
     def on_slide_up(self, event_obj: lv.event_t):
         code = event_obj.code
         if code == lv.EVENT.GESTURE:
             _dir = lv.indev_get_act().get_gesture_dir()
             if _dir == lv.DIR.TOP:
-                if __debug__:
-                    print("[LOCKSCREEN] Slide up gesture detected")
-
                 if not ui.display.backlight():
-                    if __debug__:
-                        print("[LOCKSCREEN] Display backlight off, ignoring gesture")
                     return
+                from trezor import workflow
+                from apps.base import unlock_device
 
-                # Avoid circular import by deferring the import
-                try:
-                    if __debug__:
-                        print("[LOCKSCREEN] Starting unlock via slide up")
-                    from trezor import workflow
-
-                    def start_unlock_slide():
-                        try:
-                            from apps.base import unlock_device
-                            workflow.spawn(unlock_device())
-                            if __debug__:
-                                print("[LOCKSCREEN] Unlock via slide spawned")
-                        except Exception as e:
-                            if __debug__:
-                                print(f"[LOCKSCREEN] Error in slide unlock: {e}")
-
-                    from trezor import loop
-                    loop.schedule(start_unlock_slide())
-                except Exception as e:
-                    if __debug__:
-                        print(f"[LOCKSCREEN] Error processing slide up: {e}")
+                workflow.spawn(unlock_device())
 
     def _load_scr(self, scr: "Screen", back: bool = False) -> None:
         lv.scr_load(scr)
