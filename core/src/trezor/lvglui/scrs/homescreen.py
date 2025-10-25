@@ -5590,6 +5590,97 @@ class AppdrawerBackgroundSetting(AnimScreen):
                 self.load_screen(self.prev_scr, destroy_self=True)
 
 
+class ImgGridItemRounded(lv.obj):
+    """Wallpaper preview - container wrapper with 40px rounded corners (no stripes)"""
+
+    def __init__(
+        self,
+        parent,
+        col_num,
+        row_num,
+        file_name: str,
+        path_dir: str,
+        img_path_selected: str = "A:/res/selected.png",
+        img_path_unselected: str | None = "A:/res/unselect.png",
+        is_internal: bool = False,
+        style_type: str = "wallpaper",
+    ):
+        super().__init__(parent)
+        self.set_grid_cell(
+            lv.GRID_ALIGN.CENTER, col_num, 1, lv.GRID_ALIGN.START, row_num, 1
+        )
+        self.is_internal = is_internal
+        self.file_name = file_name
+        self.zoom_path = path_dir + file_name
+        self.img_path = self.zoom_path.replace("zoom-", "")
+        self.style_type = style_type
+
+        # Container setup with rounded corners
+        self.set_size(144, 240)
+        self.set_style_radius(40, 0)  # 40px rounded corners
+        self.set_style_clip_corner(True, 0)  # Enable clipping on container
+        self.set_style_pad_all(0, 0)
+        self.set_style_border_width(0, 0)
+        self.set_style_border_opa(lv.OPA.TRANSP, 0)
+        self.set_style_bg_opa(lv.OPA.TRANSP, 0)
+        self.clear_flag(lv.obj.FLAG.SCROLLABLE)
+
+        # Create inner img object with FIXED size (not percentage)
+        self.img = lv.img(self)
+        self.img.set_src(self.zoom_path)
+        self.img.set_size(144, 240)  # Fixed size, NOT lv.pct()
+        self.img.center()
+        self.img.clear_flag(lv.obj.FLAG.CLICKABLE)
+
+        # Image rendering settings - NO clip_corner on img
+        self.img.set_style_img_opa(lv.OPA.COVER, 0)
+        self.img.set_style_img_recolor_opa(lv.OPA.TRANSP, 0)
+
+        # Optimize rendering
+        try:
+            self.img.set_zoom(256)
+            self.img.set_antialias(True)
+        except (AttributeError, TypeError):
+            pass
+
+        # Selection indicator overlay
+        self.check = None
+        self.selected_indicator_src = img_path_selected
+        self.unselected_indicator_src = img_path_unselected
+
+        if img_path_selected:
+            self.check = lv.img(self)
+            initial_src = img_path_unselected or img_path_selected
+            try:
+                self.check.set_src(initial_src)
+            except Exception:
+                fallback_src = "A:/res/checked-solid.png"
+                self.check.set_src(fallback_src)
+                self.selected_indicator_src = fallback_src
+                self.unselected_indicator_src = None
+            self.check.clear_flag(lv.obj.FLAG.CLICKABLE)
+            self.check.align(lv.ALIGN.TOP_RIGHT, -12, 12)
+            self.set_checked(False)
+
+        self.add_flag(lv.obj.FLAG.CLICKABLE)
+        self.add_flag(lv.obj.FLAG.EVENT_BUBBLE)
+
+    def set_checked(self, checked: bool):
+        if not self.check or not self.selected_indicator_src:
+            return
+
+        if self.unselected_indicator_src:
+            self.check.set_src(
+                self.selected_indicator_src if checked else self.unselected_indicator_src
+            )
+            self.check.clear_flag(lv.obj.FLAG.HIDDEN)
+        elif checked:
+            self.check.set_src(self.selected_indicator_src)
+            self.check.clear_flag(lv.obj.FLAG.HIDDEN)
+        else:
+            self.check.add_flag(lv.obj.FLAG.HIDDEN)
+
+
 class WallperChange(AnimScreen):
     def collect_animation_targets(self) -> list:
         targets = []
@@ -5820,7 +5911,7 @@ class WallperChange(AnimScreen):
                 path_dir = "A:1:/res/wallpapers/"
                 # Use zoom- prefix like Collection wallpapers
                 zoom_file_name = f"zoom-{file_name}"
-                current_wp = ImgGridItem(
+                current_wp = ImgGridItemRounded(
                     self.container,
                     i % 3,
                     current_row + (i // 3),
@@ -5984,7 +6075,7 @@ class WallperChange(AnimScreen):
             path_dir = "A:/res/"
             file_name = f"zoom-wallpaper-{i+1}.jpg"
 
-            current_wp = ImgGridItem(
+            current_wp = ImgGridItemRounded(
                 self.container,
                 i % 3,
                 current_row + (i // 3),
