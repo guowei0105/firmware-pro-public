@@ -672,8 +672,6 @@ class MainScreen(Screen):
         if not check_operation_frequency():
             return
 
-
-
         if hasattr(self, "apps") and self.apps:
             try:
                 _animation_in_progress = True
@@ -724,7 +722,7 @@ class MainScreen(Screen):
                             display.cover_background_load_jpeg(display_path)
                             _last_jpeg_loaded = display_path
 
-                    except Exception:
+                    except Exception as jpeg_error:
                         # Use pure black background as fallback
                         if hasattr(display, "cover_background_set_image"):
                             width, height = 480, 800
@@ -756,12 +754,6 @@ class MainScreen(Screen):
                         self.apps.clear_flag(lv.obj.FLAG.GESTURE_BUBBLE)
                         self.apps.visible = True
 
-                        # Restore AppDrawer's original background (2222.png)
-                        current_homescreen = storage_device.get_appdrawer_background()
-                        cached_style = get_cached_style(current_homescreen)
-                        if cached_style is not None:
-                            self.apps.add_style(cached_style, 0)
-
 
                     # Immediately show AppDrawer
                     show_appdrawer_behind_layer2()
@@ -778,7 +770,6 @@ class MainScreen(Screen):
                         display.cover_background_animate_to_y(
                             -800, 200
                         )  # 200ms animation (optimized response time)
-
 
                         # Restore LVGL refresh after animation complete
                         try:
@@ -798,7 +789,6 @@ class MainScreen(Screen):
                             # Clean timers and force memory cleanup
                             cleanup_timers()
                             force_memory_cleanup()
-
 
                             # Ensure LVGL refresh is restored
                             try:
@@ -894,18 +884,6 @@ class MainScreen(Screen):
                 def show_appdrawer_behind_layer2():
                     if hasattr(self.apps, "show"):
                         self.apps.show()
-                        # Restore AppDrawer's original background (2222.png)
-                        current_homescreen = storage_device.get_appdrawer_background()
-                        self.apps.add_style(
-                            StyleWrapper()
-                            .bg_img_src(
-                                _lvgl_safe_wallpaper_src(
-                                    current_homescreen, "MainScreen.layer2"
-                                )
-                            )
-                            .border_width(0),
-                            0,
-                        )
                         print(
                             "MainScreen: AppDrawer shown behind layer2 with proper gesture handling"
                         )
@@ -915,6 +893,9 @@ class MainScreen(Screen):
                     lambda t: show_appdrawer_behind_layer2(), 50, None  # 50ms delay
                 )
                 show_timer.set_repeat_count(1)
+                # Track timer
+                global _active_timers
+                _active_timers.append(show_timer)
 
                 # Step 4: After delay, slide layer2 up and out of screen
                 def start_layer2_animation():
@@ -924,8 +905,16 @@ class MainScreen(Screen):
 
                     # Step 5: Hide layer2 after animation complete
                     def on_slide_complete():
+                        global _animation_in_progress
+
                         if hasattr(display, "cover_background_hide"):
                             display.cover_background_hide()
+
+                        _animation_in_progress = False
+
+                        # Clean timers and force memory cleanup
+                        cleanup_timers()
+                        force_memory_cleanup()
 
                     # Hide layer2 after animation complete
                     completion_timer = lv.timer_create(
@@ -934,6 +923,8 @@ class MainScreen(Screen):
                         None,  # 300ms animation + 50ms buffer
                     )
                     completion_timer.set_repeat_count(1)
+                    # Track timer
+                    _active_timers.append(completion_timer)
 
                 animation_timer = lv.timer_create(
                     lambda t: start_layer2_animation(),
@@ -941,6 +932,8 @@ class MainScreen(Screen):
                     None,  # 100ms delay (reduced from 150ms)
                 )
                 animation_timer.set_repeat_count(1)
+                # Track timer
+                _active_timers.append(animation_timer)
 
         except Exception as e:
             print(f"MainScreen: Error in show_layer2_and_appdrawer: {e}")
@@ -1482,7 +1475,7 @@ class MainScreen(Screen):
                                     f"AppDrawer: Layer2 background already loaded, skipping: {display_path}"
                                 )
 
-                    except Exception:
+                    except Exception as jpeg_error:
                         # Use pure black background as fallback
                         if hasattr(display, "cover_background_set_image"):
                             width, height = 480, 800
@@ -1493,7 +1486,6 @@ class MainScreen(Screen):
 
 
                 if hasattr(display, "cover_background_animate_to_y"):
-
 
                     self.parent.hidden_others(False)
                     if hasattr(self.parent, "prepare_title_fade_in"):
@@ -1515,20 +1507,9 @@ class MainScreen(Screen):
 
 
                     def prepare_mainscreen_after_coverage():
-
                         self.add_flag(lv.obj.FLAG.HIDDEN)
                         self.visible = False
                         self.add_flag(lv.obj.FLAG.GESTURE_BUBBLE)
-
-
-                        from storage import device
-
-                        current_lockscreen = device.get_homescreen()
-                        if current_lockscreen:
-                            cached_style = get_cached_style(current_lockscreen)
-                            if cached_style is not None:
-                                self.parent.add_style(cached_style, 0)
-
 
                         lv.refr_now(None)
                         gc.collect()
@@ -1541,7 +1522,6 @@ class MainScreen(Screen):
                     # Track timer
                     global _active_timers
                     _active_timers.append(prepare_timer)
-
 
                     def on_animation_complete():
                         global _animation_in_progress
@@ -1557,8 +1537,9 @@ class MainScreen(Screen):
                             # Clean timers and force memory cleanup
                             cleanup_timers()
                             force_memory_cleanup()
+
                         except Exception as error:
-                               pass
+                            pass
 
                     completion_timer = lv.timer_create(
                         lambda t: on_animation_complete(), 200, None
@@ -2994,15 +2975,17 @@ class NftLockScreenPreview(AnimScreen):
         self.preview_container.align(
             lv.ALIGN.TOP_MID, 0, 118
         )  # 118px from top as requested
-        self.preview_container.add_style(
-            StyleWrapper()
-            .bg_opa(lv.OPA.TRANSP)
-            .pad_all(0)
-            .border_width(0)
-            .radius(40)
-            .clip_corner(True),
-            0,
-        )
+        # Use cached style to avoid memory issues during frequent scrolling
+        if "nft_preview_container" not in _cached_styles:
+            _cached_styles["nft_preview_container"] = (
+                StyleWrapper()
+                .bg_opa(lv.OPA.TRANSP)
+                .pad_all(0)
+                .border_width(0)
+                .radius(40)
+                .clip_corner(True)
+            )
+        self.preview_container.add_style(_cached_styles["nft_preview_container"], 0)
         self.preview_container.clear_flag(lv.obj.FLAG.CLICKABLE)
         self.preview_container.add_flag(lv.obj.FLAG.EVENT_BUBBLE)
         self.preview_container.set_scrollbar_mode(lv.SCROLLBAR_MODE.OFF)
@@ -3034,13 +3017,17 @@ class NftLockScreenPreview(AnimScreen):
         # Device name label (overlaid on image)
         self.device_name_label = lv.label(self.preview_container)
         self.device_name_label.set_text(device_name)
-        self.device_name_label.add_style(
-            StyleWrapper()
-            .text_font(font_GeistSemiBold38)
-            .text_color(lv_colors.WHITE)
-            .text_align(lv.TEXT_ALIGN.CENTER),
-            0,
-        )
+
+        # Use cached style to avoid memory issues during frequent scrolling
+        if "nft_device_name" not in _cached_styles:
+            _cached_styles["nft_device_name"] = (
+                StyleWrapper()
+                .text_font(font_GeistSemiBold38)
+                .text_color(lv_colors.WHITE)
+                .text_align(lv.TEXT_ALIGN.CENTER)
+            )
+        self.device_name_label.add_style(_cached_styles["nft_device_name"], 0)
+
         self.device_name_label.align_to(self.preview_container, lv.ALIGN.TOP_MID, 0, 49)
 
         # Bluetooth name label (overlaid on image)
@@ -3049,13 +3036,17 @@ class NftLockScreenPreview(AnimScreen):
             self.bluetooth_label.set_text("Pro " + ble_name[-4:])
         else:
             self.bluetooth_label.set_text("Pro")
-        self.bluetooth_label.add_style(
-            StyleWrapper()
-            .text_font(font_GeistRegular26)
-            .text_color(lv_colors.WHITE)
-            .text_align(lv.TEXT_ALIGN.CENTER),
-            0,
-        )
+
+        # Use cached style to avoid memory issues during frequent scrolling
+        if "nft_bluetooth_name" not in _cached_styles:
+            _cached_styles["nft_bluetooth_name"] = (
+                StyleWrapper()
+                .text_font(font_GeistRegular26)
+                .text_color(lv_colors.WHITE)
+                .text_align(lv.TEXT_ALIGN.CENTER)
+            )
+        self.bluetooth_label.add_style(_cached_styles["nft_bluetooth_name"], 0)
+
         self.bluetooth_label.align_to(
             self.device_name_label, lv.ALIGN.OUT_BOTTOM_MID, 0, 8
         )
@@ -3183,15 +3174,17 @@ class NftHomeScreenPreview(AnimScreen):
         self.preview_container.align(
             lv.ALIGN.TOP_MID, 0, 118
         )  # 118px from top as requested
-        self.preview_container.add_style(
-            StyleWrapper()
-            .bg_opa(lv.OPA.TRANSP)
-            .pad_all(0)
-            .border_width(0)
-            .radius(40)
-            .clip_corner(True),
-            0,
-        )
+        # Use cached style to avoid memory issues during frequent scrolling
+        if "nft_preview_container" not in _cached_styles:
+            _cached_styles["nft_preview_container"] = (
+                StyleWrapper()
+                .bg_opa(lv.OPA.TRANSP)
+                .pad_all(0)
+                .border_width(0)
+                .radius(40)
+                .clip_corner(True)
+            )
+        self.preview_container.add_style(_cached_styles["nft_preview_container"], 0)
         self.preview_container.clear_flag(lv.obj.FLAG.CLICKABLE)
         self.preview_container.add_flag(lv.obj.FLAG.EVENT_BUBBLE)
         self.preview_container.set_scrollbar_mode(lv.SCROLLBAR_MODE.OFF)
@@ -5331,9 +5324,13 @@ class AppdrawerBackgroundSetting(AnimScreen):
         self.preview_container = lv.obj(self.container)
         self.preview_container.set_size(344, 574)  # Larger preview size
         self.preview_container.align(lv.ALIGN.TOP_MID, 0, 105)  # Below status bar
-        self.preview_container.add_style(
-            StyleWrapper().bg_opa(lv.OPA.TRANSP).pad_all(0).border_width(0), 0
-        )
+
+        # Use cached style to avoid memory issues during frequent scrolling
+        if "appdrawer_preview_container" not in _cached_styles:
+            _cached_styles["appdrawer_preview_container"] = (
+                StyleWrapper().bg_opa(lv.OPA.TRANSP).pad_all(0).border_width(0)
+            )
+        self.preview_container.add_style(_cached_styles["appdrawer_preview_container"], 0)
         # Don't capture click events - let them pass through to buttons
         self.preview_container.clear_flag(lv.obj.FLAG.CLICKABLE)
         self.preview_container.add_flag(lv.obj.FLAG.EVENT_BUBBLE)
@@ -5380,13 +5377,17 @@ class AppdrawerBackgroundSetting(AnimScreen):
         # Device name label (overlaid on image, horizontally centered, 49px from top edge)
         self.device_name_label = lv.label(self.preview_container)
         self.device_name_label.set_text(device_name)
-        self.device_name_label.add_style(
-            StyleWrapper()
-            .text_font(font_GeistSemiBold38)
-            .text_color(lv_colors.WHITE)
-            .text_align(lv.TEXT_ALIGN.CENTER),
-            0,
-        )
+
+        # Use cached style to avoid memory issues during frequent scrolling
+        if "appdrawer_device_name" not in _cached_styles:
+            _cached_styles["appdrawer_device_name"] = (
+                StyleWrapper()
+                .text_font(font_GeistSemiBold38)
+                .text_color(lv_colors.WHITE)
+                .text_align(lv.TEXT_ALIGN.CENTER)
+            )
+        self.device_name_label.add_style(_cached_styles["appdrawer_device_name"], 0)
+
         # device_name 49px from preview_container top edge, horizontally centered (not vertically centered)
         self.device_name_label.align_to(self.preview_container, lv.ALIGN.TOP_MID, 0, 49)
 
@@ -5396,13 +5397,17 @@ class AppdrawerBackgroundSetting(AnimScreen):
             self.bluetooth_label.set_text("Pro " + ble_name[-4:])
         else:
             self.bluetooth_label.set_text("Pro")
-        self.bluetooth_label.add_style(
-            StyleWrapper()
-            .text_font(font_GeistRegular26)
-            .text_color(lv_colors.WHITE)
-            .text_align(lv.TEXT_ALIGN.CENTER),
-            0,
-        )
+
+        # Use cached style to avoid memory issues during frequent scrolling
+        if "appdrawer_bluetooth_name" not in _cached_styles:
+            _cached_styles["appdrawer_bluetooth_name"] = (
+                StyleWrapper()
+                .text_font(font_GeistRegular26)
+                .text_color(lv_colors.WHITE)
+                .text_align(lv.TEXT_ALIGN.CENTER)
+            )
+        self.bluetooth_label.add_style(_cached_styles["appdrawer_bluetooth_name"], 0)
+
         # bluetooth_label 8px from device_name_label bottom edge, horizontally centered (not vertically centered)
         self.bluetooth_label.align_to(
             self.device_name_label, lv.ALIGN.OUT_BOTTOM_MID, 0, 8
@@ -5414,7 +5419,10 @@ class AppdrawerBackgroundSetting(AnimScreen):
         )
         # Remove border from the button_icon (icon itself is an image, so no border by default)
         # But to be sure, also remove border from the button itself
-        self.change_button.add_style(StyleWrapper().border_width(0).radius(40), 0)
+        # Use cached style to avoid memory issues during frequent scrolling
+        if "appdrawer_change_button" not in _cached_styles:
+            _cached_styles["appdrawer_change_button"] = StyleWrapper().border_width(0).radius(40)
+        self.change_button.add_style(_cached_styles["appdrawer_change_button"], 0)
 
         # Icon in the button - using landscape icon as shown in the image
         self.button_icon = lv.img(self.change_button)
@@ -8547,15 +8555,10 @@ class HomeScreenSetting(AnimScreen):
             if hasattr(MainScreen, "_instance") and MainScreen._instance:
                 main_screen = MainScreen._instance
                 if hasattr(main_screen, "apps") and main_screen.apps:
-                    # Use original path - _lvgl_safe_wallpaper_src() will convert A:1: -> 1: if needed
-                    safe_homescreen_path = _lvgl_safe_wallpaper_src(
-                        self.current_wallpaper_path, "HomeScreenSetting.AppDrawer"
-                    )
-                    # Refresh AppDrawer background with new homescreen
-                    main_screen.apps.add_style(
-                        StyleWrapper().bg_img_src(safe_homescreen_path).border_width(0),
-                        0,
-                    )
+                    # Refresh AppDrawer background with new homescreen - use cached style
+                    cached_style = get_cached_style(self.current_wallpaper_path)
+                    if cached_style is not None:
+                        main_screen.apps.add_style(cached_style, 0)
                     # Force invalidate to ensure refresh
                     main_screen.apps.invalidate()
 
