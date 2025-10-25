@@ -59,10 +59,9 @@ _last_jpeg_loaded = None  # Cache the last loaded JPEG path
 _operation_count = 0  # Operation counter
 _active_timers = []  # Track active timers
 _cached_styles = {}  # Cache style objects dictionary
-_restore_timer = None  # LVGL timer for debounced restore to MainScreen
+_restore_timer = None  # LVGL timer for debounced restore
 _busy_show_timer = None  # LVGL timer to delay showing Processing
 _busy_show_delay_ms = 800  # Delay before showing Processing text
-_restore_timer = None  # LVGL timer for debounced restore to AppDrawer
 
 
 def _lvgl_safe_wallpaper_src(path: str | None, context: str = "") -> str:
@@ -110,9 +109,6 @@ def cleanup_timers():
 
 def force_memory_cleanup():
     """Force memory cleanup"""
-    if __debug__:
-        mem_before = gc.mem_alloc()
-
     # Multiple garbage collections
     for i in range(5):  # Increased to 5 times
         try:
@@ -122,13 +118,11 @@ def force_memory_cleanup():
 
     # Periodically clean style cache (keep 2 most recently used)
     global _cached_styles
-    styles_cleaned = 0
     if len(_cached_styles) > 2:
         # Keep only the last 2, clean others
         keys = list(_cached_styles.keys())
         for key in keys[:-2]:
             del _cached_styles[key]
-            styles_cleaned += 1
 
 
 
@@ -315,11 +309,6 @@ def change_state(is_busy: bool = False):
             # Don't save persistent state here - only save when counter > 0
             if _busy_state_counter > 0:
                 _set_persistent_busy_state(_busy_state_counter)
-
-        # Only restore to non-busy state if counter is 0.
-        # To avoid flicker across bursts of host messages, debounce the restore
-        # using an LVGL timer. This survives loop.clear() and is cancelled by
-        # any subsequent busy call above.
         time_since_last_busy = utime.ticks_diff(current_time, _last_busy_time)
         if _busy_state_counter > 0:
             return
@@ -421,12 +410,10 @@ class MainScreen(Screen):
     def __init__(self, device_name=None, ble_name=None, dev_state=None):
         import storage.device as storage_device
 
-        # homescreen = storage_device.get_homescreen()
         lockscreen = storage_device.get_homescreen()
         safe_lockscreen = _lvgl_safe_wallpaper_src(lockscreen, "MainScreen.init")
         if not hasattr(self, "_init"):
             self._init = True
-            # self._cached_lockscreen = lockscreen
 
             # Check if device name display is enabled
             show_device_names = storage_device.is_device_name_display_enabled()
@@ -479,11 +466,6 @@ class MainScreen(Screen):
                     self.subtitle.add_flag(lv.obj.FLAG.HIDDEN)
                     self.subtitle.set_text("")
 
-            # if (
-            #     not hasattr(self, "_cached_lockscreen")
-            #     or self._cached_lockscreen != lockscreen
-            # ):
-            #     self._cached_lockscreen = lockscreen
             lockscreen = storage_device.get_homescreen()
             safe_lockscreen = _lvgl_safe_wallpaper_src(lockscreen, "MainScreen.update")
             self.add_style(
@@ -572,15 +554,12 @@ class MainScreen(Screen):
         import utime
 
         current_time = utime.ticks_ms()
-        should_show_appdrawer = False  # Initialize flag
 
         # If we have a saved busy state, check if it's too old
         # BUT be extra careful during session restarts - only clear if very old
         if _busy_state_counter > 0:
             last_busy_time = _get_persistent_busy_time()
             time_since_last_busy = utime.ticks_diff(current_time, last_busy_time)
-
-
 
             # For very recent activity (less than 3 seconds), never clear during initialization
             # This prevents clearing states during normal multi-step operations with session restarts
@@ -592,8 +571,6 @@ class MainScreen(Screen):
                 _set_persistent_busy_state(0)
                 # Clear the persistent busy time as well since communication is done
                 _set_persistent_busy_time(0)
-                # Force show AppDrawer after clearing busy state
-                should_show_appdrawer = True
             else:
                 pass
 
@@ -664,8 +641,6 @@ class MainScreen(Screen):
             # Check if AppDrawer is visible
             if hasattr(self, "apps") and self.apps:
                 is_app_drawer_hidden = self.apps.has_flag(lv.obj.FLAG.HIDDEN)
-                is_showing = getattr(self.apps, "_showing", False)
-
 
                 if not is_app_drawer_hidden:
                     return
@@ -819,7 +794,6 @@ class MainScreen(Screen):
                                 display.cover_background_hide()
 
                             _animation_in_progress = False
-                            elapsed = get_timestamp() - _animation_start_time
 
                             # Clean timers and force memory cleanup
                             cleanup_timers()
@@ -919,11 +893,6 @@ class MainScreen(Screen):
                 # Step 3: Immediately show AppDrawer and restore original background (covered by layer2)
                 def show_appdrawer_behind_layer2():
                     if hasattr(self.apps, "show"):
-                        # Use show() method to properly display AppDrawer
-                        # show() method will:
-                        # 1. Clear HIDDEN flag
-                        # 2. Set visible = True
-                        # 3. Clear FLAG.GESTURE_BUBBLE flag to ensure gestures don't bubble
                         self.apps.show()
                         # Restore AppDrawer's original background (2222.png)
                         current_homescreen = storage_device.get_appdrawer_background()
@@ -1271,15 +1240,11 @@ class MainScreen(Screen):
 
             items_per_page = 4
             cols = 2
-            rows = 2  # 2 columns × 3 rows = 6 items per page
             item_width = 144
             item_height = 214
             col_gap = 64
             row_gap = 64
 
-            # center grid horizontally inside page width to avoid visual gap at edges
-            content_width = cols * item_width + (cols - 1) * col_gap
-            # grid_offset_x = max(0, (self.page_width - content_width) // 2)
             grid_offset_x = 64
 
             for idx, (name, img, text) in enumerate(items):
@@ -1423,7 +1388,6 @@ class MainScreen(Screen):
 
         def set_position(self, val):
             pass
-            # self.main_cont.set_y(val)
 
         def on_gesture(self, event_obj):
             global _animation_in_progress
@@ -1477,11 +1441,6 @@ class MainScreen(Screen):
 
                 from storage import device
 
-                # lockscreen_path = device.get_homescreen()
-                # self.add_style(
-                #     StyleWrapper().bg_img_src(lockscreen_path).border_width(0),
-                #     0,
-                # )
                 if hasattr(display, "cover_background_load_jpeg"):
                     try:
                         from storage import device
@@ -1594,7 +1553,6 @@ class MainScreen(Screen):
                             if hasattr(self.parent, "start_title_fade_in"):
                                 self.parent.start_title_fade_in(duration=100)
                             _animation_in_progress = False
-                            elapsed = get_timestamp() - _animation_start_time
 
                             # Clean timers and force memory cleanup
                             cleanup_timers()
@@ -1987,9 +1945,6 @@ class MainScreen(Screen):
             if hasattr(self, "page_items") and page_index < len(self.page_items):
                 items = self.page_items[page_index]
                 for item in items:
-                    # Create new item copies
-                    # Need to copy based on actual item structure
-                    # Simplified handling: only copy basic attributes
                     pass
 
         def cleanup_prerender(self):
@@ -2029,7 +1984,6 @@ class PasskeysManager(AnimScreen):
 
         self.fresh_show()
         self.add_event_cb(self.on_click_event, lv.EVENT.CLICKED, None)
-        # self.add_event_cb(self.on_scroll, lv.EVENT.SCROLL_BEGIN, None)
 
     async def list_credential(self):
         from .app_passkeys import PasskeysListItemBtn
@@ -2187,8 +2141,6 @@ class ShowAddress(AnimScreen):
         else:
             if not self.is_visible():
                 self._load_scr(self)
-            # self.container.delete()
-            # self.init_ui()
             gc.collect()
 
     async def _get_passphrase_from_user(self, init=False, prev_scr=None):
@@ -2358,7 +2310,6 @@ class ShowAddress(AnimScreen):
 
         for i, btn in enumerate(self.chain_buttons):
             btn.remove_event_cb(None)
-            # btn.set_style_opa(0, 0)
             if i < (end_idx - start_idx):
                 chain = self.chains[start_idx + i]
                 chain_name, chain_icon = chain
@@ -2441,9 +2392,6 @@ class ShowAddress(AnimScreen):
         self.index_btn.label_left.set_text(f"Account #{self.current_index + 1}")
         # pass
 
-    # def _load_scr(self, scr: "Screen", back: bool = False) -> None:
-    #     lv.scr_load(scr)
-
     def eventhandler(self, event_obj):
         event = event_obj.code
         target = event_obj.get_target()
@@ -2458,8 +2406,6 @@ class ShowAddress(AnimScreen):
                         self.load_screen(self.prev_scr, destroy_self=True)
 
                 elif passphrase.is_enabled() and target == self.nav_passphrase.nav_btn:
-                    # enter new passphrase
-                    # device.set_passphrase_auto_status(False)
                     storage.cache.end_current_session()
                     self.curr_session_id = storage.cache.start_session()
                     workflow.spawn(self._get_passphrase_from_user(init=False))
@@ -3129,16 +3075,6 @@ class NftLockScreenPreview(AnimScreen):
                     lockscreen_path = self.nft_path
 
                     try:
-                        # First, verify the NFT file exists and is accessible
-                        test_file_path = lockscreen_path.replace("A:", "1:")
-                        try:
-                            stat_result = io.fatfs.stat(test_file_path)
-                            file_size = (
-                                stat_result[6] if len(stat_result) > 6 else "unknown"
-                            )
-                        except Exception as file_err:
-                             pass
-
                         storage_device.set_homescreen(lockscreen_path)
 
 
@@ -3526,8 +3462,6 @@ class SettingsScreen(AnimScreen):
             if not self.is_visible():
                 self._load_scr(self, lv.scr_act() != self)
             return
-        # if __debug__:
-        #     self.add_style(StyleWrapper().bg_color(lv_colors.ONEKEY_GREEN_1), 0)
         self.container = ContainerFlexCol(self.content_area, self.title, padding_row=2)
         self.general = ListItemBtn(
             self.container,
@@ -3569,9 +3503,7 @@ class SettingsScreen(AnimScreen):
     def refresh_text(self):
         self.title.set_text(_(i18n_keys.TITLE__SETTINGS))
         self.general.label_left.set_text(_(i18n_keys.ITEM__GENERAL))
-        # self.connect.label_left.set_text(_(i18n_keys.ITEM__CONNECT))
         self.air_gap.label_left.set_text(_(i18n_keys.ITEM__AIR_GAP_MODE))
-        # self.home_scr.label_left.set_text(_(i18n_keys.ITEM__HOMESCREEN))
         self.security.label_left.set_text(_(i18n_keys.ITEM__SECURITY))
         self.wallet.label_left.set_text(_(i18n_keys.ITEM__WALLET))
         if not utils.BITCOIN_ONLY:
@@ -3586,18 +3518,12 @@ class SettingsScreen(AnimScreen):
                 return
             if target == self.general:
                 GeneralScreen(self)
-            # elif target == self.connect:
-            #     ConnectSetting(self)
-            # elif target == self.home_scr:
-            #     HomeScreenSetting(self)
             elif target == self.security:
                 SecurityScreen(self)
             elif target == self.wallet:
                 WalletScreen(self)
             elif target == self.about:
                 AboutSetting(self)
-            # elif target == self.boot_loader:
-            #     Go2UpdateMode(self)
             elif target == self.air_gap:
                 AirGapSetting(self)
             elif not utils.BITCOIN_ONLY and target == self.fido_keys:
@@ -3993,8 +3919,6 @@ class BackupWallet(Screen):
             "OneKey Lite",
             left_img_src="A:/res/icon-lite-48.png",
         )
-        # hide lite backup for now
-        # self.lite.add_flag(lv.obj.FLAG.HIDDEN)
 
         self.keytag = ListItemBtn(
             self.container,
@@ -4126,8 +4050,6 @@ class ConnectWallet(FullSizeWindow):
                 StyleWrapper().text_font(font_GeistRegular26).pad_ver(12).pad_hor(0),
                 0,
             )
-            # self.content_area.clear_flag(lv.obj.FLAG.SCROLL_ELASTIC)
-            # self.content_area.clear_flag(lv.obj.FLAG.SCROLL_MOMENTUM)
             self.content_area.set_scrollbar_mode(lv.SCROLLBAR_MODE.OFF)
             self.label_bottom.set_long_mode(lv.label.LONG.WRAP)
             self.label_bottom.set_text(support_chains)
@@ -4165,9 +4087,6 @@ class ConnectWallet(FullSizeWindow):
             if stop_single in racer.finished:
                 self.destroy()
                 return
-            # if self.scrolling:
-            #     await loop.sleep(5000)
-            #     continue
             assert self.encoder is not None
             qr_data = self.encoder.next_part()
             self.qr.update(qr_data, len(qr_data))
@@ -4207,7 +4126,6 @@ class ScanScreen(Screen):
         self.camera_bg = lv.img(self.content_area)
         self.camera_bg.set_src("A:/res/camera-bg.png")
         self.camera_bg.align(lv.ALIGN.TOP_MID, 0, 148)
-        # self.camera_bg.add_flag(lv.obj.FLAG.HIDDEN)
 
         self.btn = NormalButton(self, f"{LV_SYMBOLS.LV_SYMBOL_LIGHTBULB}")
         self.btn.set_size(64, 64)
@@ -5019,9 +4937,7 @@ class GeneralScreen(AnimScreen):
         self.wallpaper.label_left.set_text(_(i18n_keys.BUTTON__WALLPAPER))
         self.animation.label_left.set_text(_(i18n_keys.ITEM__ANIMATIONS))
         self.touch.label_left.set_text(_(i18n_keys.BUTTON__TOUCH))
-        # self.power.label_left.set_text(_(i18n_keys.ITEM__POWER_OFF))
         self.container.update_layout()
-        # self.power.align_to(self.container, lv.ALIGN.OUT_BOTTOM_MID, 0, 12)
 
     def on_click_event(self, event_obj):
         target = event_obj.get_target()
@@ -5380,7 +5296,6 @@ class AppdrawerBackgroundSetting(AnimScreen):
                 self.selected_wallpaper = selected_wallpaper
                 self.current_wallpaper_path = selected_wallpaper
                 if hasattr(self, "lockscreen_preview"):
-                    # lv.img.set_src() supports A:1: format directly
                     self.lockscreen_preview.set_src(selected_wallpaper)
             self.refresh_text()
             return
@@ -5439,7 +5354,6 @@ class AppdrawerBackgroundSetting(AnimScreen):
             lockscreen_path = storage_device.get_homescreen()
             if lockscreen_path:
                 self.current_wallpaper_path = lockscreen_path
-                # lv.img.set_src() supports A:1: format directly
                 self.lockscreen_preview.set_src(lockscreen_path)
             else:
                 # Use default wallpaper if no custom lockscreen is set
@@ -5568,7 +5482,6 @@ class AppdrawerBackgroundSetting(AnimScreen):
         self.lockscreen_preview.set_src(wallpapers[next_index])
 
         # TODO: Save selected wallpaper to storage
-        # storage_device.set_lock_screen_wallpaper(wallpapers[next_index])
 
     def refresh_text(self):
 
@@ -5624,9 +5537,6 @@ class AppdrawerBackgroundSetting(AnimScreen):
             # Use the stored wallpaper path instead of get_src()
             current_wallpaper = getattr(self, "current_wallpaper_path", None)
             if current_wallpaper:
-                # Save the wallpaper path - keep original format (A:1: for custom, A: for built-in)
-                # The storage layer will handle the path as-is
-                # When reading back, _lvgl_safe_wallpaper_src() will convert A:1: -> 1: for bg_img_src
                 try:
                     storage_device.set_homescreen(current_wallpaper)
 
@@ -5683,11 +5593,6 @@ class AppdrawerBackgroundSetting(AnimScreen):
 class WallperChange(AnimScreen):
     def collect_animation_targets(self) -> list:
         targets = []
-        # if hasattr(self, "container") and self.container:
-        #     targets.append(self.container)
-        # if hasattr(self, "wps"):
-        #     for wp in self.wps:
-        #         targets.append(wp)
         return targets
 
     def __init__(self, prev_scr=None):
@@ -6242,12 +6147,10 @@ class WallperChange(AnimScreen):
                                     self.del_delayed(100)
                         elif self.prev_scr.__class__.__name__ == "AppdrawerBackgroundSetting":
                             try:
-                                # 更新现有的AppdrawerBackgroundSetting实例
                                 self.prev_scr.selected_wallpaper = wp.img_path
                                 self.prev_scr.current_wallpaper_path = wp.img_path
 
                                 if hasattr(self.prev_scr, "lockscreen_preview"):
-                                    # lv.img.set_src() supports A:1: format directly
                                     self.prev_scr.lockscreen_preview.set_src(wp.img_path)
 
                                 if hasattr(self.prev_scr, 'refresh_text'):
@@ -6325,7 +6228,6 @@ class WallperChange(AnimScreen):
         self.lockscreen_preview.set_src(wallpapers[next_index])
 
         # TODO: Save selected wallpaper to storage
-        # storage_device.set_lock_screen_wallpaper(wallpapers[next_index])
 
     def refresh_text(self):
         """Refresh display when returning to this screen"""
@@ -6964,9 +6866,6 @@ class AutoLockSetting(AnimScreen):
             self.btns[index] = ListItemBtn(
                 self.container, item, has_next=False, use_transition=False
             )
-            # self.btns[index].label_left.add_style(
-            #     StyleWrapper().text_font(font_GeistRegular30), 0
-            # )
             self.btns[index].add_check_img()
 
 
@@ -7072,7 +6971,6 @@ class LanguageSetting(AnimScreen):
             lang_button = ListItemBtn(
                 self.container, lang[1], has_next=False, use_transition=False
             )
-            # lang_button.label_left.add_style(StyleWrapper().text_font(font_GeistRegular30), 0)
             lang_button.add_check_img()
             self.lang_buttons.append(lang_button)
             if GeneralScreen.cur_language == lang[1]:
@@ -7452,9 +7350,6 @@ class AutoShutDownSetting(AnimScreen):
             self.btns[index] = ListItemBtn(
                 self.container, item, has_next=False, use_transition=False
             )
-            # self.btns[index].label_left.add_style(
-            #     StyleWrapper().text_font(font_GeistRegular30), 0
-            # )
             self.btns[index].add_check_img()
 
             # Compare based on delay_ms instead of string formatting
@@ -7662,7 +7557,6 @@ class ConnectSetting(Screen):
             self.description.set_text(
                 _(i18n_keys.CONTENT__CONNECT_BLUETOOTH_DISABLED__HINT)
             )
-        # self.usb = ListItemBtnWithSwitch(self.container, _(i18n_keys.ITEM__USB))
         self.container.add_event_cb(self.on_value_changed, lv.EVENT.VALUE_CHANGED, None)
 
     def on_value_changed(self, event_obj):
@@ -7685,11 +7579,6 @@ class ConnectSetting(Screen):
                         _(i18n_keys.CONTENT__CONNECT_BLUETOOTH_DISABLED__HINT)
                     )
                     uart.ctrl_ble(enable=False)
-            # else:
-            #     if target.has_state(lv.STATE.CHECKED):
-            #         print("USB is on")
-            #     else:
-            #         print("USB is off")
 
 
 class AirGapSetting(AnimScreen):
@@ -7896,8 +7785,6 @@ class AboutSetting(AnimScreen):
 
     def on_click(self, event_obj):
         target = event_obj.get_target()
-        # if target == self.board_loader:
-        #     GO2BoardLoader()
         if target == self.certification:
             from .template import CertificationInfo
 
@@ -7908,10 +7795,6 @@ class AboutSetting(AnimScreen):
     def on_long_pressed(self, event_obj):
         target = event_obj.get_target()
         if target == self.serial:
-            # if self.board_loader.has_flag(lv.obj.FLAG.HIDDEN):
-            #     self.board_loader.clear_flag(lv.obj.FLAG.HIDDEN)
-            # else:
-            #     self.board_loader.add_flag(lv.obj.FLAG.HIDDEN)
             GO2BoardLoader()
 
 
@@ -8034,12 +7917,6 @@ class PowerOff(FullSizeWindow):
 
         self.has_pin = config.has_pin()
         if self.has_pin and storage_device.is_initialized():
-            # from trezor.lvglui.scrs import fingerprints
-
-            # if fingerprints.is_available() and fingerprints.is_unlocked():
-            #         fingerprints.lock()
-            # else:
-            #     config.lock()
             config.lock()
 
             if passphrase.is_passphrase_pin_enabled():
@@ -8170,7 +8047,6 @@ class HomeScreenSetting(AnimScreen):
                 self.selected_wallpaper = selected_wallpaper
                 self.original_wallpaper_path = selected_wallpaper
 
-                # lv.img.set_src() supports A:1: paths directly (proven by ImgGridItem)
                 display_path = selected_wallpaper
 
                 # Handle blur state preservation
@@ -8257,7 +8133,6 @@ class HomeScreenSetting(AnimScreen):
 
             self.original_wallpaper_path = self.selected_wallpaper
 
-            # lv.img.set_src() supports A:1: paths directly (proven by ImgGridItem)
             display_path = self.selected_wallpaper
 
 
@@ -8275,12 +8150,10 @@ class HomeScreenSetting(AnimScreen):
 
             self.current_wallpaper_path = final_display_path
 
-            # lv.img.set_src() supports A:1: paths - no safety check needed
             self.homescreen_preview.set_src(final_display_path)
         else:
             self._load_blur_state()
 
-            # lv.img.set_src() natively supports A:1: paths - no conversion needed
             self.homescreen_preview.set_src(self.current_wallpaper_path)
 
         # Use zoom scaling instead of set_size to avoid jagged edges
@@ -8824,9 +8697,6 @@ class WallPaperManage(Screen):
             0,
         )
         if not is_internal:
-            # self.icon.add_style(StyleWrapper().radius(40).clip_corner(True), 0)
-            # self.icon.set_style_radius(40, 0)
-            # self.icon.set_style_clip_corner(True, 0)
             self.btn_yes.set_size(224, 98)
             self.btn_yes.align_to(self.content_area, lv.ALIGN.BOTTOM_RIGHT, -12, -8)
             self.btn_del = NormalButton(self.content_area, "")
@@ -8863,9 +8733,6 @@ class WallPaperManage(Screen):
         if storage_device.get_homescreen() == self.img_path:
             storage_device.set_appdrawer_background(utils.get_default_wallpaper())
         self.load_screen(self.prev_scr, destroy_self=True)
-
-    # def cancel_callback(self):
-    #     self.btn_del.clear_flag(lv.obj.FLAG.HIDDEN)
 
     def eventhandler(self, event_obj):
         event = event_obj.code
@@ -8908,8 +8775,6 @@ class SecurityScreen(AnimScreen):
             utils.mark_collecting_fingerprint_done()
             return
         super().__init__(prev_scr, title=_(i18n_keys.TITLE__SECURITY), nav_back=True)
-
-        # self.set_scrollbar_mode(lv.SCROLLBAR_MODE.OFF)
 
         self.container = ContainerFlexCol(self.content_area, self.title, padding_row=2)
 
@@ -8970,13 +8835,6 @@ class SecurityScreen(AnimScreen):
                         pin_use_type=1,
                     )
                 )
-                # else:
-
-                #     workflow.spawn(
-                #         fingerprints.add_fingerprint(
-                #             0, callback=lambda: FingerprintSetting(self)
-                #         )
-                #     )
             elif target == self.device_auth:
                 DeviceAuthScreen(self)
             elif target == self.safety_check:
@@ -9412,17 +9270,9 @@ class SafetyCheckSetting(AnimScreen):
         )
 
         self.container = ContainerFlexCol(self.content_area, self.title, padding_row=2)
-        # self.strict = ListItemBtn(
-        #     self.container, _(i18n_keys.ITEM__STATUS__STRICT), has_next=False
-        # )
-        # self.strict.add_check_img()
-        # self.prompt = ListItemBtn(
-        #     self.container, _(i18n_keys.ITEM__STATUS__PROMPT), has_next=False
-        # )
         self.safety_check = ListItemBtnWithSwitch(
             self.container, _(i18n_keys.ITEM__SAFETY_CHECKS)
         )
-        # self.prompt.add_check_img()
         self.description = lv.label(self.content_area)
         self.description.set_size(456, lv.SIZE.CONTENT)
         self.description.set_long_mode(lv.label.LONG.WRAP)
@@ -9430,7 +9280,6 @@ class SafetyCheckSetting(AnimScreen):
         self.description.set_style_text_line_space(3, 0)
         self.description.align_to(self.container, lv.ALIGN.OUT_BOTTOM_LEFT, 8, 16)
         self.description.set_recolor(True)
-        # self.set_checked()
         self.retrieval_state()
 
         self.container.add_event_cb(self.on_click, lv.EVENT.VALUE_CHANGED, None)
@@ -9518,16 +9367,6 @@ class SafetyCheckPromptConfirm(FullSizeWindow):
             anim_dir=0,
         )
         self.slider.change_knob_style(1)
-        # self.status_bar = lv.obj(self)
-        # self.status_bar.remove_style_all()
-        # self.status_bar.set_size(lv.pct(100), 44)
-        # self.status_bar.add_style(
-        #     StyleWrapper()
-        #     .bg_opa()
-        #     .align(lv.ALIGN.TOP_LEFT)
-        #     .bg_img_src("A:/res/warning_bar.png"),
-        #     0,
-        # )
         self.callback = callback_obj
 
     def eventhandler(self, event_obj):
@@ -10490,8 +10329,6 @@ class PowerOnOffDetails(FullSizeWindow):
         self.item.label.set_style_text_color(lv_colors.WHITE_2, 0)
         self.item.label.set_long_mode(lv.label.LONG.WRAP)
 
-    # def destroy(self, _delay):
-    #     return self.delete()
 
 
 class RecoveryPhraseDetails(FullSizeWindow):
@@ -10513,8 +10350,6 @@ class RecoveryPhraseDetails(FullSizeWindow):
         self.item.label.align_to(self.item.label_top, lv.ALIGN.OUT_BOTTOM_LEFT, 0, 16)
         self.item.label.set_long_mode(lv.label.LONG.WRAP)
 
-    # def destroy(self, _delay):
-    #     return self.delete()
 
 
 class PinProtectionDetails(FullSizeWindow):
@@ -10536,8 +10371,6 @@ class PinProtectionDetails(FullSizeWindow):
         self.item.label.align_to(self.item.label_top, lv.ALIGN.OUT_BOTTOM_LEFT, 0, 16)
         self.item.label.set_long_mode(lv.label.LONG.WRAP)
 
-    # def destroy(self, _delay):
-    #     return self.delete()
 
 
 class FingerprintDetails(FullSizeWindow):
@@ -10580,8 +10413,6 @@ class HardwareWalletDetails(FullSizeWindow):
         self.item.label.align_to(self.item.label_top, lv.ALIGN.OUT_BOTTOM_LEFT, 0, 16)
         self.item.label.set_long_mode(lv.label.LONG.WRAP)
 
-    # def destroy(self, _delay):
-    #     return self.delete()
 
 
 class PassphraseDetails(FullSizeWindow):
@@ -10603,8 +10434,6 @@ class PassphraseDetails(FullSizeWindow):
         self.item.label.align_to(self.item.label_top, lv.ALIGN.OUT_BOTTOM_LEFT, 0, 16)
         self.item.label.set_long_mode(lv.label.LONG.WRAP)
 
-    # def destroy(self, _delay):
-    #     return self.delete()
 
 
 class HelpDetails(FullSizeWindow):
@@ -10644,5 +10473,3 @@ class HelpDetails(FullSizeWindow):
         self.underline.set_style_line_color(lv_colors.WHITE_2, 0)
         self.underline.align_to(self.website, lv.ALIGN.OUT_BOTTOM_LEFT, 0, 0)
 
-    # def destroy(self, _delay):
-    #     return self.delete()
