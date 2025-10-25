@@ -129,14 +129,32 @@ def set_up() -> None:
 
 
 def clear_screens() -> None:
+    # CRITICAL FIX: Don't delete core screens (LockScreen, MainScreen) that are always needed
+    # Deleting these causes them to be recreated, which can trigger duplicate resource loading
+    # and memory exhaustion (e.g., wallpaper images being loaded multiple times)
+    screens_to_keep = []
     for scr in SCREENS:
         try:
+            # Check if this is a core screen that should not be deleted
+            scr_class_name = scr.__class__.__name__
+            if scr_class_name in ("LockScreen", "MainScreen"):
+                if __debug__:
+                    print(f"[clear_screens] Keeping core screen: {scr_class_name}")
+                screens_to_keep.append(scr)
+                continue
+
+            # Delete non-core screens
+            if __debug__:
+                print(f"[clear_screens] Deleting screen: {scr_class_name}")
             scr.del_delayed(500)
             del scr.__class__._instance
             del scr
         except BaseException:
             pass
+
+    # Replace SCREENS with only the kept screens
     SCREENS.clear()
+    SCREENS.extend(screens_to_keep)
 
 
 def try_remove_scr(screen):

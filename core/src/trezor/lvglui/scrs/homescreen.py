@@ -7061,7 +7061,8 @@ class WallperChange(AnimScreen):
                                 # Simply load the previous screen with return animation
                                 try:
                                     self._load_scr(self.prev_scr, back=True)
-                                    # Clean up WallperChange singleton
+                                    # Clean up WallperChange properly
+                                    utils.try_remove_scr(self)
                                     if hasattr(self.__class__, "_instance"):
                                         del self.__class__._instance
                                     self.del_delayed(100)
@@ -7073,6 +7074,7 @@ class WallperChange(AnimScreen):
                                     # Simple fallback to WallpaperScreen
                                     fallback_screen = WallpaperScreen()
                                     self._load_scr(fallback_screen, back=True)
+                                    utils.try_remove_scr(self)
                                     if hasattr(self.__class__, "_instance"):
                                         del self.__class__._instance
                                     self.del_delayed(100)
@@ -7104,7 +7106,8 @@ class WallperChange(AnimScreen):
                                     )
                                     self._load_scr(new_screen, back=True)
 
-                                    # Clean up WallperChange singleton
+                                    # Clean up WallperChange properly
+                                    utils.try_remove_scr(self)
                                     if hasattr(self.__class__, "_instance"):
                                         del self.__class__._instance
                                     self.del_delayed(100)
@@ -7116,6 +7119,7 @@ class WallperChange(AnimScreen):
                                     # Fallback to WallpaperScreen
                                     fallback_screen = WallpaperScreen()
                                     self._load_scr(fallback_screen, back=True)
+                                    utils.try_remove_scr(self)
                                     if hasattr(self.__class__, "_instance"):
                                         del self.__class__._instance
                                     self.del_delayed(100)
@@ -7140,17 +7144,18 @@ class WallperChange(AnimScreen):
                                         print(
                                             f"WallperChange: Updated lockscreen preview directly to {wp.img_path}"
                                         )
-                                
-                                # 直接返回到Lock Screen设置页面，使用返回动画
-                                self._load_scr(self.prev_scr, back=True)
-                                
+
                                 # 确保界面正确刷新
                                 if hasattr(self.prev_scr, 'refresh_text'):
                                     self.prev_scr.refresh_text()
                                 if hasattr(self.prev_scr, 'invalidate'):
                                     self.prev_scr.invalidate()
-                                
-                                # Clean up WallperChange singleton
+
+                                # 直接返回到Lock Screen设置页面，使用返回动画
+                                self._load_scr(self.prev_scr, back=True)
+
+                                # Clean up WallperChange properly
+                                utils.try_remove_scr(self)
                                 if hasattr(self.__class__, "_instance"):
                                     del self.__class__._instance
                                 self.del_delayed(100)
@@ -7167,6 +7172,7 @@ class WallperChange(AnimScreen):
                                         return_from_wallpaper=True,
                                     )
                                     self._load_scr(new_screen, back=True)
+                                    utils.try_remove_scr(self)
                                     if hasattr(self.__class__, "_instance"):
                                         del self.__class__._instance
                                     self.del_delayed(100)
@@ -7176,6 +7182,7 @@ class WallperChange(AnimScreen):
                                     # 最终后备方案：返回到WallpaperScreen
                                     fallback_screen = WallpaperScreen()
                                     self._load_scr(fallback_screen, back=True)
+                                    utils.try_remove_scr(self)
                                     if hasattr(self.__class__, "_instance"):
                                         del self.__class__._instance
                                     self.del_delayed(100)
@@ -7186,6 +7193,7 @@ class WallperChange(AnimScreen):
                             # 尝试直接返回到前一个页面，使用返回动画
                             try:
                                 self._load_scr(self.prev_scr, back=True)
+                                utils.try_remove_scr(self)
                                 if hasattr(self.__class__, "_instance"):
                                     del self.__class__._instance
                                 self.del_delayed(100)
@@ -7195,6 +7203,7 @@ class WallperChange(AnimScreen):
                                 # Fallback to WallpaperScreen
                                 fallback_screen = WallpaperScreen()
                                 self._load_scr(fallback_screen, back=True)
+                                utils.try_remove_scr(self)
                                 if hasattr(self.__class__, "_instance"):
                                     del self.__class__._instance
                                 self.del_delayed(100)
