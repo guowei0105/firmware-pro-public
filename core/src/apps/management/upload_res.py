@@ -117,8 +117,27 @@ async def upload_res(ctx: wire.Context, msg: ResourceUpload) -> Success:
                 new_path = f"1:/res/wallpapers/{file_name}.{res_ext}"
                 old_path_zoom = f"1:res/wallpapers/{name}"
                 new_path_zoom = f"1:/res/wallpapers/zoom-{file_name}.{res_ext}"
+                # Rename original and zoom files to update timestamp
                 io.fatfs.rename(old_path, new_path)
                 io.fatfs.rename(old_path_zoom, new_path_zoom)
+
+                # Also handle optional blur variant: if an existing blur file is present,
+                # rename it to the new timestamped name so the pair stays in sync.
+                try:
+                    # Derive old blur filename from the zoom entry's base name
+                    dot_idx = name.rfind(".")
+                    if dot_idx > -1:
+                        old_ext = name[dot_idx + 1 :]
+                        old_base = name[5:dot_idx]  # remove 'zoom-' prefix and extension
+                        old_path_blur = f"1:res/wallpapers/{old_base}-blur.{old_ext}"
+                        new_path_blur = (
+                            f"1:/res/wallpapers/{file_name}-blur.{res_ext}"
+                        )
+                        io.fatfs.rename(old_path_blur, new_path_blur)
+                except BaseException:
+                    # No existing blur file; nothing to rename.
+                    pass
+
                 return Success(message="Success")
             else:
                 raise wire.DataError("File already exists")

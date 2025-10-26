@@ -4559,13 +4559,17 @@ class AppdrawerBackgroundSetting(AnimScreen):
 
         # Lock screen preview container with image
         self.preview_container = lv.obj(self.container)
-        self.preview_container.set_size(344, 574)  # Larger preview size
+        self.preview_container.set_size(344, 572)  # Slightly shorter to avoid top seam
         self.preview_container.align(lv.ALIGN.TOP_MID, 0, 105)  # Below status bar
 
         # Use cached style to avoid memory issues during frequent scrolling
         if "appdrawer_preview_container" not in _cached_styles:
             _cached_styles["appdrawer_preview_container"] = (
-                StyleWrapper().bg_opa(lv.OPA.TRANSP).pad_all(0).border_width(0)
+                StyleWrapper()
+                .bg_color(lv_colors.BLACK)
+                .bg_opa(lv.OPA.COVER)
+                .pad_all(0)
+                .border_width(0)
             )
         self.preview_container.add_style(_cached_styles["appdrawer_preview_container"], 0)
         # Don't capture click events - let them pass through to buttons
@@ -4600,9 +4604,10 @@ class AppdrawerBackgroundSetting(AnimScreen):
         # Disable scrollbars on the image itself
         self.lockscreen_preview.clear_flag(lv.obj.FLAG.SCROLLABLE)
         base_width, base_height = 480, 800
-        zoom_x = int((344 / base_width) * 256)
-        zoom_y = int((574 / base_height) * 256)
-        zoom = min(zoom_x, zoom_y)
+        # Use cover strategy: fill container then clip rounded corners
+        zoom_x = math.ceil((344 / base_width) * 256)
+        zoom_y = math.ceil((572 / base_height) * 256)
+        zoom = max(int(zoom_x), int(zoom_y))
         self.lockscreen_preview.set_zoom(zoom)
         self.lockscreen_preview.set_antialias(True)  # Enable anti-aliasing for smooth scaling
         self.lockscreen_preview.align(lv.ALIGN.CENTER, 0, 0)
@@ -4695,6 +4700,13 @@ class AppdrawerBackgroundSetting(AnimScreen):
         self.button_icon.add_event_cb(_on_button_icon_clicked, lv.EVENT.CLICKED, None)
 
         self.load_screen(self)
+        # Schedule a one-shot full refresh to eliminate first-frame artifacts
+        try:
+            from trezor import loop as _loop
+
+            _loop.schedule(self._first_frame_fix())
+        except Exception:
+            pass
         gc.collect()
 
     def on_select_clicked(self, event_obj):
@@ -4740,6 +4752,23 @@ class AppdrawerBackgroundSetting(AnimScreen):
         except Exception as e:
             if __debug__:
                 print(f"[AppdrawerBackgroundSetting.refresh_text] Error during refresh: {e}")
+
+    async def _first_frame_fix(self):
+        import utime
+
+        # Small delay to ensure layout and first decode are done
+        utime.sleep_ms(50)
+        try:
+            # Full screen refresh + targeted invalidates
+            self.refresh()
+            if hasattr(self, "container") and self.container:
+                self.container.invalidate()
+            if hasattr(self, "preview_container") and self.preview_container:
+                self.preview_container.invalidate()
+            if hasattr(self, "lockscreen_preview") and self.lockscreen_preview:
+                self.lockscreen_preview.invalidate()
+        except Exception:
+            pass
 
     def eventhandler(self, event_obj):
         event = event_obj.code
@@ -4862,14 +4891,32 @@ class ImgGridItemRounded(lv.obj):
         self.set_style_pad_all(0, 0)
         self.set_style_border_width(0, 0)
         self.set_style_border_opa(lv.OPA.TRANSP, 0)
-        self.set_style_bg_opa(lv.OPA.TRANSP, 0)
+        # Use solid black background to hide potential single-pixel gaps
+        self.set_style_bg_color(lv_colors.BLACK, 0)
+        self.set_style_bg_opa(lv.OPA.COVER, 0)
         self.clear_flag(lv.obj.FLAG.SCROLLABLE)
 
-        # Create inner img object with FIXED size (not percentage)
+        # Create inner img object using natural size, then scale to cover
         self.img = lv.img(self)
         self.img.set_src(self.zoom_path)
-        self.img.set_size(144, 240)  # Fixed size, NOT lv.pct()
-        self.img.center()
+        self.img.set_size(lv.SIZE.CONTENT, lv.SIZE.CONTENT)
+        try:
+            # Compute zoom to cover the 144x240 container and center
+            nat_w = self.img.get_width()
+            nat_h = self.img.get_height()
+            if nat_w and nat_h:
+                zoom_w = math.ceil((144 / nat_w) * 256)
+                zoom_h = math.ceil((240 / nat_h) * 256)
+                zoom = max(int(zoom_w), int(zoom_h))
+                self.img.set_zoom(zoom)
+        except Exception:
+            # Fallback to default zoom if native size is not available
+            try:
+                self.img.set_zoom(256)
+            except Exception:
+                pass
+        # Slight upward nudge to avoid any 1px seam at the top after scaling
+        self.img.align(lv.ALIGN.CENTER, 0, -1)
         self.img.clear_flag(lv.obj.FLAG.CLICKABLE)
 
         # Image rendering settings - NO clip_corner on img
@@ -4878,7 +4925,6 @@ class ImgGridItemRounded(lv.obj):
 
         # Optimize rendering
         try:
-            self.img.set_zoom(256)
             self.img.set_antialias(True)
         except (AttributeError, TypeError):
             pass
@@ -4986,7 +5032,9 @@ class WallperChange(AnimScreen):
                 return 0
 
         if file_name_list:
-            file_name_list.sort(key=safe_extract_timestamp)
+            # Sort by timestamp descending (newest first) and limit to 6 items
+            file_name_list.sort(key=safe_extract_timestamp, reverse=True)
+            file_name_list = file_name_list[:6]
 
         # Calculate grid layout
         internal_wp_nums = 7
@@ -7427,10 +7475,15 @@ class HomeScreenSetting(AnimScreen):
 
         # Home screen preview container with image (same size as LockScreenSetting)
         self.preview_container = lv.obj(self.container)
-        self.preview_container.set_size(344, 574)  # Same as LockScreenSetting
+        self.preview_container.set_size(344, 572)  # Slightly shorter to avoid top seam
         self.preview_container.align(lv.ALIGN.TOP_MID, 0, 105)  # Below status bar
         self.preview_container.add_style(
-            StyleWrapper().bg_opa(lv.OPA.TRANSP).pad_all(0).border_width(0), 0
+            StyleWrapper()
+            .bg_color(lv_colors.BLACK)
+            .bg_opa(lv.OPA.COVER)
+            .pad_all(0)
+            .border_width(0),
+            0,
         )
         # Don't capture click events - let them pass through to buttons
         self.preview_container.clear_flag(lv.obj.FLAG.CLICKABLE)
@@ -7476,14 +7529,19 @@ class HomeScreenSetting(AnimScreen):
         self.homescreen_preview.set_size(lv.SIZE.CONTENT, lv.SIZE.CONTENT)
         self.homescreen_preview.clear_flag(lv.obj.FLAG.SCROLLABLE)
 
-        # Calculate zoom to fit image within 344x574 while maintaining aspect ratio
+        # Calculate zoom using cover strategy to avoid 1px gaps after integer rounding
         base_width, base_height = 480, 800
-        zoom_x = int((344 / base_width) * 256)
-        zoom_y = int((574 / base_height) * 256)
-        zoom = min(zoom_x, zoom_y)
+        zoom_x = math.ceil((344 / base_width) * 256)
+        zoom_y = math.ceil((572 / base_height) * 256)
+        zoom = max(int(zoom_x), int(zoom_y))
         self.homescreen_preview.set_zoom(zoom)
         self.homescreen_preview.set_antialias(True)  # Enable anti-aliasing for smooth scaling
         self.homescreen_preview.align(lv.ALIGN.CENTER, 0, 0)
+        try:
+            self.homescreen_preview.invalidate()
+            self.preview_container.invalidate()
+        except Exception:
+            pass
 
         self.app_icons = []
 
@@ -7523,6 +7581,13 @@ class HomeScreenSetting(AnimScreen):
         self._create_buttons()
 
         # Simplified button positioning - use relative position instead of absolute position
+        # Schedule a one-shot full refresh to eliminate first-frame artifacts
+        try:
+            from trezor import loop as _loop
+
+            _loop.schedule(self._first_frame_fix())
+        except Exception:
+            pass
         # Change button left-aligned, Blur button right-aligned
         self.change_button.align_to(
             self.preview_container, lv.ALIGN.OUT_BOTTOM_LEFT, 50, 10
@@ -7736,7 +7801,7 @@ class HomeScreenSetting(AnimScreen):
 
                 # Create a button container to hold image (mimicking successful button icon pattern)
                 self.preview_button = lv.btn(self.preview_container)
-                self.preview_button.set_size(344, 574)
+                self.preview_button.set_size(344, 567)
                 self.preview_button.align(lv.ALIGN.CENTER, 0, 0)
                 self.preview_button.remove_style_all()
                 self.preview_button.add_style(
@@ -7748,7 +7813,7 @@ class HomeScreenSetting(AnimScreen):
 
                 # Create image inside button (exactly same way as button icons)
                 self.homescreen_preview = lv.img(self.preview_button)
-                self.homescreen_preview.set_size(344, 574)
+                self.homescreen_preview.set_size(344, 572)
                 self.homescreen_preview.align(lv.ALIGN.CENTER, 0, 0)
 
                 # Use same set_src calling method as button icons
