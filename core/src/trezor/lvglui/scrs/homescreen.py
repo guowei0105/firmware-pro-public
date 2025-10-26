@@ -39,6 +39,7 @@ from .common import AnimScreen, FullSizeWindow, Screen, lv  # noqa: F401, F403, 
 from .components.anim import Anim
 from .components.banner import LEVEL, Banner
 from .components.button import ListItemBtn, ListItemBtnWithSwitch, NormalButton
+from .components.label import Title, SubTitle
 from .components.container import ContainerFlexCol, ContainerFlexRow, ContainerGrid
 from .components.listitem import (
     DisplayItemWithFont_30,
@@ -494,11 +495,24 @@ class MainScreen(Screen):
             # Update title and subtitle based on current setting
 
             if show_device_names:
-                # Check if title and subtitle exist before using them
-                if hasattr(self, "title") and self.title:
+                # Ensure title and subtitle exist; lazily create if missing
+                if not (hasattr(self, "title") and self.title):
+                    self.title = Title(self.content_area, None, (), real_device_name)
+                    # Center align like first-time init and place at 76px from top
+                    self.title.align_to(self.content_area, lv.ALIGN.TOP_MID, 0, 76)
+                    self.title.add_style(StyleWrapper().text_align_center(), 0)
+                else:
                     self.title.set_text(real_device_name)
                     self.title.clear_flag(lv.obj.FLAG.HIDDEN)
-                if hasattr(self, "subtitle") and self.subtitle:
+
+                if not (hasattr(self, "subtitle") and self.subtitle):
+                    self.subtitle = SubTitle(self.content_area, self.title, (0, 16), real_ble_name)
+                    # Center align + white color like first-time init
+                    self.subtitle.add_style(
+                        StyleWrapper().text_align_center().text_color(lv_colors.WHITE),
+                        0,
+                    )
+                else:
                     self.subtitle.set_text(real_ble_name)
                     self.subtitle.clear_flag(lv.obj.FLAG.HIDDEN)
             else:
@@ -4337,23 +4351,31 @@ class DisplayScreen(AnimScreen):
 
 
                 if new_switch_checked:
-                    # Show device names - ensure title/subtitle exist first
-                    if hasattr(main_screen, "title") and main_screen.title:
+                    # Show device names - create labels if they don't exist
+                    if not (hasattr(main_screen, "title") and main_screen.title):
+                        main_screen.title = Title(
+                            main_screen.content_area, None, (), real_device_name
+                        )
+                        main_screen.title.align_to(
+                            main_screen.content_area, lv.ALIGN.TOP_MID, 0, 76
+                        )
+                    else:
                         main_screen.title.set_text(real_device_name)
                         main_screen.title.clear_flag(lv.obj.FLAG.HIDDEN)
-                        # Ensure centered alignment
-                        main_screen.title.add_style(
-                            StyleWrapper().text_align_center(), 0
+                    # Ensure centered alignment
+                    main_screen.title.add_style(StyleWrapper().text_align_center(), 0)
+
+                    if not (hasattr(main_screen, "subtitle") and main_screen.subtitle):
+                        main_screen.subtitle = SubTitle(
+                            main_screen.content_area, main_screen.title, (0, 16), real_ble_name
                         )
-                    if hasattr(main_screen, "subtitle") and main_screen.subtitle:
+                    else:
                         main_screen.subtitle.set_text(real_ble_name)
                         main_screen.subtitle.clear_flag(lv.obj.FLAG.HIDDEN)
-                        main_screen.subtitle.add_style(
-                            StyleWrapper()
-                            .text_align_center()
-                            .text_color(lv_colors.WHITE),
-                            0,
-                        )
+                    main_screen.subtitle.add_style(
+                        StyleWrapper().text_align_center().text_color(lv_colors.WHITE),
+                        0,
+                    )
                 else:                   
 
                     # Hide device names - only if title/subtitle exist
