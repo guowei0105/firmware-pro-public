@@ -4440,7 +4440,7 @@ class AutolockSetting(AnimScreen):
         gc.collect()
 
     def get_str_from_ms(self, delay_ms: int) -> str:
-        if delay_ms == 0:
+        if delay_ms == 0 or delay_ms == storage_device.AUTOLOCK_DELAY_MAXIMUM:
             return "从不"
         elif delay_ms < 60000:
             return f"{delay_ms // 1000}秒"
@@ -5893,7 +5893,7 @@ class ShutdownSetting(AnimScreen):
         gc.collect()
 
     def get_str_from_ms(self, delay_ms: int) -> str:
-        if delay_ms == 0:
+        if delay_ms == 0 or delay_ms == storage_device.AUTOSHUTDOWN_DELAY_MAXIMUM:
             return "从不"
         elif delay_ms < 60000:
             return f"{delay_ms // 1000}秒"
@@ -5949,7 +5949,7 @@ def get_autolock_delay_str() -> str:
 def get_autoshutdown_delay_str() -> str:
     """Get auto-shutdown delay as formatted string"""
     delay_ms = storage_device.get_autoshutdown_delay_ms()
-    if delay_ms == 0:
+    if delay_ms == 0 or delay_ms == storage_device.AUTOSHUTDOWN_DELAY_MAXIMUM:
         return _(i18n_keys.OPTION__NEVER)
     elif delay_ms < 60000:
         seconds = delay_ms // 1000
@@ -6655,7 +6655,7 @@ class AutoShutDownSetting(AnimScreen):
             # Compare based on delay_ms instead of string formatting
             expected_delay_ms = 0
             if original_item == "Never":
-                expected_delay_ms = 0
+                expected_delay_ms = storage_device.AUTOSHUTDOWN_DELAY_MAXIMUM
             else:
                 expected_delay_ms = (
                     original_item * 60 * 1000

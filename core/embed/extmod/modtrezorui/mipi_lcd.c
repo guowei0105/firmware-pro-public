@@ -1171,17 +1171,10 @@ __attribute__((used)) void lcd_cover_background_load_jpeg(const char* jpeg_path)
   jpeg_decode_file_operation(JPEG_FILE_FATFS);  // Explicitly use FATFS mode
   jpeg_decode_init(jpeg_output_address);        // Use dedicated buffer
   
-  // Key fix: use direct address decoding to avoid modifying g_current_display_addr
-  // This completely avoids global display address conflicts
-  int decode_result = jped_decode_to_address((char*)jpeg_path, 
-                                            jpeg_output_address, 
-                                            (uint32_t)LAYER2_MEMORY_BASE);
-  
-  // Immediately restore LVGL's JPEG decoder state to ensure no impact on subsequent operations
-  jpeg_restore_state();
-  
+  int decode_result = jpeg_decode_start(jpeg_path);
   if (decode_result != 0) {
     printf("ERROR: Failed to decode JPEG file %s, error code: %d\n", jpeg_path, decode_result);
+    jpeg_restore_state();
     return;
   }
   
@@ -1189,23 +1182,40 @@ __attribute__((used)) void lcd_cover_background_load_jpeg(const char* jpeg_path)
   uint32_t width, height, subsampling;
   jpeg_decode_info(&width, &height, &subsampling);
   
-  // printf("JPEG decoded successfully: %lux%lu, subsampling: %lu\n", width, height, subsampling);
+  // Prepare Layer2 buffer and clear to black before copying the decoded image
+  uint16_t* layer2_buffer = (uint16_t*)LAYER2_MEMORY_BASE;
+  uint32_t total_pixels = lcd_params.hres * lcd_params.vres;
+  for (uint32_t i = 0; i < total_pixels; i++) {
+    layer2_buffer[i] = 0x0000;
+  }
   
-  // Verify data in Layer2
-  uint16_t *layer2_buffer = (uint16_t*)LAYER2_MEMORY_BASE;
+  // When the decoded image height is smaller than the screen height,
+  // add black padding above and below to keep the image vertically centered.
+  uint32_t top_padding = 0;
+  if (height < lcd_params.vres) {
+    top_padding = (lcd_params.vres - height) / 2;
+  }
+  
+  uint32_t dest_address =
+      (uint32_t)(layer2_buffer + top_padding * lcd_params.hres);
+  dma2d_copy_ycbcr_to_rgb((uint32_t*)jpeg_output_address,
+                          (uint32_t*)dest_address,
+                          width, height, subsampling);
+  
+  // Immediately restore LVGL's JPEG decoder state to ensure no impact on subsequent operations
+  jpeg_restore_state();
+  
+  // Optional verification hook (debug logging disabled by default)
   uint32_t non_black_in_layer2 = 0;
-  for (uint32_t i = 0; i < 1000; i++) { // Check first 1000 pixels
-    if (layer2_buffer[i] != 0x0000) {
+  uint32_t sample_offset = top_padding * lcd_params.hres;
+  for (uint32_t i = 0; i < 1000 && (sample_offset + i) < total_pixels; i++) {
+    if (layer2_buffer[sample_offset + i] != 0x0000) {
       non_black_in_layer2++;
     }
   }
-  // printf("[Layer2 JPEG] After direct decode to Layer2: %lu/1000 non-black pixels\n", non_black_in_layer2);
-  
-  // Data has been directly decoded to Layer2, no need for additional DMA2D conversion
+  // printf("[Layer2 JPEG] After centered decode: %lu/1000 non-black pixels\n", non_black_in_layer2);
   
   // Background image has been completely loaded to Layer2
-  
-  // printf("DMA2D JPEG copy completed\n");
   
   // printf("JPEG wallpaper loaded to CoverBackground layer: %s (%lux%lu)\n", 
   //        jpeg_path, width, height);
@@ -1628,4 +1638,3 @@ __attribute__((used)) void lcd_ensure_second_layer(void) {
   // CoverBackground layer is now managed separately via dedicated functions
   // No automatic updates needed here - controlled by show/hide/set_opacity functions
 }
-
