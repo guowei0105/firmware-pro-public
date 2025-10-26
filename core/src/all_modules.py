@@ -249,6 +249,8 @@ trezor.lvglui.scrs.lockscreen
 import trezor.lvglui.scrs.lockscreen
 trezor.lvglui.scrs.nfc
 import trezor.lvglui.scrs.nfc
+trezor.lvglui.scrs.nftmanager
+import trezor.lvglui.scrs.nftmanager
 trezor.lvglui.scrs.passphrase
 import trezor.lvglui.scrs.passphrase
 trezor.lvglui.scrs.pinscreen
