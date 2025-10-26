@@ -69,7 +69,53 @@ _busy_show_timer = None  # LVGL timer to delay showing Processing
 _busy_show_delay_ms = 800  # Delay before showing Processing text
 
 
-def _lvgl_safe_wallpaper_src(path: str | None, context: str = "") -> str:
+def _resume_lvgl_timers():
+    try:
+        lv.timer_handler_resume()
+    except AttributeError:
+        pass
+    except Exception:
+        pass
+
+
+def _hide_cover_background():
+    try:
+        from trezorui import Display
+
+        display = Display()
+        if hasattr(display, "cover_background_hide"):
+            display.cover_background_hide()
+        if hasattr(display, "cover_background_set_visible"):
+            display.cover_background_set_visible(False)
+        if hasattr(display, "cover_background_move_to_y"):
+            display.cover_background_move_to_y(-800)
+    except Exception:
+        pass
+
+
+def cancel_pending_animations(reason=None) -> None:
+    """Force-stop homescreen LVGL timers/animations (e.g., before switching screens)."""
+    global _animation_in_progress
+
+    timers_to_clear = len(_active_timers)
+    cleanup_timers()
+    _animation_in_progress = False
+    _resume_lvgl_timers()
+    _hide_cover_background()
+    if __debug__ and (timers_to_clear or reason):
+        print(f"[homescreen.cancel_pending_animations] reset timers={timers_to_clear}, reason={reason}")
+
+
+def log_with_timestamp(message) -> None:
+    """Best-effort timestamped debug logging."""
+    try:
+        timestamp = utime.ticks_ms()
+    except Exception:
+        timestamp = 0
+    print(f"[{timestamp}] {message}")
+
+
+def _lvgl_safe_wallpaper_src(path, context: str = "") -> str:
 
     if not path:
         return utils.get_default_wallpaper()
@@ -89,7 +135,6 @@ def get_timestamp():
 
 
 def check_operation_frequency():
-    """Check operation frequency to prevent too rapid operations"""
     global _last_operation_time, _operation_count
     current_time = get_timestamp()
     if current_time - _last_operation_time < 100:  # No repeated operations within 100ms
@@ -101,7 +146,6 @@ def check_operation_frequency():
 
 
 def cleanup_timers():
-    """Clean up all active timers"""
     global _active_timers
     for timer in _active_timers:
         try:
@@ -113,7 +157,6 @@ def cleanup_timers():
 
 
 def force_memory_cleanup():
-    """Force memory cleanup"""
     # Multiple garbage collections
     for i in range(5):  # Increased to 5 times
         try:
@@ -189,7 +232,6 @@ def _get_persistent_busy_state():
 
 
 def _get_persistent_busy_time():
-    """Get last busy time from storage cache"""
     try:
         import storage.cache
 
@@ -199,7 +241,6 @@ def _get_persistent_busy_time():
 
 
 def _set_persistent_busy_state(counter):
-    """Set busy state to storage cache"""
     try:
         import storage.cache
         import utime
@@ -217,7 +258,6 @@ def _set_persistent_busy_state(counter):
 
 
 def _set_persistent_busy_time(time_ms):
-    """Set busy time to storage cache"""
     try:
         import storage.cache
 
@@ -227,7 +267,6 @@ def _set_persistent_busy_time(time_ms):
 
 
 async def _delayed_cleanup():
-    """Delayed cleanup task to restore non-busy state after debounce time"""
     global _busy_state_counter, _cleanup_task
 
     import utime
@@ -384,7 +423,7 @@ def change_state(is_busy: bool = False):
 
 
 def show_appdrawer_immediate():
-    """Immediately show AppDrawer (used after successful unlock)."""
+    cancel_pending_animations("show_appdrawer_immediate")
     try:
         if hasattr(MainScreen, "_instance") and MainScreen._instance:
             ms = MainScreen._instance
@@ -611,7 +650,6 @@ class MainScreen(Screen):
                 if hasattr(self, "bottom_tips"):
                     self.bottom_tips.clear_flag(lv.obj.FLAG.HIDDEN)
                     self.bottom_tips.set_text("")  # Clear processing text
-                print("MainScreen: Device locked, staying in MainScreen view")
             else:
                 # Device is unlocked: always default to MainScreen (no AppDrawer)
                 # Hide AppDrawer if needed
@@ -625,7 +663,6 @@ class MainScreen(Screen):
                 if hasattr(self, "bottom_tips"):
                     self.bottom_tips.clear_flag(lv.obj.FLAG.HIDDEN)
                     self.bottom_tips.set_text(_(i18n_keys.BUTTON__SWIPE_TO_SHOW_APPS))
-                print("MainScreen: Default to MainScreen view")
 
         # Add gesture handling for MainScreen
         self.add_event_cb(self.on_main_gesture, lv.EVENT.GESTURE, None)
@@ -633,14 +670,11 @@ class MainScreen(Screen):
         save_app_obj(self)
 
     def on_main_gesture(self, event_obj):
-        """Handle MainScreen gesture events - strict control: only allow UP gesture when MainScreen is visible"""
         global _animation_in_progress
         code = event_obj.code
         if code == lv.EVENT.GESTURE:
             # If animation is in progress, ignore gesture
             if _animation_in_progress:
-                if __debug__:
-                    print("[GESTURE] Ignored: Animation in progress")
                 return
 
             # Check if AppDrawer is visible
@@ -666,7 +700,6 @@ class MainScreen(Screen):
                 self.show_appdrawer_simple()
 
     def show_appdrawer_simple(self):
-        """Show AppDrawer with layer2 animation"""
         global _animation_in_progress, _animation_start_time
 
         # Prevent duplicate calls
@@ -822,6 +855,7 @@ class MainScreen(Screen):
 
 
             except Exception as e:
+                cancel_pending_animations("show_appdrawer_simple_error")
                 print(f"MainScreen: Error in show_appdrawer_simple: {e}")
                 # Show AppDrawer in simple way on error
                 self.hidden_others(True)
@@ -835,7 +869,6 @@ class MainScreen(Screen):
                 print("MainScreen: AppDrawer shown via fallback method")
 
     def show_layer2_and_appdrawer(self):
-        """Show layer2 and restore AppDrawer, then slide layer2 up and out"""
         try:
             from trezorui import Display
 
@@ -941,6 +974,7 @@ class MainScreen(Screen):
                 _active_timers.append(animation_timer)
 
         except Exception as e:
+            cancel_pending_animations("show_layer2_and_appdrawer_error")
             print(f"MainScreen: Error in show_layer2_and_appdrawer: {e}")
 
     def _get_title_labels(self):
@@ -1051,7 +1085,6 @@ class MainScreen(Screen):
                 label.invalidate()
 
     def refresh_appdrawer_background(self):
-        """Refresh AppDrawer background"""
         if hasattr(self, "apps") and self.apps:
             self.apps.refresh_background()
 
@@ -1332,7 +1365,6 @@ class MainScreen(Screen):
             return cont
 
         def _configure_image_cache(self):
-            """Ensure icon textures have enough LVGL cache slots to avoid decode stalls."""
             icon_count = len(self._icon_sources)
             if not icon_count:
                 return
@@ -1410,7 +1442,6 @@ class MainScreen(Screen):
                     self.handle_page_gesture(_dir)
 
         def hide_to_mainscreen(self):
-            """Hide AppDrawer and show MainScreen with layer2 animation"""
             global _animation_in_progress, _animation_start_time
 
             # Prevent duplicate calls
@@ -1557,10 +1588,10 @@ class MainScreen(Screen):
 
             except Exception as e:
                 self.hide_to_mainscreen_fallback()
+                cancel_pending_animations("appdrawer_hide_error")
                 _animation_in_progress = False
 
         def hide_to_mainscreen_fallback(self):
-            """Backup simple hide method"""
             global _animation_in_progress
             self.add_flag(lv.obj.FLAG.HIDDEN)
             self.add_flag(lv.obj.FLAG.GESTURE_BUBBLE)
@@ -1568,6 +1599,9 @@ class MainScreen(Screen):
             
             # Ensure animation flag is properly reset
             _animation_in_progress = False
+            cleanup_timers()
+            _resume_lvgl_timers()
+            _hide_cover_background()
 
             self.parent.hidden_others(False)
             if hasattr(self.parent, "up_arrow"):
@@ -1578,7 +1612,6 @@ class MainScreen(Screen):
                 self.parent.dev_state.show()
 
         def handle_page_gesture(self, _dir):
-            """Handle page swipe gestures"""
             if _dir not in [lv.DIR.RIGHT, lv.DIR.LEFT]:
                 return
             # Optimization: if animation is in late stage, allow new gestures
@@ -1826,15 +1859,12 @@ class MainScreen(Screen):
             self.add_flag(lv.obj.FLAG.GESTURE_BUBBLE)
 
         def show(self):
-            """Simplified show method - no longer used, replaced with simplified direct display method"""
             return
 
         def dismiss(self):
-            """Simplified dismiss method - no longer used, replaced with simplified direct hide method"""
             return
 
         def refresh_background(self):
-            """Refresh AppDrawer background image"""
             homescreen = storage_device.get_appdrawer_background()
             safe_homescreen = (
                 _lvgl_safe_wallpaper_src(homescreen, "AppDrawer.refresh")
@@ -1873,7 +1903,6 @@ class MainScreen(Screen):
                 handlers[name]()
 
         def _create_nft_gallery(self):
-            """Create NFT gallery with singleton cleanup"""
             try:
                 # Clean up existing NftGallery instance to allow fresh creation
                 if hasattr(NftGallery, "_instance"):
@@ -1902,7 +1931,6 @@ class MainScreen(Screen):
                 label.set_text(_(text_key))
 
         def _init_prerender(self):
-            """Initialize pre-render manager"""
             try:
                 from .appdrawer_prerender import PreRenderManager
 
@@ -1911,7 +1939,6 @@ class MainScreen(Screen):
                 self._prerender_manager = None
 
         def _render_page_content(self, page_index, target_container):
-            """Render specified page content to target container"""
             if page_index < 0 or page_index >= self.PAGE_SIZE:
                 return
 
@@ -1934,7 +1961,6 @@ class MainScreen(Screen):
                     pass
 
         def cleanup_prerender(self):
-            """Clean up pre-render resources"""
             if self._prerender_manager:
                 self._prerender_manager.clear()
                 self._prerender_manager = None
@@ -2195,7 +2221,6 @@ class ShowAddress(AnimScreen):
         self.animations_prev.append(container_move_back_anim)
 
     def init_ui(self):
-        """Initialize UI components"""
 
         if passphrase.is_enabled() and not passphrase.is_passphrase_pin_enabled():
             from .components.navigation import Navigation
@@ -2363,18 +2388,15 @@ class ShowAddress(AnimScreen):
             self.update_page_buttons()
 
     def on_index_click(self, event):
-        """Handle account selection click"""
         IndexSelectionScreen(self)
 
     def on_chain_click(self, event, name):
-        """Handle chain selection click"""
         if utils.lcd_resume():
             return
 
         workflow.spawn(self.addr_manager.generate_address(name, self.current_index))
 
     def update_index_btn_text(self):
-        """Update account button text"""
         self.index_btn.label_left.set_text(f"Account #{self.current_index + 1}")
         # pass
 
@@ -4298,7 +4320,6 @@ class DisplayScreen(AnimScreen):
             )
 
     def on_switch_change(self, event_obj):
-        """Handle switch value changes and persist the setting"""
         code = event_obj.code
         if code == lv.EVENT.VALUE_CHANGED:
             # Get the new switch state
@@ -4469,8 +4490,7 @@ class AppdrawerBackgroundSetting(AnimScreen):
         # Disable animations for lock screen preview
         return []
 
-    def _safe_preview_src(self, path: str | None, context: str = "AppdrawerPreview") -> str:
-        """Return an LVGL-safe preview path while preserving the original for storage."""
+    def _safe_preview_src(self, path, context: str = "AppdrawerPreview") -> str:
         return _lvgl_safe_wallpaper_src(path, context)
 
     def __init__(
@@ -4656,18 +4676,15 @@ class AppdrawerBackgroundSetting(AnimScreen):
         gc.collect()
 
     def on_select_clicked(self, event_obj):
-        """Handle select button click - open wallpaper selection"""
         target = event_obj.get_target()
         if target == self.change_button:
             # Navigate to WallperChange for wallpaper selection
             WallperChange(self)
 
     def on_wallpaper_clicked(self, event_obj):
-        """Handle wallpaper image click - same as select button"""
         self.cycle_wallpaper()
 
     def cycle_wallpaper(self):
-        """Cycle through available wallpapers for demo"""
         wallpapers = [
             "A:/res/wallpaper-1.jpg",
             "A:/res/wallpaper-2.jpg",
@@ -4703,7 +4720,6 @@ class AppdrawerBackgroundSetting(AnimScreen):
                 print(f"[AppdrawerBackgroundSetting.refresh_text] Error during refresh: {e}")
 
     def eventhandler(self, event_obj):
-        """Override event handler to ensure clicks are handled"""
         event = event_obj.code
         target = event_obj.get_target()
 
@@ -4794,7 +4810,6 @@ class AppdrawerBackgroundSetting(AnimScreen):
 
 
 class ImgGridItemRounded(lv.obj):
-    """Wallpaper preview - container wrapper with 40px rounded corners (no stripes)"""
 
     def __init__(
         self,
@@ -4804,7 +4819,7 @@ class ImgGridItemRounded(lv.obj):
         file_name: str,
         path_dir: str,
         img_path_selected: str = "A:/res/selected.png",
-        img_path_unselected: str | None = "A:/res/unselect.png",
+        img_path_unselected = "A:/res/unselect.png",
         is_internal: bool = False,
         style_type: str = "wallpaper",
     ):
@@ -5313,14 +5328,12 @@ class WallperChange(AnimScreen):
         gc.collect()
 
     async def _refresh_previews_after_load(self):
-        """Refresh preview images after a short delay to fix initial rendering artifacts"""
         import utime
 
         utime.sleep_ms(100)  # Small delay to ensure layout is complete
         self._refresh_previews_immediate()
 
     def _refresh_previews_immediate(self):
-        """Force refresh all preview images to fix rendering artifacts"""
         # Performance: Minimal logging during refresh
 
         if hasattr(self, "wps"):
@@ -5499,18 +5512,15 @@ class WallperChange(AnimScreen):
                                 self.del_delayed(100)
 
     def on_select_clicked(self, event_obj):
-        """Handle select button click - open wallpaper selection"""
         target = event_obj.get_target()
         if target == self.change_button:
             # Navigate to WallperChange for wallpaper selection
             WallperChange(self)
 
     def on_wallpaper_clicked(self, event_obj):
-        """Handle wallpaper image click - same as select button"""
         self.cycle_wallpaper()
 
     def cycle_wallpaper(self):
-        """Cycle through available wallpapers for demo"""
         wallpapers = [
             "A:/res/wallpaper-1.jpg",
             "A:/res/wallpaper-2.jpg",
@@ -5530,12 +5540,10 @@ class WallperChange(AnimScreen):
         # TODO: Save selected wallpaper to storage
 
     def refresh_text(self):
-        """Refresh display when returning to this screen"""
         # TODO: Load current wallpaper from storage and update preview
         pass
 
     def on_edit_button_clicked(self, event_obj):
-        """Handle Edit button click to enter edit mode"""
         if self.edit_mode or not getattr(self, "custom_wps", None):
             return
 
@@ -5545,7 +5553,6 @@ class WallperChange(AnimScreen):
         self._enter_edit_mode()
 
     def on_delete_button_clicked(self, event_obj):
-        """Handle Delete button click to delete selected wallpapers"""
         if not self.edit_mode or not self.selected_wallpapers:
             return
 
@@ -5561,7 +5568,6 @@ class WallperChange(AnimScreen):
         self._exit_edit_mode(commit=False)
 
     def on_done_button_clicked(self, event_obj):
-        """Handle Done button click to exit edit mode"""
         if not self.edit_mode:
             return
 
@@ -5572,7 +5578,6 @@ class WallperChange(AnimScreen):
 
 
     def _enter_edit_mode(self):
-        """Enable edit mode UI state"""
         if self.edit_mode:
             return
 
@@ -5600,7 +5605,6 @@ class WallperChange(AnimScreen):
 
 
     def _exit_edit_mode(self, *, commit: bool):
-        """Disable edit mode UI state"""
         if not self.edit_mode:
             return
 
@@ -5633,7 +5637,6 @@ class WallperChange(AnimScreen):
             self.selected_wallpapers.clear()
 
     def _highlight_active_wallpaper(self):
-        """Update selection indicators based on the currently active wallpaper"""
         active_path = self._get_active_wallpaper_path()
         active_normalized = self._normalize_wallpaper_path(active_path)
 
@@ -5644,8 +5647,7 @@ class WallperChange(AnimScreen):
             )
             wp.set_checked(is_selected)
 
-    def _get_active_wallpaper_path(self) -> str | None:
-        """Determine the wallpaper currently in use for selection highlighting"""
+    def _get_active_wallpaper_path(self):
         if hasattr(self.prev_scr, "current_wallpaper_path"):
             current = getattr(self.prev_scr, "current_wallpaper_path", None)
             if current:
@@ -5661,8 +5663,7 @@ class WallperChange(AnimScreen):
         except Exception:
             return None
 
-    def _normalize_wallpaper_path(self, path: str | None) -> str | None:
-        """Normalize wallpaper paths to enable reliable comparisons"""
+    def _normalize_wallpaper_path(self, path):
         if not path:
             return None
 
@@ -5679,7 +5680,6 @@ class WallperChange(AnimScreen):
         return normalized
 
     def on_selection_checkbox_clicked(self, event_obj, wallpaper):
-        """Handle selection checkbox click to toggle selection state"""
         if not self.edit_mode:
             return
             
@@ -5696,7 +5696,6 @@ class WallperChange(AnimScreen):
             wallpaper.selection_checkbox_img.set_src("A:/res/unselect.png")
 
     def on_remove_icon_clicked(self, event_obj, wallpaper):
-        """Handle remove icon click"""
 
         self.marked_for_deletion.add(wallpaper)
 
@@ -5709,7 +5708,6 @@ class WallperChange(AnimScreen):
 
 
     def delete_marked_files(self):
-        """Delete files marked for deletion"""
         from trezor import io
         import storage.device as storage_device
         marked_count = len(self.marked_for_deletion)
@@ -5779,7 +5777,6 @@ class WallperChange(AnimScreen):
         self.__init__(self.prev_scr)
 
     def replace_if_in_use(self, deleted_path):
-        """Replace deleted wallpaper with wallpaper-7.jpg if it's currently in use"""
         import storage.device as storage_device
 
         try:
@@ -5802,7 +5799,6 @@ class WallperChange(AnimScreen):
                 )
 
     def eventhandler(self, event_obj):
-        """Override eventhandler to handle navigation safely"""
         event = event_obj.code
         target = event_obj.get_target()
         if event == lv.EVENT.CLICKED:
@@ -5918,7 +5914,6 @@ class ShutdownSetting(AnimScreen):
 
 
 def get_autolock_delay_str() -> str:
-    """Get auto-lock delay as formatted string"""
     delay_ms = storage_device.get_autolock_delay_ms()
     if __debug__:
         print(f"[get_autolock_delay_str] Input delay_ms: {delay_ms}")
@@ -5947,7 +5942,6 @@ def get_autolock_delay_str() -> str:
 
 
 def get_autoshutdown_delay_str() -> str:
-    """Get auto-shutdown delay as formatted string"""
     delay_ms = storage_device.get_autoshutdown_delay_ms()
     if delay_ms == 0 or delay_ms == storage_device.AUTOSHUTDOWN_DELAY_MAXIMUM:
         return _(i18n_keys.OPTION__NEVER)
@@ -7522,7 +7516,6 @@ class HomeScreenSetting(AnimScreen):
         gc.collect()
 
     def _create_button_with_label(self, icon_path, text, callback):
-        """Create a button with icon and label"""
 
         # Create button
         button = lv.btn(self.container)
@@ -7569,7 +7562,6 @@ class HomeScreenSetting(AnimScreen):
         return button, icon, label
 
     def _create_buttons(self):
-        """Create Change and Blur buttons"""
 
         # Create Change button
         (
@@ -7640,7 +7632,6 @@ class HomeScreenSetting(AnimScreen):
         WallperChange(prev_scr=self)
 
     def eventhandler(self, event_obj):
-        """Simplified event handling"""
         event = event_obj.code
         target = event_obj.get_target()
 
@@ -7700,7 +7691,6 @@ class HomeScreenSetting(AnimScreen):
                 )
 
     def __del__(self):
-        """Remove from active list when cleaning up"""
         try:
             if self in HomeScreenSetting._active_instances:
                 HomeScreenSetting._active_instances.remove(self)
@@ -7780,7 +7770,6 @@ class HomeScreenSetting(AnimScreen):
                         )
 
     def _get_blur_wallpaper_path(self, original_path):
-        """Generate the blur version path from original wallpaper path"""
         if __debug__:
             print(
                 f"[HomeScreenSetting._get_blur_wallpaper_path] original_path={original_path}"
@@ -7798,7 +7787,6 @@ class HomeScreenSetting(AnimScreen):
         return blur_path
 
     def _blur_wallpaper_exists(self, blur_path):
-        """Simple check if blur wallpaper exists"""
         if not blur_path:
             return False
 
@@ -7910,7 +7898,6 @@ class HomeScreenSetting(AnimScreen):
         self._update_blur_button_state()
 
     def _load_blur_state(self):
-        """Load blur state by analyzing the current homescreen path"""
         try:
             # Get current homescreen from storage - use get_appdrawer_background since we save with set_appdrawer_background
             current_homescreen = (
@@ -7951,7 +7938,6 @@ class HomeScreenSetting(AnimScreen):
             self.is_blur_active = False
 
     def set_wallpaper(self, wallpaper_path):
-        """Set wallpaper and update blur button state"""
         if __debug__:
             print(
                 f"[HomeScreenSetting.set_wallpaper] Setting wallpaper to {wallpaper_path}"

@@ -471,60 +471,93 @@ ALLOW_WHILE_LOCKED = (
 
 
 def set_homescreen(show_app_guide: bool = False, prefer_appdrawer: bool = False) -> None:
-    if __debug__:
-        print(f"[SET_HOMESCREEN] Starting set_homescreen(show_app_guide={show_app_guide}, prefer_appdrawer={prefer_appdrawer})")
-
+    import gc
     import lvgl as lv  # type: ignore[Import "lvgl" could not be resolved]
+
+    # Memory tracking at start
+    mem_free_start = gc.mem_free()
+    mem_alloc_start = gc.mem_alloc()
+    mem_total = mem_free_start + mem_alloc_start
+
+    print("")
+    print("=" * 80)
+    print(f"[SET_HOMESCREEN] ========== START ==========")
+    print(f"[SET_HOMESCREEN] Parameters: show_app_guide={show_app_guide}, prefer_appdrawer={prefer_appdrawer}")
+    print(f"[SET_HOMESCREEN] Memory START: free={mem_free_start}B ({mem_free_start/1024:.1f}KB), alloc={mem_alloc_start}B ({mem_alloc_start/1024:.1f}KB), total={mem_total}B ({mem_total/1024:.1f}KB)")
+
+    # ✓ LOW MEMORY DETECTION: Aggressive GC if memory is critically low
+    if mem_free_start < 50000:  # Less than 50KB free
+        print(f"[SET_HOMESCREEN] ⚠️ LOW MEMORY DETECTED! Running aggressive GC...")
+        gc.collect()
+        gc.collect()  # Run twice for better cleanup
+        mem_free_after_gc = gc.mem_free()
+        recovered = mem_free_after_gc - mem_free_start
+        print(f"[SET_HOMESCREEN] After aggressive GC: free={mem_free_after_gc}B ({mem_free_after_gc/1024:.1f}KB), recovered={recovered}B ({recovered/1024:.1f}KB)")
 
     from trezor.lvglui.scrs import fingerprints
 
-    if __debug__:
-        print("[SET_HOMESCREEN] Getting BLE name")
+    # (diagnostic logging removed)
+
+    print("[SET_HOMESCREEN] Getting BLE name")
     ble_name = storage.device.get_ble_name()
-    if __debug__:
-        print(f"[SET_HOMESCREEN] BLE name: {ble_name}")
+    print(f"[SET_HOMESCREEN] BLE name: {ble_name}")
 
     first_unlock = False
     if storage.device.is_initialized():
-        if __debug__:
-            print("[SET_HOMESCREEN] Device is initialized, getting state")
+        print("[SET_HOMESCREEN] Device is initialized, getting state")
         dev_state = get_state()
-        if __debug__:
-            print("[SET_HOMESCREEN] Getting device name")
+        print("[SET_HOMESCREEN] Getting device name")
         device_name = storage.device.get_label()
-        if __debug__:
-            print(f"[SET_HOMESCREEN] Device name: {device_name}")
+        print(f"[SET_HOMESCREEN] Device name: {device_name}")
 
         if not device_is_unlocked():
-            if __debug__:
-                print(
-                    f"[SET_HOMESCREEN] Device is locked by pin {not config.is_unlocked()} === fingerprint {not fingerprints.is_unlocked()}"
-                )
-                print("[SET_HOMESCREEN] Importing LockScreen class")
+            print(
+                f"[SET_HOMESCREEN] Device is locked by pin {not config.is_unlocked()} === fingerprint {not fingerprints.is_unlocked()}"
+            )
 
+            print("[SET_HOMESCREEN] Importing LockScreen class")
+            from trezor.lvglui.scrs.lockscreen import LockScreen
+            # Bridge across module reloads: if LockScreen._instance is missing, try to find
+            # an existing LockScreen object in utils.SCREENS and attach it.
+            try:
+                if not hasattr(LockScreen, "_instance") or LockScreen._instance is None:
+                    import trezor.utils as _utils
+                    for _scr in reversed(_utils.SCREENS):
+                        if _scr.__class__.__name__ == "LockScreen":
+                            LockScreen._instance = _scr  # type: ignore[attr-defined]
+                            break
+            except Exception:
+                pass
+
+            print("[SET_HOMESCREEN] Creating LockScreen instance")
+            screen = LockScreen(device_name, ble_name, dev_state)
+            print("[SET_HOMESCREEN] LockScreen instance created successfully")
+        else:
+            print(
+                f"[SET_HOMESCREEN] Device is unlocked and has fingerprint {fingerprints.is_available() and not fingerprints.is_unlocked()}"
+            )
+            print("[SET_HOMESCREEN] Importing MainScreen class")
+            from trezor.lvglui.scrs.homescreen import MainScreen
             from trezor.lvglui.scrs.lockscreen import LockScreen
 
-            if __debug__:
-                print("[SET_HOMESCREEN] Creating LockScreen instance")
-            screen = LockScreen(device_name, ble_name, dev_state)
-            if __debug__:
-                print("[SET_HOMESCREEN] LockScreen instance created successfully")
-        else:
-            if __debug__:
-                print(
-                    f"[SET_HOMESCREEN] Device is unlocked and has fingerprint {fingerprints.is_available() and not fingerprints.is_unlocked()}"
-                )
-                print("[SET_HOMESCREEN] Importing MainScreen class")
-            from trezor.lvglui.scrs.homescreen import MainScreen
+            # Keep LockScreen singleton so it can be reused next time the device locks.
 
-            if __debug__:
-                print("[SET_HOMESCREEN] Storing BLE name")
+            # Bridge across module reloads for MainScreen as well.
+            try:
+                if not hasattr(MainScreen, "_instance") or MainScreen._instance is None:
+                    import trezor.utils as _utils
+                    for _scr in reversed(_utils.SCREENS):
+                        if _scr.__class__.__name__ == "MainScreen":
+                            MainScreen._instance = _scr  # type: ignore[attr-defined]
+                            break
+            except Exception:
+                pass
+
+            print("[SET_HOMESCREEN] Storing BLE name")
             store_ble_name(ble_name)
-            if __debug__:
-                print("[SET_HOMESCREEN] Creating MainScreen instance")
+            print("[SET_HOMESCREEN] Creating MainScreen instance")
             screen = MainScreen(device_name, ble_name, dev_state)
-            if __debug__:
-                print("[SET_HOMESCREEN] MainScreen instance created successfully")
+            print("[SET_HOMESCREEN] MainScreen instance created successfully")
             # If requested (e.g., after unlock), prepare AppDrawer before first refresh
             if prefer_appdrawer:
                 try:
@@ -552,9 +585,28 @@ def set_homescreen(show_app_guide: bool = False, prefer_appdrawer: bool = False)
 
         InitScreen()
         return
+
     if not screen.is_visible():
+        print(f"[SET_HOMESCREEN] Screen not visible, loading...")
         lv.scr_load(screen)
+        print(f"[SET_HOMESCREEN] Screen loaded")
+    else:
+        print(f"[SET_HOMESCREEN] Screen already visible, skipping load")
+
+    print(f"[SET_HOMESCREEN] Refreshing display...")
     lv.refr_now(None)
+
+    # (diagnostic logging removed)
+
+    # Final memory report
+    mem_free_end = gc.mem_free()
+    mem_alloc_end = gc.mem_alloc()
+    mem_diff = mem_free_end - mem_free_start
+    print(f"[SET_HOMESCREEN] Memory END: free={mem_free_end}B ({mem_free_end/1024:.1f}KB), alloc={mem_alloc_end}B ({mem_alloc_end/1024:.1f}KB)")
+    print(f"[SET_HOMESCREEN] Memory CHANGE: {'+' if mem_diff >= 0 else ''}{mem_diff}B ({mem_diff/1024:+.1f}KB)")
+    print(f"[SET_HOMESCREEN] ========== END ==========")
+    print("=" * 80)
+    print("")
 
 
 def store_ble_name(ble_name):
@@ -584,51 +636,61 @@ def get_state() -> str | None:
 
 
 def lock_device() -> None:
-    if __debug__:
-        print("[LOCK_DEVICE] Starting lock_device()")
+    import gc
+
+    mem_free_start = gc.mem_free()
+    mem_alloc_start = gc.mem_alloc()
+
+    print("")
+    print("🔐" * 40)
+    print(f"[LOCK_DEVICE] ========== START ==========")
+    print(f"[LOCK_DEVICE] Memory START: free={mem_free_start}B ({mem_free_start/1024:.1f}KB), alloc={mem_alloc_start}B ({mem_alloc_start/1024:.1f}KB)")
 
     if storage.device.is_initialized() and config.has_pin():
         from trezor.lvglui.scrs import fingerprints
 
-        if __debug__:
-            print("[LOCK_DEVICE] Device initialized with PIN, proceeding with lock")
+        print("[LOCK_DEVICE] Device initialized with PIN, proceeding with lock")
 
         try:
             se_thd89.clear_session()
-            if __debug__:
-                print("[LOCK_DEVICE] SE session cleared")
+            print("[LOCK_DEVICE] SE session cleared")
         except Exception as e:
-            if __debug__:
-                print(f"[LOCK_DEVICE] Warning: Failed to clear SE session: {e}")
+            print(f"[LOCK_DEVICE] Warning: Failed to clear SE session: {e}")
 
         if fingerprints.is_available():
-            if __debug__:
-                print("[LOCK_DEVICE] Fingerprints available, locking fingerprints")
+            print("[LOCK_DEVICE] Fingerprints available, locking fingerprints")
             fingerprints.lock()
         else:
-            if __debug__:
-                print(
-                    f"[LOCK_DEVICE] pin locked,  finger is available: {fingerprints.is_available()} ===== finger is unlocked: {fingerprints.is_unlocked()} "
-                )
+            print(
+                f"[LOCK_DEVICE] pin locked,  finger is available: {fingerprints.is_available()} ===== finger is unlocked: {fingerprints.is_unlocked()} "
+            )
             config.lock()
 
-        if __debug__:
-            print("[LOCK_DEVICE] Setting pinlocked handler")
+        print("[LOCK_DEVICE] Setting pinlocked handler")
         wire.find_handler = get_pinlocked_handler
 
-        if __debug__:
-            print("[LOCK_DEVICE] Calling set_homescreen()")
+        print("[LOCK_DEVICE] Calling set_homescreen()")
         set_homescreen()
 
-        if __debug__:
-            print("[LOCK_DEVICE] Closing other workflows")
+        print("[LOCK_DEVICE] Closing other workflows")
         workflow.close_others()
 
-        if __debug__:
-            print("[LOCK_DEVICE] lock_device() completed")
+        # Force GC after locking
+        print("[LOCK_DEVICE] Running gc.collect()...")
+        gc.collect()
+
+        mem_free_end = gc.mem_free()
+        mem_diff = mem_free_end - mem_free_start
+
+        print(f"[LOCK_DEVICE] Memory END: free={mem_free_end}B ({mem_free_end/1024:.1f}KB), change={mem_diff:+d}B ({mem_diff/1024:+.1f}KB)")
+        print(f"[LOCK_DEVICE] ========== END ==========")
+        print("🔐" * 40)
+        print("")
     else:
-        if __debug__:
-            print("[LOCK_DEVICE] Device not initialized or no PIN, skipping lock")
+        print("[LOCK_DEVICE] Device not initialized or no PIN, skipping lock")
+        print(f"[LOCK_DEVICE] ========== END (skipped) ==========")
+        print("🔐" * 40)
+        print("")
 
 
 def device_is_unlocked():
@@ -685,6 +747,16 @@ async def unlock_device(
     attach_wall_only: bool = False,
     allow_fingerprint: bool = True,
 ) -> None:
+    import gc
+
+    mem_free_start = gc.mem_free()
+    mem_alloc_start = gc.mem_alloc()
+
+    print("")
+    print("🔓" * 40)
+    print(f"[UNLOCK_DEVICE] ========== START ==========")
+    print(f"[UNLOCK_DEVICE] Memory START: free={mem_free_start}B ({mem_free_start/1024:.1f}KB), alloc={mem_alloc_start}B ({mem_alloc_start/1024:.1f}KB)")
+
     from apps.common.request_pin import verify_user_pin, verify_user_fingerprint
 
     pin_use_type_int = int(pin_use_type)
@@ -722,9 +794,26 @@ async def unlock_device(
 
     utils.mark_pin_verified()
     reload_settings_from_storage()
+
+    # Force GC before creating MainScreen to maximize available memory
+    print(f"[UNLOCK_DEVICE] Running gc.collect() before set_homescreen...")
+    gc.collect()
+    mem_free_after_gc = gc.mem_free()
+    print(f"[UNLOCK_DEVICE] After GC: free={mem_free_after_gc}B ({mem_free_after_gc/1024:.1f}KB)")
+
     # Prefer AppDrawer immediately after unlock to avoid homescreen flash
     set_homescreen(prefer_appdrawer=True)
     wire.find_handler = workflow_handlers.find_registered_handler
+
+    mem_free_end = gc.mem_free()
+    mem_diff = mem_free_end - mem_free_start
+
+    # (diagnostic logging removed)
+
+    print(f"[UNLOCK_DEVICE] Memory END: free={mem_free_end}B ({mem_free_end/1024:.1f}KB), change={mem_diff:+d}B ({mem_diff/1024:+.1f}KB)")
+    print(f"[UNLOCK_DEVICE] ========== END ==========")
+    print("🔓" * 40)
+    print("")
 
 
 def get_pinlocked_handler(
@@ -734,11 +823,10 @@ def get_pinlocked_handler(
     if orig_handler is None:
         return None
 
-    if __debug__:
-        import usb
+    import usb
 
-        if iface is usb.iface_debug:
-            return orig_handler
+    if iface is usb.iface_debug:
+        return orig_handler
 
     if msg_type in ALLOW_WHILE_LOCKED:
         return orig_handler
@@ -861,14 +949,11 @@ def boot() -> None:
     reload_settings_from_storage()
     from trezor.lvglui.scrs import fingerprints
 
-    if __debug__:
-        print(f"fingerprints.is_unlocked(): {fingerprints.is_unlocked()}")
-        print(f"config.is_unlocked(): {config.is_unlocked()}")
+    print(f"fingerprints.is_unlocked(): {fingerprints.is_unlocked()}")
+    print(f"config.is_unlocked(): {config.is_unlocked()}")
     if config.is_unlocked() and fingerprints.is_unlocked():
-        if __debug__:
-            print("fingerprints is unlocked and config is unlocked")
+        print("fingerprints is unlocked and config is unlocked")
         wire.find_handler = workflow_handlers.find_registered_handler
     else:
-        if __debug__:
-            print("fingerprints is locked or config is locked")
+        print("fingerprints is locked or config is locked")
         wire.find_handler = get_pinlocked_handler
