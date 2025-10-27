@@ -110,13 +110,11 @@ def _wrap_protobuf_load(
     try:
         msg = protobuf.decode(buffer, expected_type, experimental_enabled)
         if __debug__ and utils.EMULATOR:
-            log.debug(
-                __name__, "received message contents:\n%s", utils.dump_protobuf(msg)
-            )
+            pass  # log call removed
         return msg
     except Exception as e:
         if __debug__:
-            log.exception(__name__, e)
+            pass  # log call removed
         if e.args:
             raise DataError("Failed to decode message: " + " ".join(e.args))
         else:
@@ -166,33 +164,21 @@ class QRContext:
 
     async def write(self, msg: protobuf.MessageType) -> None:
         if __debug__:
-            log.debug(
-                __name__,
-                "write: %s",
-                msg.MESSAGE_NAME,
-            )
+            pass  # log call removed
         self.request.publish(msg)
 
     async def read(
         self, expected_type: type[LoadedMessageType]
     ) -> protobuf.MessageType | None:
         if __debug__:
-            log.debug(
-                __name__,
-                "expect: %s",
-                expected_type.MESSAGE_NAME,
-            )
+            pass  # log call removed
         return await self.response.take()
 
     async def read_any(
         self, expected_wire_types: Iterable[int]
     ) -> protobuf.MessageType | None:
         if __debug__:
-            log.debug(
-                __name__,
-                "expect: %s",
-                expected_wire_types,
-            )
+            pass  # log call removed
 
         return await self.response.take()
 
@@ -270,13 +256,7 @@ class Context:
 
     async def read(self, expected_type: type[LoadedMessageType]) -> LoadedMessageType:
         if __debug__:
-            log.debug(
-                __name__,
-                "%s:%x expect: %s",
-                self.iface.iface_num(),
-                self.sid,
-                expected_type.MESSAGE_NAME,
-            )
+            pass  # log call removed
 
         # Load the full message into a buffer, parse out type and data payload
         msg = await self.read_from_wire()
@@ -287,13 +267,7 @@ class Context:
             raise UnexpectedMessageError(msg)
 
         if __debug__:
-            log.debug(
-                __name__,
-                "%s:%x read: %s",
-                self.iface.iface_num(),
-                self.sid,
-                expected_type.MESSAGE_NAME,
-            )
+            pass  # log call removed
 
         workflow.idle_timer.touch()
 
@@ -304,13 +278,7 @@ class Context:
         self, expected_wire_types: Iterable[int]
     ) -> protobuf.MessageType:
         if __debug__:
-            log.debug(
-                __name__,
-                "%s:%x expect: %s",
-                self.iface.iface_num(),
-                self.sid,
-                expected_wire_types,
-            )
+            pass  # log call removed
 
         # Load the full message into a buffer, parse out type and data payload
         msg = await self.read_from_wire()
@@ -319,24 +287,14 @@ class Context:
         # `UnexpectedMessageError` and let the session handler deal with it.
         if msg.type not in expected_wire_types:
             if __debug__:
-                log.debug(
-                    __name__,
-                    "Unexpected message type: %s",
-                    msg.type,
-                )
+                pass  # log call removed
             raise UnexpectedMessageError(msg)
 
         # find the protobuf type
         exptype = protobuf.type_for_wire(msg.type)
 
         if __debug__:
-            log.debug(
-                __name__,
-                "%s:%x read: %s",
-                self.iface.iface_num(),
-                self.sid,
-                exptype.MESSAGE_NAME,
-            )
+            pass  # log call removed
 
         workflow.idle_timer.touch()
 
@@ -345,14 +303,7 @@ class Context:
 
     async def write(self, msg: protobuf.MessageType) -> None:
         if __debug__:
-            log.debug(
-                __name__,
-                "%s:%x write: %s %s",
-                self.iface.iface_num(),
-                self.sid,
-                msg.MESSAGE_NAME,
-                msg.MESSAGE_WIRE_TYPE,
-            )
+            pass  # log call removed
 
         # cannot write message without wire type
         assert msg.MESSAGE_WIRE_TYPE is not None
@@ -420,13 +371,7 @@ async def _handle_single_message(
             msg_type = protobuf.type_for_wire(msg.type).MESSAGE_NAME
         except Exception:
             msg_type = f"{msg.type} - unknown message type"
-        log.debug(
-            __name__,
-            "%s:%x receive: <%s>",
-            ctx.iface.iface_num(),
-            ctx.sid,
-            msg_type,
-        )
+        pass  # log call removed
 
     res_msg: protobuf.MessageType | None = None
 
@@ -494,11 +439,11 @@ async def _handle_single_message(
         # - something canceled the workflow from the outside
         if __debug__:
             if isinstance(exc, ActionCancelled):
-                log.debug(__name__, "cancelled: %s", exc.message)
+                pass  # log call removed
             elif isinstance(exc, loop.TaskClosed):
-                log.debug(__name__, "cancelled: loop task was closed")
+                pass  # log call removed
             else:
-                log.exception(__name__, exc)
+                pass  # log call removed
         res_msg = failure(exc)
 
     if res_msg is not None:
@@ -539,7 +484,7 @@ async def handle_session(
                     change_state(is_busy=True)
                 except codec_v1.CodecError as exc:
                     if __debug__:
-                        log.exception(__name__, exc)
+                        pass  # log call removed
                     await ctx.write(failure(exc))
                     continue
 
@@ -556,7 +501,7 @@ async def handle_session(
                 # Log and ignore. The session handler can only exit explicitly in the
                 # following finally block.
                 if __debug__:
-                    log.exception(__name__, exc)
+                    pass  # log call removed
             finally:
                 if not __debug__ or not is_debug_session:
                     # Unload modules imported by the workflow.  Should not raise.
@@ -584,7 +529,7 @@ async def handle_session(
             # Log and try again. The session handler can only exit explicitly via
             # loop.clear() above.
             if __debug__:
-                log.exception(__name__, exc)
+                pass  # log call removed
 
 
 def _find_handler_placeholder(iface: WireInterface, msg_type: int) -> Handler | None:

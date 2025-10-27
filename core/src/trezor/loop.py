@@ -214,11 +214,11 @@ def _step(task: Task, value: Any) -> None:
             result = task.send(value)
     except StopIteration as e:
         if __debug__:
-            log.debug(__name__, "finish: %s", task)
+            pass  # log call removed
         finalize(task, e.value)
     except Exception as e:
         if __debug__:
-            log.exception(__name__, e)
+            pass  # log call removed
         finalize(task, e)
     else:
         if isinstance(result, Syscall):
@@ -227,7 +227,7 @@ def _step(task: Task, value: Any) -> None:
             schedule(task)
         else:
             if __debug__:
-                log.error(__name__, "unknown syscall: %s", result)
+                pass  # log call removed
         if after_step_hook:
             after_step_hook()
 
@@ -524,7 +524,7 @@ class spawn(Syscall):
 
         # schedule task immediately
         if __debug__:
-            log.debug(__name__, "spawn new task: %s", task)
+            pass  # log call removed
 
         assert isinstance(task, _type_gen)
         schedule(task, finalizer=self._finalize)
@@ -580,7 +580,7 @@ class spawn(Syscall):
         """
         if not self.finished:
             if __debug__:
-                log.debug(__name__, "close spawned task: %s", self.task)
+                pass  # log call removed
             close(self.task)
 
     def set_finalizer(self, finalizer_callback: Callable[["spawn"], None]) -> None:

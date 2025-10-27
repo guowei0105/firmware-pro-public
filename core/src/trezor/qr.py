@@ -357,7 +357,7 @@ async def handle_qr_task():
             continue
         except Exception as exec:
             if __debug__:
-                log.exception(__name__, exec)
+                pass  # log call removed
             if not isinstance(exec, wire.ActionCancelled):
                 from trezor.ui.layouts import show_error_no_interact
 

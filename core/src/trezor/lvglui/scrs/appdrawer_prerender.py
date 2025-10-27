@@ -42,14 +42,12 @@ class PageCache:
             if current_time - entry["timestamp"] < CACHE_EXPIRY_MS:
                 entry["hit_count"] += 1
                 if __debug__:
-                    print(
-                        f"PageCache: Hit for page {page_index}, hit_count={entry['hit_count']}"
-                    )
+                    pass  # print removed to reduce qstr usage
                 return entry["buffer"]
             else:
                 # Cache expired, clean up
                 if __debug__:
-                    print(f"PageCache: Expired cache for page {page_index}")
+                    pass  # print removed to reduce qstr usage
                 self._evict(page_index)
         return None
 
@@ -65,7 +63,7 @@ class PageCache:
             "hit_count": 0,
         }
         if __debug__:
-            print(f"PageCache: Cached page {page_index}")
+            pass  # print removed to reduce qstr usage
 
     def _evict(self, page_index):
         """Remove specified page cache"""
@@ -88,7 +86,7 @@ class PageCache:
         # Find the one with minimum hit_count
         min_page = min(self.cache.keys(), key=lambda k: self.cache[k]["hit_count"])
         if __debug__:
-            print(f"PageCache: Evicting LRU page {min_page}")
+            pass  # print removed to reduce qstr usage
         self._evict(min_page)
 
     def clear(self):
@@ -142,7 +140,7 @@ class DoubleBuffer:
 
         self.is_swapped = not self.is_swapped
         if __debug__:
-            print(f"DoubleBuffer: Swapped buffers")
+            pass  # print removed to reduce qstr usage
 
     def get_render_buffer(self):
         """Get buffer for rendering (back buffer)"""
@@ -230,7 +228,7 @@ class PreRenderManager:
 
         except Exception as e:
             if __debug__:
-                print(f"PreRenderManager: Error in prerender: {e}")
+                pass  # print removed to reduce qstr usage
         finally:
             self.is_prerendering = False
             self.prerender_timer = None
@@ -238,7 +236,7 @@ class PreRenderManager:
     def _prerender_page(self, page_index):
         """Pre-render specified page to cache"""
         if __debug__:
-            print(f"PreRenderManager: Prerendering page {page_index}")
+            pass  # print removed to reduce qstr usage
 
         # Use back buffer of double buffer for rendering
         if self.double_buffer:

@@ -103,7 +103,7 @@ async def handle_fingerprint():
                         assert match_id in fps
                     except Exception as e:
                         if __debug__:
-                            log.exception(__name__, e)
+                            pass  # log call removed
                             print("fingerprint mismatch")
                         warning_level = 0
                         if isinstance(e, fingerprint.ExtractFeatureFail):
@@ -169,7 +169,7 @@ async def handle_fingerprint():
                     break
             except Exception as e:
                 if __debug__:
-                    log.exception(__name__, e)
+                    pass  # log call removed
                 loop.clear()
                 return  # pylint: disable=lost-exception
 
@@ -226,7 +226,7 @@ async def handle_usb_state():
             base.reload_settings_from_storage()
         except Exception as exec:
             if __debug__:
-                log.exception(__name__, exec)
+                pass  # log call removed
             loop.clear()
 
 
@@ -246,7 +246,7 @@ async def handle_uart():
             await process_push()
         except Exception as exec:
             if __debug__:
-                log.exception(__name__, exec)
+                pass  # log call removed
             loop.clear()
             return  # pylint: disable=lost-exception
 

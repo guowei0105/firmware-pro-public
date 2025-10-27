@@ -35,7 +35,6 @@ class BootScreen(Screen):
     # def eventhandler(self, event_obj):
     #     code = event_obj.code
     #     if code == lv.EVENT.SCREEN_LOADED:
-    #         print(f'draw end')
     #         self.channel.publish("boot_screen_done")
     #     else:
-    #         print(f'clicked boot')
+    #         pass

@@ -106,7 +106,7 @@ class ChargingPromptScr(lv.obj):
             if get_elapsed() > 10000:
                 ui.display.backlight(0)
             if __debug__:
-                print("delete .......")
+                pass  # print removed to reduce qstr usage
 
     def destroy(self):
         self.clear_flag(lv.obj.FLAG.CLICKABLE)

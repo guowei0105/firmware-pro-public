@@ -47,7 +47,7 @@ def get_fingerprint_count() -> int:
         count = fingerprint.get_template_count()
     except Exception as e:
         if __debug__:
-            print(f"get fingerprint count failed: {e}")
+            pass  # print removed to reduce qstr usage
         count = 0
     return count
 
@@ -61,7 +61,7 @@ def get_fingerprint_list():
         fingers = fingerprint.list_template()
     except Exception as e:
         if __debug__:
-            print(f"get fingerprint list failed: {e}")
+            pass  # print removed to reduce qstr usage
         return ()
     return fingers or ()
 
@@ -410,7 +410,7 @@ class FingerprintDataUpgrade(FullSizeWindow):
 async def request_enroll(i) -> None:
     while fingerprint.detect():
         if __debug__:
-            print("move finger away")
+            pass  # print removed to reduce qstr usage
         CollectFingerprintProgress.get_instance().prompt_tips(
             _(
                 i18n_keys.MSG__LIFT_AND_FINE_TUNE_THE_POSITION_THEN_TOUCH_POWER_BUTTON_AGAIN
@@ -438,7 +438,7 @@ async def request_enroll(i) -> None:
             if __debug__:
                 from trezor import log
 
-                log.exception(__name__, e)
+                pass  # log call removed
             if should_vibrate:
                 should_vibrate = False
                 motor.vibrate(motor.WARNING, force=True)
@@ -464,7 +464,7 @@ async def request_add_fingerprint() -> None:
         if await scr.request():
             success = await add_fingerprint(0)
             if __debug__:
-                print("add_fingerprint success:", success)
+                pass  # print removed to reduce qstr usage
             if success:
                 break
         else:

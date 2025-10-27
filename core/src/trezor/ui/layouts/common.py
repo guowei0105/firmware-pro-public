@@ -19,7 +19,7 @@ async def button_request(
     pages: int | None = None,
 ) -> None:
     if __debug__:
-        log.debug(__name__, "ButtonRequest.type=%s", br_type)
+        pass  # log call removed
     workflow.close_others()
     if pages is not None:
         await ctx.call(ButtonRequest(code=code, pages=pages), ButtonAck)

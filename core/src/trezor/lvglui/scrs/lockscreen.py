@@ -35,16 +35,9 @@ class LockScreen(Screen):
         mem_free_start = gc.mem_free()
         mem_alloc_start = gc.mem_alloc()
 
-        print("")
-        print("🔒" * 40)
-        print(f"[LOCKSCREEN-{current_count}] ========== __init__ START ==========")
-        print(f"[LOCKSCREEN-{current_count}] self id={id(self)}")
-        print(f"[LOCKSCREEN-{current_count}] Memory START: free={mem_free_start}B ({mem_free_start/1024:.1f}KB), alloc={mem_alloc_start}B ({mem_alloc_start/1024:.1f}KB)")
-
         lockscreen = device.get_homescreen()
 
         if not hasattr(self, "_init"):
-            print(f"[LOCKSCREEN-{current_count}] 🆕 FIRST TIME INIT - Creating full UI")
 
             self._init = True
 
@@ -52,11 +45,9 @@ class LockScreen(Screen):
             # This prevents memory leak caused by LVGL destroying screen objects during screen switching
             if hasattr(LockScreen, '_saved_double_click'):
                 self.double_click = LockScreen._saved_double_click
-                print(f"[LOCKSCREEN-{current_count}] ♻️ Reused saved DoubleClickDetector id={id(self.double_click)}")
                 del LockScreen._saved_double_click
             else:
                 self.double_click = DoubleClickDetector(click_timeout=800, click_dist=50)
-                print(f"[LOCKSCREEN-{current_count}] ✓ Created NEW DoubleClickDetector id={id(self.double_click)}")
 
             super().__init__(title=device_name, subtitle=ble_name)
             self.title.add_style(
@@ -70,9 +61,6 @@ class LockScreen(Screen):
                 0,
             )
         else:
-            print(f"[LOCKSCREEN-{current_count}] ♻️ REUSING EXISTING INSTANCE - Updating content only")
-            print(f"[LOCKSCREEN-{current_count}] ✓ DoubleClickDetector NOT recreated (reusing existing id={id(self.double_click)})")
-
             self.add_style(
                 StyleWrapper().bg_img_src(lockscreen).bg_img_opa(lv.OPA._40),
                 0,
@@ -86,11 +74,6 @@ class LockScreen(Screen):
 
             mem_free_end = gc.mem_free()
             mem_diff = mem_free_end - mem_free_start
-
-            print(f"[LOCKSCREEN-{current_count}] Memory END: free={mem_free_end}B ({mem_free_end/1024:.1f}KB), change={mem_diff:+d}B ({mem_diff/1024:+.1f}KB)")
-            print(f"[LOCKSCREEN-{current_count}] ========== __init__ END (reuse) ==========")
-            print("🔒" * 40)
-            print("")
 
             return
         self.set_scrollbar_mode(lv.SCROLLBAR_MODE.OFF)
@@ -115,35 +98,24 @@ class LockScreen(Screen):
         mem_free_end = gc.mem_free()
         mem_diff = mem_free_end - mem_free_start
 
-        print(f"[LOCKSCREEN-{current_count}] ✓ Full initialization completed")
-        print(f"[LOCKSCREEN-{current_count}] Memory END: free={mem_free_end}B ({mem_free_end/1024:.1f}KB), change={mem_diff:+d}B ({mem_diff/1024:+.1f}KB)")
-        print(f"[LOCKSCREEN-{current_count}] ========== __init__ END (full init) ==========")
-        print("🔒" * 40)
-        print("")
-
     def show_tips(self, level: int = 0):
         if level:
             if level == 1:
                 text = _(i18n_keys.MSG__FINGERPRINT_NOT_RECOGNIZED_TRY_AGAIN)
                 self.tap_tip.set_text(text)
-                print(f"[LOCKSCREEN] Set text for level 1: {text}")
             elif level == 2:
                 text = _(
                     i18n_keys.MSG__YOUR_PIN_CODE_REQUIRED_TO_ENABLE_FINGERPRINT_UNLOCK
                 )
                 self.tap_tip.set_text(text)
-                print(f"[LOCKSCREEN] Set text for level 2: {text}")
             elif level == 3:
                 text = _(i18n_keys.MSG__PUT_FINGER_ON_THE_FINGERPRINT)
                 self.tap_tip.set_text(text)
-                print(f"[LOCKSCREEN] Set text for level 3: {text}")
             elif level == 4:
                 text = _(i18n_keys.MSG__CLEAN_FINGERPRINT_SENSOR_AND_TRY_AGAIN)
                 self.tap_tip.set_text(text)
-                print(f"[LOCKSCREEN] Set text for level 4: {text}")
             if hasattr(self, "lock_state"):
                 self.lock_state.align_to(self.tap_tip, lv.ALIGN.OUT_TOP_MID, 0, -16)
-                print("[LOCKSCREEN] Aligned lock_state to tap_tip")
         else:
             from trezor.lvglui.scrs import fingerprints
 

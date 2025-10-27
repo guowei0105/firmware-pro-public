@@ -4828,52 +4828,6 @@ def get_autoshutdown_delay_str() -> str:
         ).format(hours)
 
 
-class Animations(AnimScreen):
-    def collect_animation_targets(self) -> list:
-        targets = []
-        if hasattr(self, "container") and self.container:
-            targets.append(self.container)
-        return targets
-
-    def __init__(self, prev_scr=None):
-        if not hasattr(self, "_init"):
-            self._init = True
-        else:
-            self.refresh_text()
-            return
-
-        super().__init__(
-            prev_scr=prev_scr, title=_(i18n_keys.TITLE__ANIMATIONS), nav_back=True
-        )
-
-        self.container = ContainerFlexCol(
-            self.content_area, self.title, padding_row=2, pos=(0, 40)
-        )
-        current_lang = storage_device.get_language()
-        if current_lang not in langs_keys:
-            current_lang = "en"
-            storage_device.set_language(current_lang)
-        GeneralScreen.cur_language = langs[
-            langs_keys.index(current_lang)
-        ][1]
-        self.animation = ListItemBtn(self.container, _(i18n_keys.ITEM__ANIMATIONS))
-        self.container.add_event_cb(self.on_click, lv.EVENT.CLICKED, None)
-        self.load_screen(self)
-        gc.collect()
-
-    def refresh_text(self):
-        self.title.set_text(_(i18n_keys.TITLE__ANIMATIONS))
-        self.animation.label_left.set_text(_(i18n_keys.ITEM__ANIMATIONS))
-
-    def on_click(self, event_obj):
-        code = event_obj.code
-        target = event_obj.get_target()
-        if code == lv.EVENT.CLICKED:
-            if utils.lcd_resume():
-                return
-            if target == self.animation:
-                AnimationSetting(self)
-
 
 class Autolock_and_ShutingDown(AnimScreen):
     cur_auto_lock = ""
@@ -5248,64 +5202,6 @@ class BacklightSetting(AnimScreen):
                         storage_device.set_brightness(self.temp_brightness)
             super().eventhandler(event_obj)
 
-
-class KeyboardHapticSetting(AnimScreen):
-    def collect_animation_targets(self) -> list:
-        targets = []
-        if hasattr(self, "container") and self.container:
-            targets.append(self.container)
-        if hasattr(self, "tips") and self.tips:
-            targets.append(self.tips)
-        return targets
-
-    def __init__(self, prev_scr=None):
-        if not hasattr(self, "_init"):
-            self._init = True
-        else:
-            return
-        super().__init__(
-            prev_scr=prev_scr,
-            title=_(i18n_keys.TITLE__VIBRATION_AND_HAPTIC),
-            nav_back=True,
-        )
-        self.container = ContainerFlexCol(
-            self.content_area,
-            self.title,
-        )
-
-        self.keyboard = ListItemBtnWithSwitch(
-            self.container, _(i18n_keys.ITEM__KEYBOARD_HAPTIC), is_haptic_feedback=True
-        )
-        self.tips = lv.label(self.content_area)
-        self.tips.align_to(self.container, lv.ALIGN.OUT_BOTTOM_LEFT, 8, 16)
-        self.tips.set_long_mode(lv.label.LONG.WRAP)
-        self.tips.add_style(
-            StyleWrapper()
-            .text_font(font_GeistRegular26)
-            .width(448)
-            .text_color(lv_colors.WHITE_2)
-            .text_align_left(),
-            0,
-        )
-        self.tips.set_text(_(i18n_keys.CONTENT__VIBRATION_HAPTIC__HINT))
-        if storage_device.keyboard_haptic_enabled():
-            self.keyboard.add_state()
-        else:
-            self.keyboard.clear_state()
-
-        self.container.add_event_cb(self.on_value_changed, lv.EVENT.VALUE_CHANGED, None)
-        self.load_screen(self)
-        gc.collect()
-
-    def on_value_changed(self, event_obj):
-        code = event_obj.code
-        target = event_obj.get_target()
-        if code == lv.EVENT.VALUE_CHANGED:
-            if target == self.keyboard.switch:
-                if target.has_state(lv.STATE.CHECKED):
-                    storage_device.toggle_keyboard_haptic(True)
-                else:
-                    storage_device.toggle_keyboard_haptic(False)
 
 
 class AnimationSetting(AnimScreen):
@@ -5693,62 +5589,6 @@ class PinMapSetting(AnimScreen):
                 return
             self.fresh_tips()
 
-
-class ConnectSetting(Screen):
-    def __init__(self, prev_scr=None):
-        if not hasattr(self, "_init"):
-            self._init = True
-        else:
-            return
-        super().__init__(
-            prev_scr=prev_scr, title=_(i18n_keys.TITLE__CONNECT), nav_back=True
-        )
-
-        self.container = ContainerFlexCol(self.content_area, self.title)
-        self.ble = ListItemBtnWithSwitch(self.container, _(i18n_keys.ITEM__BLUETOOTH))
-
-        self.description = lv.label(self.content_area)
-        self.description.set_size(456, lv.SIZE.CONTENT)
-        self.description.set_long_mode(lv.label.LONG.WRAP)
-        self.description.set_style_text_color(lv_colors.ONEKEY_GRAY, lv.STATE.DEFAULT)
-        self.description.set_style_text_font(font_GeistRegular26, lv.STATE.DEFAULT)
-        self.description.set_style_text_line_space(3, 0)
-        self.description.align_to(self.container, lv.ALIGN.OUT_BOTTOM_LEFT, 8, 16)
-
-        if uart.is_ble_opened():
-            self.ble.add_state()
-            self.description.set_text(
-                _(i18n_keys.CONTENT__CONNECT_BLUETOOTH_ENABLED__HINT).format(
-                    storage_device.get_ble_name()
-                )
-            )
-        else:
-            self.ble.clear_state()
-            self.description.set_text(
-                _(i18n_keys.CONTENT__CONNECT_BLUETOOTH_DISABLED__HINT)
-            )
-        self.container.add_event_cb(self.on_value_changed, lv.EVENT.VALUE_CHANGED, None)
-
-    def on_value_changed(self, event_obj):
-        code = event_obj.code
-        target = event_obj.get_target()
-        if code == lv.EVENT.VALUE_CHANGED:
-
-            if target == self.ble.switch:
-                if target.has_state(lv.STATE.CHECKED):
-                    self.description.set_text(
-                        self.description.set_text(
-                            _(
-                                i18n_keys.CONTENT__CONNECT_BLUETOOTH_ENABLED__HINT
-                            ).format(storage_device.get_ble_name())
-                        )
-                    )
-                    uart.ctrl_ble(enable=True)
-                else:
-                    self.description.set_text(
-                        _(i18n_keys.CONTENT__CONNECT_BLUETOOTH_DISABLED__HINT)
-                    )
-                    uart.ctrl_ble(enable=False)
 
 
 class AirGapSetting(AnimScreen):
@@ -6735,126 +6575,6 @@ class HomeScreenSetting(AnimScreen):
             self.current_wallpaper_path = current_homescreen
             self.is_blur_active = False
 
-
-class WallPaperManage(Screen):
-    def __init__(
-        self,
-        prev_scr=None,
-        img_path: str = "",
-        zoom_path: str = "",
-        is_internal: bool = False,
-    ):
-        super().__init__(
-            prev_scr,
-            icon_path=zoom_path,
-            title=_(i18n_keys.TITLE__MANAGE_WALLPAPER),
-            subtitle=_(i18n_keys.SUBTITLE__MANAGE_WALLPAPER),
-            nav_back=True,
-        )
-        self.img_path = img_path
-        self.zoom_path = zoom_path
-
-        self.btn_yes = NormalButton(self.content_area, _(i18n_keys.BUTTON__SET))
-        self.btn_yes.add_style(
-            StyleWrapper().bg_color(lv_colors.ONEKEY_GREEN).text_color(lv_colors.BLACK),
-            0,
-        )
-        if not is_internal:
-            self.btn_yes.set_size(224, 98)
-            self.btn_yes.align_to(self.content_area, lv.ALIGN.BOTTOM_RIGHT, -12, -8)
-            self.btn_del = NormalButton(self.content_area, "")
-            self.btn_del.set_size(224, 98)
-            self.btn_del.align(lv.ALIGN.BOTTOM_LEFT, 12, -8)
-
-            self.panel = lv.obj(self.btn_del)
-            self.panel.remove_style_all()
-            self.panel.set_size(lv.SIZE.CONTENT, lv.SIZE.CONTENT)
-            self.panel.clear_flag(lv.obj.FLAG.CLICKABLE)
-
-            self.btn_del_img = lv.img(self.panel)
-            self.btn_del_img.set_src("A:/res/btn-del.png")
-            self.btn_label = lv.label(self.panel)
-            self.btn_label.set_text(_(i18n_keys.BUTTON__DELETE))
-            self.btn_label.align_to(self.btn_del_img, lv.ALIGN.OUT_RIGHT_MID, 4, 1)
-
-            self.panel.add_style(
-                StyleWrapper()
-                .bg_color(lv_colors.ONEKEY_BLACK)
-                .text_color(lv_colors.ONEKEY_RED_1)
-                .bg_opa(lv.OPA.TRANSP)
-                .border_width(0)
-                .align(lv.ALIGN.CENTER),
-                0,
-            )
-
-    def _load_scr(self, scr: "Screen", back: bool = False) -> None:
-        lv.scr_load(scr)
-
-    def del_callback(self):
-        io.fatfs.unlink(self.img_path[2:])
-        io.fatfs.unlink(self.zoom_path[2:])
-
-        try:
-            replacement_path = "A:/res/wallpaper-7.jpg"
-            deleted_name = self.img_path.split("/")[-1]
-            blur_name = deleted_name
-            for ext in (".jpg", ".jpeg", ".png"):
-                if deleted_name.lower().endswith(ext):
-                    blur_name = deleted_name[: -len(ext)] + "-blur" + ext
-                    break
-
-            current_home = storage_device.get_appdrawer_background()
-            current_lock = storage_device.get_homescreen()
-
-            if current_home and (
-                current_home == self.img_path
-                or current_home.endswith("/" + deleted_name)
-                or current_home.endswith("/" + blur_name)
-            ):
-                storage_device.set_appdrawer_background(replacement_path)
-
-            if current_lock and (
-                current_lock == self.img_path
-                or current_lock.endswith("/" + deleted_name)
-                or current_lock.endswith("/" + blur_name)
-            ):
-                storage_device.set_homescreen(replacement_path)
-
-            try:
-                global _last_jpeg_loaded
-                _last_jpeg_loaded = None
-            except Exception:
-                pass
-        except Exception:
-            pass
-
-        self.load_screen(self.prev_scr, destroy_self=True)
-
-    def eventhandler(self, event_obj):
-        event = event_obj.code
-        target = event_obj.get_target()
-        if event == lv.EVENT.CLICKED:
-            if utils.lcd_resume():
-                return
-            if isinstance(target, lv.imgbtn):
-                if target == self.nav_back.nav_btn:
-                    if self.prev_scr is not None:
-                        self.prev_scr.from_wallpaper = True
-                        self.load_screen(self.prev_scr, destroy_self=True)
-                        self.prev_scr.from_wallpaper = False
-            else:
-                if target == self.btn_yes:
-                    storage_device.set_appdrawer_background(self.img_path)
-                    self.prev_scr.from_wallpaper = True
-                    self.load_screen(self.prev_scr, destroy_self=True)
-                    self.prev_scr.from_wallpaper = False
-                elif hasattr(self, "btn_del") and target == self.btn_del:
-                    from trezor.ui.layouts import confirm_del_wallpaper
-                    from trezor.wire import DUMMY_CONTEXT
-
-                    workflow.spawn(
-                        confirm_del_wallpaper(DUMMY_CONTEXT, self.del_callback)
-                    )
 
 
 class SecurityScreen(AnimScreen):
@@ -7901,28 +7621,6 @@ class PassphraseTipsConfirm(FullSizeWindow):
                 return
             self.show_dismiss_anim()
 
-
-class CryptoScreen(Screen):
-    def __init__(self, prev_scr=None):
-        if not hasattr(self, "_init"):
-            self._init = True
-        else:
-            return
-        super().__init__(prev_scr, title=_(i18n_keys.TITLE__CRYPTO), nav_back=True)
-
-        self.container = ContainerFlexCol(self, self.title, padding_row=2)
-        self.ethereum = ListItemBtn(self.container, _(i18n_keys.TITLE__ETHEREUM))
-        self.solana = ListItemBtn(self.container, _(i18n_keys.TITLE__SOLANA))
-        self.container.add_event_cb(self.on_click, lv.EVENT.CLICKED, None)
-
-    def on_click(self, event_obj):
-        code = event_obj.code
-        target = event_obj.get_target()
-        if code == lv.EVENT.CLICKED:
-            if target == self.ethereum:
-                EthereumSetting(self)
-            elif target == self.solana:
-                SolanaSetting(self)
 
 
 class TurboModeScreen(AnimScreen):

@@ -34,7 +34,7 @@ def _on_start(workflow: loop.spawn) -> None:
     """
     # Take note that this workflow task is running.
     if __debug__:
-        log.debug(__name__, "start: %s", workflow.task)
+        pass  # log call removed
     idle_timer.touch()
     tasks.add(workflow)
 
@@ -43,7 +43,7 @@ def _on_close(workflow: loop.spawn) -> None:
     """Called when a workflow task has finished running."""
     # Remove task from the running set.
     if __debug__:
-        log.debug(__name__, "close: %s", workflow.task)
+        pass  # log call removed
     tasks.remove(workflow)
     if not tasks and default_constructor:
         # If no workflows are running, we should create a new default workflow
@@ -82,18 +82,18 @@ def start_default() -> None:
     if not default_task:
         default_task = loop.spawn(default_constructor())
         if __debug__:
-            log.debug(__name__, "start default: %s", default_task.task)
+            pass  # log call removed
         default_task.set_finalizer(_finalize_default)
     else:
         if __debug__:
-            log.debug(__name__, "default already started")
+            pass  # log call removed
 
 
 def set_default(constructor: Callable[[], loop.Task]) -> None:
     """Configure a default workflow, which will be started next time it is needed."""
     global default_constructor
     if __debug__:
-        log.debug(__name__, "setting a new default: %s", constructor)
+        pass  # log call removed
     default_constructor = constructor
 
 
@@ -108,7 +108,7 @@ def kill_default() -> None:
     """
     if default_task:
         if __debug__:
-            log.debug(__name__, "close default")
+            pass  # log call removed
         # We let the `_finalize_default` reset the global.
         default_task.close()
 
@@ -144,7 +144,7 @@ def _finalize_default(task: loop.spawn) -> None:
     assert default_constructor is not None  # it should always be configured
 
     if __debug__:
-        log.debug(__name__, "default closed: %s", task.task)
+        pass  # log call removed
     default_task = None
 
     if not tasks:

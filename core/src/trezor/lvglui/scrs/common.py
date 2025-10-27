@@ -498,14 +498,14 @@ class FullSizeWindow(lv.obj):
         from trezor import motor
 
         if __debug__:
-            print("on_draw_post_end called.")
+            pass  # print removed to reduce qstr usage
         if self.vibrated:
             self.remove_event_cb(None)
             return
         self.vibrated = True
         self.remove_event_cb(None)
         if __debug__:
-            print("vibrate start...")
+            pass  # print removed to reduce qstr usage
         if self.icon_path == "A:/res/success.png":
             motor.vibrate(motor.SUCCESS)
         elif self.icon_path == "A:/res/warning.png":
@@ -517,14 +517,14 @@ class FullSizeWindow(lv.obj):
         if not hasattr(self, "icon"):
             return False
         if __debug__:
-            print(f"vibrate necessary ? {self.icon_path}")
+            pass  # print removed to reduce qstr usage
         if self.icon_path in [
             "A:/res/success.png",
             "A:/res/warning.png",
             "A:/res/danger.png",
         ]:
             if __debug__:
-                print("vibrate necessary: true")
+                pass  # print removed to reduce qstr usage
             return True
         return False
 

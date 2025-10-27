@@ -24,6 +24,27 @@ from .widgets.style import StyleWrapper
 if TYPE_CHECKING:
     from .homescreen import MainScreen
 
+# Path constants to reduce qstr usage
+_P1 = "1:/res/nfts/zooms"
+_P2 = "1:/res/nfts/imgs/"
+_P3 = "1:/res/nfts/desc/"
+_P4 = "A:1:/res/nfts/zooms/"
+_P5 = "A:1:/res/nfts/imgs/"
+_P6 = "A:/res/"
+_P7 = "A:/res/wallpaper-7.jpg"
+_P8 = "A:/res/checkmark.png"
+_P9 = "A:/res/btn-del-white.png"
+_P10 = "A:/res/icon_example.png"
+_P11 = "A:/res/blur_no_selected.png"
+_P12 = "A:/res/blur_not_available.png"
+_P13 = "A:/res/blur_selected.png"
+_S1 = "NftLockScreenPreview.MainScreen"
+_S2 = "NftLockScreenPreview.LockScreen"
+_S3 = "NftHomeScreenPreview.MainScreen"
+_K1 = "nft_preview_container"
+_K2 = "nft_device_name"
+_K3 = "nft_bluetooth_name"
+
 
 def _style_cache() -> Dict[str, StyleWrapper]:
     from . import homescreen as homescreen_module
@@ -76,7 +97,7 @@ class NftGallery(Screen):
         nft_counts = 0
         file_name_list = []
         if not utils.EMULATOR:
-            for size, _attrs, name in trezor_io.fatfs.listdir("1:/res/nfts/zooms"):
+            for size, _attrs, name in trezor_io.fatfs.listdir(_P1):
                 if nft_counts >= 24:
                     break
                 if size > 0:
@@ -129,7 +150,7 @@ class NftGallery(Screen):
                     )
                 )
                 for i, file_name in enumerate(file_name_list):
-                    path_dir = "A:1:/res/nfts/zooms/"
+                    path_dir = _P4
                     current_nft = ImgGridItem(
                         self.container,
                         (i) % 2,
@@ -144,7 +165,7 @@ class NftGallery(Screen):
             self.container.add_event_cb(self.on_click, lv.EVENT.CLICKED, None)
 
     def on_nav_back(self, event_obj):
-        """Disable swipe-back gesture while keeping the back button active."""
+
         return
 
     def empty(self):
@@ -194,7 +215,7 @@ class NftGallery(Screen):
                                 )
                             except BaseException as e:
                                 if __debug__:
-                                    print(f"Invalid json {e}")
+                                    pass  # print removed to reduce qstr usage
                             else:
                                 if all(
                                     key in metadata_load.keys()
@@ -230,7 +251,7 @@ class NftManager(AnimScreen):
         # Add trash icon to title bar (right side)
         self.trash_icon = lv.imgbtn(self.content_area)
         self.trash_icon.set_src(
-            lv.imgbtn.STATE.RELEASED, "A:/res/btn-del-white.png", None, None
+            lv.imgbtn.STATE.RELEASED, _P9, None, None
         )
         self.trash_icon.set_size(40, 40)
         self.trash_icon.align(lv.ALIGN.TOP_RIGHT, -16, 60)
@@ -302,11 +323,11 @@ class NftManager(AnimScreen):
         trezor_io.fatfs.unlink(self.zoom_path[2:])
         trezor_io.fatfs.unlink(self.img_path[2:])
         trezor_io.fatfs.unlink(
-            "1:/res/nfts/desc/" + self.file_name.split(".")[0] + ".json"
+            _P3 + self.file_name.split(".")[0] + ".json"
         )
 
         try:
-            replacement_path = "A:/res/wallpaper-7.jpg"
+            replacement_path = _P7
             deleted_name = self.img_path.split("/")[-1]
 
             current_home = storage_device.get_appdrawer_background()
@@ -338,7 +359,7 @@ class NftManager(AnimScreen):
         self.load_screen(self.prev_scr, destroy_self=True)
 
     def on_nav_back(self, event_obj):
-        """Disable swipe gesture navigation while keeping back button functional."""
+
         return
 
     def _load_scr(self, scr: "Screen", back: bool = False) -> None:
@@ -374,29 +395,6 @@ class NftManager(AnimScreen):
                     # Navigate to home screen preview
                     NftHomeScreenPreview(self, self.img_path, self.nft_config)
 
-    class ConfirmSetHomeScreen(FullSizeWindow):
-        def __init__(self, homescreen):
-            super().__init__(
-                title=_(i18n_keys.TITLE__SET_AS_HOMESCREEN),
-                subtitle=_(i18n_keys.SUBTITLE__SET_AS_HOMESCREEN),
-                confirm_text=_(i18n_keys.BUTTON__CONFIRM),
-                cancel_text=_(i18n_keys.BUTTON__CANCEL),
-            )
-            self.homescreen = homescreen
-
-        def eventhandler(self, event_obj):
-            code = event_obj.code
-            target = event_obj.get_target()
-            if code == lv.EVENT.CLICKED:
-                if utils.lcd_resume():
-                    return
-                if target == self.btn_yes:
-                    storage_device.set_appdrawer_background(self.homescreen)
-                    self.destroy(0)
-                    workflow.spawn(utils.internal_reloop())
-                elif target == self.btn_no:
-                    self.destroy()
-
 
 class NftLockScreenPreview(AnimScreen):
     def __init__(self, prev_scr, nft_path, nft_config):
@@ -404,7 +402,7 @@ class NftLockScreenPreview(AnimScreen):
             prev_scr=prev_scr,
             title=_(i18n_keys.TITLE__PREVIEW),
             nav_back=True,
-            rti_path="A:/res/checkmark.png",
+            rti_path=_P8,
         )
         self.nft_path = nft_path
         self.nft_config = nft_config
@@ -437,7 +435,7 @@ class NftLockScreenPreview(AnimScreen):
         # Use cached style to avoid memory issues during frequent scrolling
         self.preview_container.add_style(
             _cached_style(
-                "nft_preview_container",
+                _K1,
                 lambda: StyleWrapper()
                 .bg_opa(lv.OPA.TRANSP)
                 .pad_all(0)
@@ -482,7 +480,7 @@ class NftLockScreenPreview(AnimScreen):
         # Use cached style to avoid memory issues during frequent scrolling
         self.device_name_label.add_style(
             _cached_style(
-                "nft_device_name",
+                _K2,
                 lambda: StyleWrapper()
                 .text_font(font_GeistSemiBold38)
                 .text_color(lv_colors.WHITE)
@@ -503,7 +501,7 @@ class NftLockScreenPreview(AnimScreen):
         # Use cached style to avoid memory issues during frequent scrolling
         self.bluetooth_label.add_style(
             _cached_style(
-                "nft_bluetooth_name",
+                _K3,
                 lambda: StyleWrapper()
                 .text_font(font_GeistRegular26)
                 .text_color(lv_colors.WHITE)
@@ -540,7 +538,7 @@ class NftLockScreenPreview(AnimScreen):
                         if hasattr(MainScreen, "_instance") and MainScreen._instance:
                             main_screen = MainScreen._instance
                         safe_unlock_path = _safe_wallpaper_src(
-                            lockscreen_path, "NftLockScreenPreview.MainScreen"
+                            lockscreen_path, _S1
                         )
                         # Refresh the background with new lockscreen
                         if main_screen:
@@ -569,7 +567,7 @@ class NftLockScreenPreview(AnimScreen):
                                     .bg_img_src(
                                         _safe_wallpaper_src(
                                             lockscreen_path,
-                                            "NftLockScreenPreview.LockScreen",
+                                            _S2,
                                         )
                                     )
                                     .bg_img_opa(lv.OPA._40)
@@ -578,16 +576,10 @@ class NftLockScreenPreview(AnimScreen):
                                 lock_screen.invalidate()
                         except Exception as e:
                             if __debug__:
-                                print(
-                                    f"[NftLockScreenPreview] LockScreen refresh error: {e}"
-                                )
-
+                                pass  # print removed to reduce qstr usage
                     except Exception as e:
                         if __debug__:
-                            print(
-                                f"[NftLockScreenPreview] Error setting lockscreen: {e}"
-                            )
-
+                            pass  # print removed to reduce qstr usage
                     main_screen = (
                         MainScreen._instance
                         if hasattr(MainScreen, "_instance") and MainScreen._instance
@@ -603,7 +595,7 @@ class NftHomeScreenPreview(AnimScreen):
             prev_scr=prev_scr,
             title=_(i18n_keys.TITLE__PREVIEW),
             nav_back=True,
-            rti_path="A:/res/checkmark.png",
+            rti_path=_P8,
         )
         self.nft_path = nft_path
         self.nft_config = nft_config
@@ -644,7 +636,7 @@ class NftHomeScreenPreview(AnimScreen):
         # Use cached style to avoid memory issues during frequent scrolling
         self.preview_container.add_style(
             _cached_style(
-                "nft_preview_container",
+                _K1,
                 lambda: StyleWrapper()
                 .bg_opa(lv.OPA.TRANSP)
                 .pad_all(0)
@@ -702,7 +694,7 @@ class NftHomeScreenPreview(AnimScreen):
 
             # Create image directly without holder to show natural shape
             icon_img = lv.img(self.preview_container)
-            icon_img.set_src("A:/res/icon_example.png")
+            icon_img.set_src(_P10)
             # Let image use its natural size
             icon_img.set_size(lv.SIZE.CONTENT, lv.SIZE.CONTENT)
             # Use set_pos for absolute positioning (left-top corner)
@@ -719,7 +711,7 @@ class NftHomeScreenPreview(AnimScreen):
         self.blur_label.align_to(self.blur_button, lv.ALIGN.OUT_BOTTOM_MID, 0, 4)
 
     def _create_button_with_label(self, icon_path, text, callback):
-        """Create a button with icon and label like HomeScreenSetting"""
+
         # Create button
         button = lv.btn(self.container)
         button.set_size(64, 64)
@@ -755,26 +747,26 @@ class NftHomeScreenPreview(AnimScreen):
         return button, icon, label
 
     def _create_blur_button(self):
-        """Create only Blur button like HomeScreenSetting"""
+
         # Create Blur button with proper icon
         (
             self.blur_button,
             self.blur_button_icon,
             self.blur_label,
         ) = self._create_button_with_label(
-            "A:/res/blur_no_selected.png", "Blur", self.on_blur_clicked
+            _P11, "Blur", self.on_blur_clicked
         )
 
         # Initialize blur button state
         self._update_blur_button_state()
 
     def on_select_clicked(self, event_obj):
-        """Handle Change button click - navigate to wallpaper selection"""
+
         # Navigate to WallperChange for wallpaper selection - not needed for NFT preview
         pass
 
     def on_blur_clicked(self, event_obj):
-        """Handle Blur button click"""
+
         if self.blur_exists:
             self._toggle_blur()
 
@@ -788,10 +780,10 @@ class NftHomeScreenPreview(AnimScreen):
             return False
 
     def _update_blur_button_state(self):
-        """Update blur button state exactly like HomeScreenSetting"""
+
         if not self.blur_exists:
             # Disabled state - no blur version available (matching HomeScreenSetting)
-            icon_path = "A:/res/blur_not_available.png"
+            icon_path = _P12
             self.blur_button.clear_flag(lv.obj.FLAG.CLICKABLE)
             # Make button look disabled
             self.blur_button.set_style_bg_opa(lv.OPA.TRANSP, 0)
@@ -804,9 +796,9 @@ class NftHomeScreenPreview(AnimScreen):
             self.blur_button.set_style_border_width(1, 0)
 
             if getattr(self, "is_blur_active", False):
-                icon_path = "A:/res/blur_selected.png"
+                icon_path = _P13
             else:
-                icon_path = "A:/res/blur_no_selected.png"
+                icon_path = _P11
 
         # Update the blur button icon
         self.blur_button_icon.set_src(icon_path)
@@ -870,7 +862,7 @@ class NftHomeScreenPreview(AnimScreen):
                             if lockscreen_path:
                                 safe_lock_path = _safe_wallpaper_src(
                                     lockscreen_path,
-                                    "NftHomeScreenPreview.MainScreen",
+                                    _S3,
                                 )
                                 main_screen.add_style(
                                     StyleWrapper().bg_img_src(safe_lock_path),
@@ -883,11 +875,7 @@ class NftHomeScreenPreview(AnimScreen):
 
                     except Exception as e:
                         if __debug__:
-                            print(
-                                f"[NftHomeScreenPreview] Error setting homescreen: {e}"
-                            )
-
-                    # Navigate back to MainScreen (AppDrawer) after setting homescreen
+                            pass  # print removed to reduce qstr usage
                     # Find the root MainScreen instance
                     main_screen = (
                         MainScreen._instance
