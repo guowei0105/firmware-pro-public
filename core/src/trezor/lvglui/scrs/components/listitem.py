@@ -349,45 +349,31 @@ class ImgGridItem(lv.img):
     def _setup_styles(self):
         """Set up all styles before loading the image"""
         if self.style_type == "nft":
-            # NFT Gallery style - no clipping, show full image
-            self.set_size(238, 238)  # Square format for NFTs
+            # NFT Gallery style - square thumbnail, subtle radius, no clipping
+            self.set_size(238, 238)
+            self.set_style_radius(8, 0)
+            self.set_style_clip_corner(False, 0)
+            self.set_style_pad_all(0, 0)
+            self.set_style_border_width(1, 0)
+            self.set_style_border_color(lv.color_hex(0x666666), 0)
+            self.set_style_border_opa(lv.OPA._30, 0)
+        else:
+            # Wallpaper thumbnails: match upstream HomeScreenSetting formatting
+            # Do not force size; zoom- assets are already 144x240
+            # Apply only radius; no manual clip_corner to avoid double rounding
+            self.set_style_radius(40, 0)
+            self.set_style_clip_corner(False, 0)
+            self.set_style_pad_all(0, 0)
+            self.set_style_border_width(0, 0)
+            self.set_style_border_opa(lv.OPA.TRANSP, 0)
 
-            # Minimal styling for NFTs - no radius clipping
-            self.set_style_radius(8, 0)  # Small radius for aesthetics
-            self.set_style_clip_corner(False, 0)  # No clipping for full image display
-
-            # Minimal border and padding
-            self.set_style_pad_all(0, 0)  # No padding
-            self.set_style_border_width(1, 0)  # Thin border
-            self.set_style_border_color(lv.color_hex(0x666666), 0)  # Light gray border
-            self.set_style_border_opa(lv.OPA._30, 0)  # Very subtle
-
-        else:  # wallpaper style (default)
-            # Wallpaper style - with rounded corners and clipping
-            self.set_size(144, 240)  # 144x240px - match Collection area exactly
-
-            # Apply radius and clipping for wallpapers
-            self.set_style_radius(48, 0)  # More rounded radius for custom wallpapers
-            self.set_style_clip_corner(True, 0)
-
-            # Remove padding to eliminate white/black edges
-            self.set_style_pad_all(0, 0)  # No padding to eliminate borders
-            self.set_style_border_width(0, 0)  # No border to prevent edge artifacts
-            self.set_style_border_opa(lv.OPA.TRANSP, 0)  # Transparent border
-
-        # Common styles for both types - use transparent background to avoid edges
-        self.set_style_bg_opa(lv.OPA.TRANSP, 0)  # Transparent background
-
-        # Image rendering optimizations
+        # Common styles for both types
+        self.set_style_bg_opa(lv.OPA.TRANSP, 0)
         self.set_style_img_opa(lv.OPA.COVER, 0)
-
-        # Ensure image scaling and positioning consistency
-        self.set_style_img_recolor_opa(lv.OPA.TRANSP, 0)  # No recoloring
-
-        # Force image to fill the container consistently
+        self.set_style_img_recolor_opa(lv.OPA.TRANSP, 0)
         try:
             if hasattr(self, "set_style_transform_angle"):
-                self.set_style_transform_angle(0, 0)  # No rotation
+                self.set_style_transform_angle(0, 0)
         except (AttributeError, TypeError):
             pass
 

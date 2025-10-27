@@ -45,6 +45,7 @@ from .components.listitem import (
     DisplayItemWithFont_30,
     DisplayItemWithFont_TextPairs,
     ListItemWithLeadingCheckbox,
+    ImgGridItem,
 )
 from .deviceinfo import DeviceInfoManager
 from .nftmanager import (
@@ -4136,8 +4137,12 @@ class GeneralScreen(AnimScreen):
         )
 
         self.container = ContainerFlexCol(self.content_area, self.title, padding_row=2)
+        current_lang = storage_device.get_language()
+        if current_lang not in langs_keys:
+            current_lang = "en"
+            storage_device.set_language(current_lang)
         GeneralScreen.cur_language = langs[
-            langs_keys.index(storage_device.get_language())
+            langs_keys.index(current_lang)
         ][1]
         self.language = ListItemBtn(
             self.container, _(i18n_keys.ITEM__LANGUAGE), GeneralScreen.cur_language
@@ -4560,7 +4565,7 @@ class AppdrawerBackgroundSetting(AnimScreen):
         # Lock screen preview container with image
         self.preview_container = lv.obj(self.container)
         self.preview_container.set_size(344, 572)  # Slightly shorter to avoid top seam
-        self.preview_container.align(lv.ALIGN.TOP_MID, 0, 105)  # Below status bar
+        self.preview_container.align(lv.ALIGN.TOP_MID, 0, 120)  # Below navigation bar (116px + 4px spacing)
 
         # Use cached style to avoid memory issues during frequent scrolling
         if "appdrawer_preview_container" not in _cached_styles:
@@ -4575,6 +4580,8 @@ class AppdrawerBackgroundSetting(AnimScreen):
         # Don't capture click events - let them pass through to buttons
         self.preview_container.clear_flag(lv.obj.FLAG.CLICKABLE)
         self.preview_container.add_flag(lv.obj.FLAG.EVENT_BUBBLE)
+        # Enable overflow clipping to prevent image bleeding outside container
+        self.preview_container.set_style_clip_corner(True, 0)
         # Prevent LVGL from drawing scrollbars around the static preview
         self.preview_container.set_scrollbar_mode(lv.SCROLLBAR_MODE.OFF)
         self.preview_container.clear_flag(lv.obj.FLAG.SCROLLABLE)
@@ -4859,114 +4866,6 @@ class AppdrawerBackgroundSetting(AnimScreen):
             if self.prev_scr is not None:
                 self.load_screen(self.prev_scr, destroy_self=True)
 
-
-class ImgGridItemRounded(lv.obj):
-
-    def __init__(
-        self,
-        parent,
-        col_num,
-        row_num,
-        file_name: str,
-        path_dir: str,
-        img_path_selected: str = "A:/res/selected.png",
-        img_path_unselected = "A:/res/unselect.png",
-        is_internal: bool = False,
-        style_type: str = "wallpaper",
-    ):
-        super().__init__(parent)
-        self.set_grid_cell(
-            lv.GRID_ALIGN.CENTER, col_num, 1, lv.GRID_ALIGN.START, row_num, 1
-        )
-        self.is_internal = is_internal
-        self.file_name = file_name
-        self.zoom_path = path_dir + file_name
-        self.img_path = self.zoom_path.replace("zoom-", "")
-        self.style_type = style_type
-
-        # Container setup with rounded corners
-        self.set_size(144, 240)
-        self.set_style_radius(40, 0)  # 40px rounded corners
-        self.set_style_clip_corner(True, 0)  # Enable clipping on container
-        self.set_style_pad_all(0, 0)
-        self.set_style_border_width(0, 0)
-        self.set_style_border_opa(lv.OPA.TRANSP, 0)
-        # Use solid black background to hide potential single-pixel gaps
-        self.set_style_bg_color(lv_colors.BLACK, 0)
-        self.set_style_bg_opa(lv.OPA.COVER, 0)
-        self.clear_flag(lv.obj.FLAG.SCROLLABLE)
-
-        # Create inner img object using natural size, then scale to cover
-        self.img = lv.img(self)
-        self.img.set_src(self.zoom_path)
-        self.img.set_size(lv.SIZE.CONTENT, lv.SIZE.CONTENT)
-        try:
-            # Compute zoom to cover the 144x240 container and center
-            nat_w = self.img.get_width()
-            nat_h = self.img.get_height()
-            if nat_w and nat_h:
-                zoom_w = math.ceil((144 / nat_w) * 256)
-                zoom_h = math.ceil((240 / nat_h) * 256)
-                zoom = max(int(zoom_w), int(zoom_h))
-                self.img.set_zoom(zoom)
-        except Exception:
-            # Fallback to default zoom if native size is not available
-            try:
-                self.img.set_zoom(256)
-            except Exception:
-                pass
-        # Slight upward nudge to avoid any 1px seam at the top after scaling
-        self.img.align(lv.ALIGN.CENTER, 0, -1)
-        self.img.clear_flag(lv.obj.FLAG.CLICKABLE)
-
-        # Image rendering settings - NO clip_corner on img
-        self.img.set_style_img_opa(lv.OPA.COVER, 0)
-        self.img.set_style_img_recolor_opa(lv.OPA.TRANSP, 0)
-
-        # Optimize rendering
-        try:
-            self.img.set_antialias(True)
-        except (AttributeError, TypeError):
-            pass
-
-        # Selection indicator overlay
-        self.check = None
-        self.selected_indicator_src = img_path_selected
-        self.unselected_indicator_src = img_path_unselected
-
-        if img_path_selected:
-            self.check = lv.img(self)
-            initial_src = img_path_unselected or img_path_selected
-            try:
-                self.check.set_src(initial_src)
-            except Exception:
-                fallback_src = "A:/res/checked-solid.png"
-                self.check.set_src(fallback_src)
-                self.selected_indicator_src = fallback_src
-                self.unselected_indicator_src = None
-            self.check.clear_flag(lv.obj.FLAG.CLICKABLE)
-            self.check.align(lv.ALIGN.TOP_RIGHT, -12, 12)
-            self.set_checked(False)
-
-        self.add_flag(lv.obj.FLAG.CLICKABLE)
-        self.add_flag(lv.obj.FLAG.EVENT_BUBBLE)
-
-    def set_checked(self, checked: bool):
-        if not self.check or not self.selected_indicator_src:
-            return
-
-        if self.unselected_indicator_src:
-            self.check.set_src(
-                self.selected_indicator_src if checked else self.unselected_indicator_src
-            )
-            self.check.clear_flag(lv.obj.FLAG.HIDDEN)
-        elif checked:
-            self.check.set_src(self.selected_indicator_src)
-            self.check.clear_flag(lv.obj.FLAG.HIDDEN)
-        else:
-            self.check.add_flag(lv.obj.FLAG.HIDDEN)
-
-
 class WallperChange(AnimScreen):
     def collect_animation_targets(self) -> list:
         targets = []
@@ -5018,17 +4917,21 @@ class WallperChange(AnimScreen):
             storage_device.increase_wp_cnts()
 
         def safe_extract_timestamp(name):
+            """Extract timestamp from custom wallpaper filename.
+
+            Handles names like:
+            - wp-<anything>-<timestamp>.jpg
+            - wp-<anything>-<timestamp>-blur.jpg
+            - zoom-wp-<anything>-<timestamp>.jpg (defensive)
+            Does not rely on a specific prefix length.
+            """
             try:
-                parts = name[5:].split("-")  # Remove "zoom-" prefix
-                if len(parts) >= 2:
-                    # Get the timestamp part (second to last part for blur files)
-                    timestamp_part = parts[-2] if "-blur" in name else parts[-1]
-                    # Remove file extension
-                    if "." in timestamp_part:
-                        timestamp_part = timestamp_part.split(".")[0]
-                    return int(timestamp_part)
-                return 0
-            except (ValueError, IndexError):
+                base = name.rsplit(".", 1)[0]
+                if base.endswith("-blur"):
+                    base = base[: -len("-blur")]
+                ts_str = base.rsplit("-", 1)[-1]
+                return int(ts_str)
+            except Exception:
                 return 0
 
         if file_name_list:
@@ -5075,8 +4978,8 @@ class WallperChange(AnimScreen):
             pad_gap=12,
         )
         self.container.align_to(self.nav_back, lv.ALIGN.OUT_BOTTOM_LEFT, -6, 20)
-        # Hide grid until thumbnails are fully refreshed to avoid initial decoding artifacts
-        self.container.add_flag(lv.obj.FLAG.HIDDEN)
+        # Don't hide container to avoid black screen on entry
+        # self.container.add_flag(lv.obj.FLAG.HIDDEN)
 
         # Enable event bubbling for the container
         self.container.add_flag(lv.obj.FLAG.EVENT_BUBBLE)
@@ -5201,15 +5104,16 @@ class WallperChange(AnimScreen):
                 path_dir = "A:1:/res/wallpapers/"
                 # Use zoom- prefix like Collection wallpapers
                 zoom_file_name = f"zoom-{file_name}"
-                current_wp = ImgGridItemRounded(
+                current_wp = ImgGridItem(
                     self.container,
                     i % 3,
                     current_row + (i // 3),
                     zoom_file_name,  # Use zoom- prefix for thumbnails
                     path_dir,
                     img_path_unselected=None,  # Disable built-in selection for custom wallpapers
-                    is_internal=True,  # Try setting back to True like Collection wallpapers
-                )             
+                    is_internal=True,
+                    style_type="wallpaper",
+                )
                 self.wps.append(current_wp)
                 self.custom_wps.append(current_wp)
 
@@ -5288,6 +5192,9 @@ class WallperChange(AnimScreen):
                 current_wp.remove_icon = remove_icon
 
                 # Debug output disabled for performance when many wallpapers are present
+
+            # After finishing the loop, advance current_row by the
+            # number of rows consumed by the custom wallpapers grid.
             current_row += custom_rows
         else:
             # No custom wallpapers - show instructional text
@@ -5365,7 +5272,7 @@ class WallperChange(AnimScreen):
             path_dir = "A:/res/"
             file_name = f"zoom-wallpaper-{i+1}.jpg"
 
-            current_wp = ImgGridItemRounded(
+            current_wp = ImgGridItem(
                 self.container,
                 i % 3,
                 current_row + (i // 3),
@@ -5373,6 +5280,7 @@ class WallperChange(AnimScreen):
                 path_dir,
                 img_path_unselected=None,  # Disable built-in selection for internal wallpapers
                 is_internal=True,
+                style_type="wallpaper",
             )
             self.wps.append(current_wp)
 
@@ -5400,7 +5308,7 @@ class WallperChange(AnimScreen):
     async def _refresh_previews_after_load(self):
         import utime
 
-        utime.sleep_ms(100)  # Small delay to ensure layout is complete
+        utime.sleep_ms(10)  # Reduced delay to minimize black screen
         self._refresh_previews_immediate()
 
     def _refresh_previews_immediate(self):
@@ -6053,8 +5961,12 @@ class Animations(AnimScreen):
         self.container = ContainerFlexCol(
             self.content_area, self.title, padding_row=2, pos=(0, 40)
         )
+        current_lang = storage_device.get_language()
+        if current_lang not in langs_keys:
+            current_lang = "en"
+            storage_device.set_language(current_lang)
         GeneralScreen.cur_language = langs[
-            langs_keys.index(storage_device.get_language())
+            langs_keys.index(current_lang)
         ][1]
         self.animation = ListItemBtn(self.container, _(i18n_keys.ITEM__ANIMATIONS))
         self.container.add_event_cb(self.on_click, lv.EVENT.CLICKED, None)
@@ -6362,6 +6274,20 @@ class LanguageSetting(AnimScreen):
                     self.title.set_text(_(i18n_keys.TITLE__LANGUAGE))
                     self.check_index = idx
                     button.set_checked()
+
+                    # Refresh previous screen texts and language label immediately
+                    try:
+                        if hasattr(self, "prev_scr") and self.prev_scr:
+                            if hasattr(self.prev_scr, "language") and hasattr(
+                                self.prev_scr.language, "label_right"
+                            ):
+                                self.prev_scr.language.label_right.set_text(
+                                    GeneralScreen.cur_language
+                                )
+                            if hasattr(self.prev_scr, "refresh_text"):
+                                self.prev_scr.refresh_text()
+                    except Exception:
+                        pass
 
 
 class BacklightSetting(AnimScreen):
@@ -7476,7 +7402,7 @@ class HomeScreenSetting(AnimScreen):
         # Home screen preview container with image (same size as LockScreenSetting)
         self.preview_container = lv.obj(self.container)
         self.preview_container.set_size(344, 572)  # Slightly shorter to avoid top seam
-        self.preview_container.align(lv.ALIGN.TOP_MID, 0, 105)  # Below status bar
+        self.preview_container.align(lv.ALIGN.TOP_MID, 0, 120)  # Below navigation bar (116px + 4px spacing)
         self.preview_container.add_style(
             StyleWrapper()
             .bg_color(lv_colors.BLACK)
@@ -7488,6 +7414,8 @@ class HomeScreenSetting(AnimScreen):
         # Don't capture click events - let them pass through to buttons
         self.preview_container.clear_flag(lv.obj.FLAG.CLICKABLE)
         self.preview_container.add_flag(lv.obj.FLAG.EVENT_BUBBLE)
+        # Enable overflow clipping to prevent image bleeding outside container
+        self.preview_container.set_style_clip_corner(True, 0)
         # Disable scrollbars on the preview container
         self.preview_container.set_scrollbar_mode(lv.SCROLLBAR_MODE.OFF)
         self.preview_container.clear_flag(lv.obj.FLAG.SCROLLABLE)
