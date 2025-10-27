@@ -32,7 +32,6 @@ from . import (
     font_GeistSemiBold26,
     font_GeistSemiBold30,
     font_GeistSemiBold38,
-    font_GeistSemiBold48,
 )
 from .address import AddressManager, chains_brief_info
 from .common import AnimScreen, FullSizeWindow, Screen, lv  # noqa: F401, F403, F405
@@ -50,9 +49,6 @@ from .components.listitem import (
 from .deviceinfo import DeviceInfoManager
 from .nftmanager import (
     NftGallery,
-    NftHomeScreenPreview,
-    NftLockScreenPreview,
-    NftManager,
 )
 from .widgets.style import StyleWrapper
 
@@ -60,28 +56,16 @@ _attach_to_pin_task_running = False
 
 # Animation state tracking
 _animation_in_progress = False
-_animation_start_time = 0
-_last_operation_time = 0  # Prevent operations from being too frequent
 _last_jpeg_loaded = None  # Cache the last loaded JPEG path
-_operation_count = 0  # Operation counter
 _active_timers = []  # Track active timers
 _cached_styles = {}  # Cache style objects dictionary
-_restore_timer = None  # LVGL timer for debounced restore
-_busy_show_timer = None  # LVGL timer to delay showing Processing
-_busy_show_delay_ms = 800  # Delay before showing Processing text
 
 
 def _resume_lvgl_timers():
-    try:
-        lv.timer_handler_resume()
-    except AttributeError:
-        pass
-    except Exception:
-        pass
+    lv.timer_handler_resume()
 
 
 def _hide_cover_background():
-    try:
         from trezorui import Display
 
         display = Display()
@@ -91,61 +75,27 @@ def _hide_cover_background():
             display.cover_background_set_visible(False)
         if hasattr(display, "cover_background_move_to_y"):
             display.cover_background_move_to_y(-800)
-    except Exception:
-        pass
 
 
-def cancel_pending_animations(reason=None) -> None:
+def cancel_pending_animations() -> None:
     """Force-stop homescreen LVGL timers/animations (e.g., before switching screens)."""
     global _animation_in_progress
 
-    timers_to_clear = len(_active_timers)
     cleanup_timers()
     _animation_in_progress = False
     _resume_lvgl_timers()
     _hide_cover_background()
-    if __debug__ and (timers_to_clear or reason):
-        print(f"[homescreen.cancel_pending_animations] reset timers={timers_to_clear}, reason={reason}")
-
-
-def log_with_timestamp(message) -> None:
-    """Best-effort timestamped debug logging."""
-    try:
-        timestamp = utime.ticks_ms()
-    except Exception:
-        timestamp = 0
-    print(f"[{timestamp}] {message}")
-
 
 def _lvgl_safe_wallpaper_src(path, context: str = "") -> str:
 
     if not path:
         return utils.get_default_wallpaper()
-
     if isinstance(path, bytes):
         try:
             path = path.decode()
         except Exception:
             return utils.get_default_wallpaper()
-
     return path
-
-
-def get_timestamp():
-    return utime.ticks_ms()
-
-
-
-def check_operation_frequency():
-    global _last_operation_time, _operation_count
-    current_time = get_timestamp()
-    if current_time - _last_operation_time < 100:  # No repeated operations within 100ms
-        return False
-
-    _last_operation_time = current_time
-    _operation_count += 1
-    return True
-
 
 def cleanup_timers():
     global _active_timers
@@ -159,17 +109,10 @@ def cleanup_timers():
 
 
 def force_memory_cleanup():
-    # Multiple garbage collections
     for i in range(5):  # Increased to 5 times
-        try:
-            gc.collect()
-        except:
-            pass
-
-    # Periodically clean style cache (keep 2 most recently used)
+        gc.collect()
     global _cached_styles
     if len(_cached_styles) > 2:
-        # Keep only the last 2, clean others
         keys = list(_cached_styles.keys())
         for key in keys[:-2]:
             del _cached_styles[key]
@@ -178,18 +121,11 @@ def force_memory_cleanup():
 
 def get_cached_style(image_src):
     global _cached_styles
-
-    # Convert path to safe filesystem path if needed
     safe_src = _lvgl_safe_wallpaper_src(image_src, "get_cached_style")
-
 
     # Check if we already have a cached style for this path
     if safe_src not in _cached_styles:
-        try:
-            _cached_styles[safe_src] = StyleWrapper().bg_img_src(safe_src).border_width(0)
-        except Exception as e:
-            return None
-
+        _cached_styles[safe_src] = StyleWrapper().bg_img_src(safe_src).border_width(0)
     return _cached_styles[safe_src]
 
 
@@ -206,250 +142,37 @@ APP_DRAWER_UP_TIME = 300
 APP_DRAWER_DOWN_TIME = 300
 APP_DRAWER_UP_DELAY = 0
 APP_DRAWER_DOWN_DELAY = 0
-if __debug__:
-    PATH_OVER_SHOOT = lv.anim_t.path_overshoot
-    PATH_BOUNCE = lv.anim_t.path_bounce
-    PATH_LINEAR = lv.anim_t.path_linear
-    PATH_EASE_IN_OUT = lv.anim_t.path_ease_in_out
-    PATH_EASE_IN = lv.anim_t.path_ease_in
-    PATH_EASE_OUT = lv.anim_t.path_ease_out
-    PATH_STEP = lv.anim_t.path_step
-    APP_DRAWER_UP_PATH_CB = PATH_EASE_OUT
-    APP_DRAWER_DOWN_PATH_CB = PATH_EASE_OUT
-
-# Global variables for debouncing busy state
-_busy_state_counter = 0
-_last_busy_time = 0
-_busy_debounce_ms = 1000  # 1 second debounce time
-_cleanup_task = None
-
-
-def _get_persistent_busy_state():
-    try:
-        import storage.cache
-
-        return storage.cache.get_int(storage.cache.APP_COMMON_BUSY_STATE, 0)
-    except:
-        return 0
-
-
-def _get_persistent_busy_time():
-    try:
-        import storage.cache
-
-        return storage.cache.get_int(storage.cache.APP_COMMON_BUSY_TIME, 0)
-    except:
-        return 0
-
-
-def _set_persistent_busy_state(counter):
-    try:
-        import storage.cache
-        import utime
-
-        # Get current saved counter to see if this is the first time going busy
-        current_saved = storage.cache.get_int(storage.cache.APP_COMMON_BUSY_STATE, 0)
-
-        storage.cache.set_int(storage.cache.APP_COMMON_BUSY_STATE, counter)
-
-        # Only update timestamp when going from 0 to non-zero (first busy)
-        if current_saved == 0 and counter > 0:
-            storage.cache.set_int(storage.cache.APP_COMMON_BUSY_TIME, utime.ticks_ms())
-    except:
-        pass
-
-
-def _set_persistent_busy_time(time_ms):
-    try:
-        import storage.cache
-
-        storage.cache.set_int(storage.cache.APP_COMMON_BUSY_TIME, time_ms)
-    except:
-        pass
-
-
-async def _delayed_cleanup():
-    global _busy_state_counter, _cleanup_task
-
-    import utime
-    from trezor import loop
-
-
-    await loop.sleep(_busy_debounce_ms)
-
-
-    # Check if we should restore non-busy state
-    current_time = utime.ticks_ms()
-    time_since_last_busy = utime.ticks_diff(current_time, _last_busy_time)
-
-    if time_since_last_busy >= _busy_debounce_ms:
-
-        # Clear persistent state and counter
-        _busy_state_counter = 0
-        _set_persistent_busy_state(0)
-        _set_persistent_busy_time(0)
-
-        if hasattr(MainScreen, "_instance") and MainScreen._instance:
-            MainScreen._instance.change_state(False)
-
-            # Show AppDrawer after restoring normal state (without animation)
-            if hasattr(MainScreen._instance, "apps") and MainScreen._instance.apps:
-                if MainScreen._instance.apps.has_flag(lv.obj.FLAG.HIDDEN):
-                    MainScreen._instance.refresh_appdrawer_background()
-                    # Show AppDrawer directly without animation - ensure complete state setup
-                    MainScreen._instance.hidden_others(True)
-                    if (
-                        hasattr(MainScreen._instance, "up_arrow")
-                        and MainScreen._instance.up_arrow
-                    ):
-                        MainScreen._instance.up_arrow.add_flag(lv.obj.FLAG.HIDDEN)
-                    if (
-                        hasattr(MainScreen._instance, "bottom_tips")
-                        and MainScreen._instance.bottom_tips
-                    ):
-                        MainScreen._instance.bottom_tips.add_flag(lv.obj.FLAG.HIDDEN)
-                    MainScreen._instance.apps.clear_flag(lv.obj.FLAG.HIDDEN)
-                    MainScreen._instance.apps.clear_flag(lv.obj.FLAG.GESTURE_BUBBLE)
-                    MainScreen._instance.apps.visible = True
-                    MainScreen._instance.apps._showing = False
-
-    _cleanup_task = None
+PATH_EASE_OUT = lv.anim_t.path_ease_out
+APP_DRAWER_UP_PATH_CB = PATH_EASE_OUT
+APP_DRAWER_DOWN_PATH_CB = PATH_EASE_OUT
 
 
 def change_state(is_busy: bool = False):
-    global _busy_state_counter, _last_busy_time, _cleanup_task, _restore_timer, _busy_show_timer
-
-
-    import utime
-    from trezor import workflow
-
-    current_time = utime.ticks_ms()
-
-    # Initialize from persistent state if needed
-    if _busy_state_counter == 0 and _last_busy_time == 0:
-        _busy_state_counter = _get_persistent_busy_state()
-
-    if is_busy:
-        # Increment busy counter and update timestamp
-        _busy_state_counter += 1
-        _last_busy_time = current_time
-        _set_persistent_busy_state(_busy_state_counter)
-        # Cancel any pending LVGL restore timer since we are busy again
-        try:
-            if _restore_timer is not None:
-                _restore_timer.delete()
-        except:
-            pass
-        _restore_timer = None
-        # Reschedule delayed busy indicator
-        try:
-            if _busy_show_timer is not None:
-                _busy_show_timer.delete()
-        except:
-            pass
-        _busy_show_timer = None
-    else:
-        # Decrement busy counter
-        if _busy_state_counter > 0:
-            _busy_state_counter -= 1
-            # Don't save persistent state here - only save when counter > 0
-            if _busy_state_counter > 0:
-                _set_persistent_busy_state(_busy_state_counter)
-        time_since_last_busy = utime.ticks_diff(current_time, _last_busy_time)
-        if _busy_state_counter > 0:
-            return
-
-        # Cancel pending busy-indicator timer; we are no longer busy
-        try:
-            if _busy_show_timer is not None:
-                _busy_show_timer.delete()
-        except:
-            pass
-        _busy_show_timer = None
-
-        # We want to immediately restore the tips to Swipe-to-show.
-        # No debounce here to avoid staying on Processing... between quick requests.
-
-
-        # Cancel cleanup task if it exists
-        if _cleanup_task is not None:
-            _cleanup_task = None
-
-        # Don't clear persistent state here - let cleanup task handle it
-
-    if hasattr(MainScreen, "_instance") and MainScreen._instance:
-        # Ensure MainScreen is the active screen
-        if not MainScreen._instance.is_visible():
-            lv.scr_load(MainScreen._instance)
-        if is_busy:
-            # Hide AppDrawer if it's visible
-            if hasattr(MainScreen._instance, "apps") and MainScreen._instance.apps:
-                if not MainScreen._instance.apps.has_flag(lv.obj.FLAG.HIDDEN):
-                    MainScreen._instance.apps.hide_to_mainscreen_fallback()
-
-            # Delay showing Processing to avoid flicker for short requests
-            def _busy_show_cb(t=None):
-                try:
-                    # Only show if still busy
-                    if _busy_state_counter > 0 and MainScreen._instance:
-                        MainScreen._instance.change_state(True)
-                finally:
-                    global _busy_show_timer
-                    _busy_show_timer = None
-
-            if _busy_state_counter > 0 and _busy_show_timer is None:
-                _busy_show_timer = lv.timer_create(lambda _t: _busy_show_cb(), _busy_show_delay_ms, None)
-                _busy_show_timer.set_repeat_count(1)
-        else:
-            # Restoring from busy: stay on MainScreen and reset tips
-            if hasattr(MainScreen._instance, "apps") and MainScreen._instance.apps:
-                if not MainScreen._instance.apps.has_flag(lv.obj.FLAG.HIDDEN):
-                    MainScreen._instance.apps.hide_to_mainscreen_fallback()
-            MainScreen._instance.change_state(False)
-            _set_persistent_busy_state(0)
-            _set_persistent_busy_time(0)
-    elif is_busy:
-        # If MainScreen instance doesn't exist, create and show it (without immediate busy)
-        main_screen = MainScreen()
-        lv.scr_load(main_screen)
-        # Schedule delayed busy indicator
-        def _busy_show_cb2(t=None):
-            try:
-                if _busy_state_counter > 0 and hasattr(MainScreen, "_instance") and MainScreen._instance:
-                    MainScreen._instance.change_state(True)
-            finally:
-                global _busy_show_timer
-                _busy_show_timer = None
-        _busy_show_timer = lv.timer_create(lambda _t: _busy_show_cb2(), _busy_show_delay_ms, None)
-        _busy_show_timer.set_repeat_count(1)
-
-
-def show_appdrawer_immediate():
-    cancel_pending_animations("show_appdrawer_immediate")
     try:
         if hasattr(MainScreen, "_instance") and MainScreen._instance:
             ms = MainScreen._instance
         else:
             ms = MainScreen()
-        if not ms.is_visible():
-            lv.scr_load(ms)
-        # Show AppDrawer directly without animation
-        if hasattr(ms, "apps") and ms.apps:
-            ms.refresh_appdrawer_background()
-            ms.hidden_others(True)
-            if hasattr(ms, "up_arrow"):
-                ms.up_arrow.add_flag(lv.obj.FLAG.HIDDEN)
-            if hasattr(ms, "bottom_tips"):
-                ms.bottom_tips.add_flag(lv.obj.FLAG.HIDDEN)
-            ms.apps.clear_flag(lv.obj.FLAG.HIDDEN)
-            ms.apps.clear_flag(lv.obj.FLAG.GESTURE_BUBBLE)
-            ms.apps.visible = True
-            ms.apps._showing = False
-    except Exception as e:
-        try:
-            pass
-        except:
-            pass
+
+        # Ensure homescreen is visible when entering busy state
+        if is_busy:
+            try:
+                if not ms.is_visible():
+                    lv.scr_load(ms)
+            except Exception:
+                pass
+
+            # Keep AppDrawer hidden so the background is shown
+            try:
+                if hasattr(ms, "apps") and ms.apps:
+                    ms.apps.add_flag(lv.obj.FLAG.HIDDEN)
+                    ms.apps.visible = False
+            except Exception:
+                pass
+        ms.change_state(is_busy)
+    except Exception:
+        # Best-effort; ignore UI errors so wire handling never breaks
+        pass
 
 
 class MainScreen(Screen):
@@ -593,151 +316,69 @@ class MainScreen(Screen):
 
         self.apps = self.AppDrawer(self)
         self.set_size(480, 800)
-
-        # Show AppDrawer by default instead of MainScreen
-        # Hide MainScreen elements
-        self.hidden_others(True)
-        if hasattr(self, "up_arrow"):
-            self.up_arrow.add_flag(lv.obj.FLAG.HIDDEN)
-        if hasattr(self, "bottom_tips"):
-            self.bottom_tips.add_flag(lv.obj.FLAG.HIDDEN)
-
-        # Check if we're in busy state - if so, don't show AppDrawer
-        global _busy_state_counter, _last_busy_time
-
-        # Load persistent state if not already loaded
-        if _busy_state_counter == 0 and _last_busy_time == 0:
-            _busy_state_counter = _get_persistent_busy_state()
-
-        # Check if we should clear old busy state (no active communication for a while)
-        import utime
-
-        current_time = utime.ticks_ms()
-
-        # If we have a saved busy state, check if it's too old
-        # BUT be extra careful during session restarts - only clear if very old
-        if _busy_state_counter > 0:
-            last_busy_time = _get_persistent_busy_time()
-            time_since_last_busy = utime.ticks_diff(current_time, last_busy_time)
-
-            # For very recent activity (less than 3 seconds), never clear during initialization
-            # This prevents clearing states during normal multi-step operations with session restarts
-            if time_since_last_busy < 3000:
-                # Don't clear - this is likely an ongoing operation
-                pass
-            elif time_since_last_busy > 5000:  # Reduce threshold to 5 seconds
-                _busy_state_counter = 0
-                _set_persistent_busy_state(0)
-                # Clear the persistent busy time as well since communication is done
-                _set_persistent_busy_time(0)
-            else:
-                pass
-
-        if _busy_state_counter > 0:
-            # Keep AppDrawer hidden during busy state
-            self.apps.add_flag(lv.obj.FLAG.HIDDEN)
-            self.apps.add_flag(lv.obj.FLAG.GESTURE_BUBBLE)
-            self.apps.visible = False
-
-            # Show MainScreen elements including title and subtitle
-            if hasattr(self, "title") and self.title:
-                self.title.clear_flag(lv.obj.FLAG.HIDDEN)
-            if hasattr(self, "subtitle") and self.subtitle:
-                self.subtitle.clear_flag(lv.obj.FLAG.HIDDEN)
-            if hasattr(self, "up_arrow"):
-                self.up_arrow.add_flag(lv.obj.FLAG.HIDDEN)  # Hide during busy
-            if hasattr(self, "bottom_tips"):
-                self.bottom_tips.clear_flag(lv.obj.FLAG.HIDDEN)
-                self.bottom_tips.set_text(_(i18n_keys.BUTTON__PROCESSING))
-        else:
-            # Check if device is locked before showing AppDrawer
-            from trezor import config
-            from . import fingerprints
-
-            if not config.is_unlocked() or not fingerprints.is_unlocked():
-                # Device is locked, keep MainScreen visible without showing AppDrawer
-                if hasattr(self, "title") and self.title:
-                    self.title.clear_flag(lv.obj.FLAG.HIDDEN)
-                if hasattr(self, "subtitle") and self.subtitle:
-                    self.subtitle.clear_flag(lv.obj.FLAG.HIDDEN)
-                if hasattr(self, "up_arrow"):
-                    self.up_arrow.add_flag(lv.obj.FLAG.HIDDEN)
-                if hasattr(self, "bottom_tips"):
-                    self.bottom_tips.clear_flag(lv.obj.FLAG.HIDDEN)
-                    self.bottom_tips.set_text("")  # Clear processing text
-            else:
-                # Device is unlocked: always default to MainScreen (no AppDrawer)
-                # Hide AppDrawer if needed
-                self.apps.add_flag(lv.obj.FLAG.HIDDEN)
-                self.apps.add_flag(lv.obj.FLAG.GESTURE_BUBBLE)
-                self.apps.visible = False
-                # Show MainScreen elements and tips
-                self.hidden_others(False)
-                if hasattr(self, "up_arrow"):
-                    self.up_arrow.clear_flag(lv.obj.FLAG.HIDDEN)
-                if hasattr(self, "bottom_tips"):
-                    self.bottom_tips.clear_flag(lv.obj.FLAG.HIDDEN)
-                    self.bottom_tips.set_text(_(i18n_keys.BUTTON__SWIPE_TO_SHOW_APPS))
-
-        # Add gesture handling for MainScreen
+        # Align with upstream: show MainScreen by default, hide AppDrawer
+        self.apps.add_flag(lv.obj.FLAG.HIDDEN)
+        # Gesture handling for MainScreen
         self.add_event_cb(self.on_main_gesture, lv.EVENT.GESTURE, None)
-
         save_app_obj(self)
+        print("[DEBUG] MainScreen.__init__ completed, gesture callback registered")
 
     def on_main_gesture(self, event_obj):
         global _animation_in_progress
         code = event_obj.code
+        print(f"[DEBUG] on_main_gesture called, code={code}")
         if code == lv.EVENT.GESTURE:
+            print(f"[DEBUG] GESTURE event detected, _animation_in_progress={_animation_in_progress}")
             # If animation is in progress, ignore gesture
             if _animation_in_progress:
+                print("[DEBUG] Gesture blocked: animation in progress")
                 return
 
             # Check if AppDrawer is visible
             if hasattr(self, "apps") and self.apps:
                 is_app_drawer_hidden = self.apps.has_flag(lv.obj.FLAG.HIDDEN)
+                print(f"[DEBUG] AppDrawer exists, is_hidden={is_app_drawer_hidden}")
 
                 if not is_app_drawer_hidden:
-                    return
-
-                # Check if communication just recovered (prevent accidental triggers)
-                if hasattr(self, "_just_restored_from_busy"):
-                    delattr(self, "_just_restored_from_busy")
+                    print("[DEBUG] Gesture blocked: AppDrawer already visible")
                     return
 
             # Only when AppDrawer is hidden (MainScreen visible), allow UP gesture
             indev = lv.indev_get_act()
             _dir = indev.get_gesture_dir()
+            print(f"[DEBUG] Gesture direction: {_dir}, lv.DIR.TOP={lv.DIR.TOP}")
 
 
             # Strict control: only allow UP gesture
             if _dir == lv.DIR.TOP:
+                print("[DEBUG] UP gesture detected! Calling show_appdrawer_simple()")
                 self.refresh_appdrawer_background()
                 self.show_appdrawer_simple()
+            else:
+                print(f"[DEBUG] Gesture ignored: direction {_dir} is not UP")
 
     def show_appdrawer_simple(self):
-        global _animation_in_progress, _animation_start_time
+        global _animation_in_progress
+        print("[DEBUG] show_appdrawer_simple() called")
 
         # Prevent duplicate calls
         if _animation_in_progress:
-            return
-
-        # Check operation frequency
-        if not check_operation_frequency():
+            print("[DEBUG] show_appdrawer_simple blocked: animation already in progress")
             return
 
         if hasattr(self, "apps") and self.apps:
             try:
+                print("[DEBUG] Starting appdrawer animation, setting _animation_in_progress=True")
                 _animation_in_progress = True
-                _animation_start_time = get_timestamp()
-
 
                 from trezorui import Display
 
                 display = Display()
+                print("[DEBUG] Display object created")
 
                 # Step 1: Load and display layer2 background
                 if hasattr(display, "cover_background_load_jpeg"):
-                    try:
+
                         from storage import device
 
                         lockscreen_path = device.get_homescreen()
@@ -762,10 +403,6 @@ class MainScreen(Screen):
                             else:
                                 display_path = lockscreen_path
 
-                        if __debug__:
-                            log_with_timestamp(
-                                f"MainScreen: Layer2 path conversion: {lockscreen_path} -> {display_path}"
-                            )
 
                         # Check if JPEG needs to be reloaded
                         global _last_jpeg_loaded
@@ -775,14 +412,6 @@ class MainScreen(Screen):
                             display.cover_background_load_jpeg(display_path)
                             _last_jpeg_loaded = display_path
 
-                    except Exception as jpeg_error:
-                        # Use pure black background as fallback
-                        if hasattr(display, "cover_background_set_image"):
-                            width, height = 480, 800
-                            black_image = bytearray(width * height * 2)
-                            for i in range(len(black_image)):
-                                black_image[i] = 0x00
-                            display.cover_background_set_image(bytes(black_image))
 
                 # Step 2: Show layer2 (initial position at top of screen)
                 if hasattr(display, "cover_background_animate_to_y"):
@@ -870,8 +499,10 @@ class MainScreen(Screen):
 
 
             except Exception as e:
-                cancel_pending_animations("show_appdrawer_simple_error")
-                print(f"MainScreen: Error in show_appdrawer_simple: {e}")
+                print(f"[DEBUG] Exception in show_appdrawer_simple: {e}")
+                import sys
+                sys.print_exception(e)
+                cancel_pending_animations()
                 # Show AppDrawer in simple way on error
                 self.hidden_others(True)
                 if hasattr(self, "up_arrow"):
@@ -881,116 +512,7 @@ class MainScreen(Screen):
                 self.apps.clear_flag(lv.obj.FLAG.HIDDEN)
                 self.apps.clear_flag(lv.obj.FLAG.GESTURE_BUBBLE)
                 self.apps.visible = True
-                print("MainScreen: AppDrawer shown via fallback method")
-
-    def show_layer2_and_appdrawer(self):
-        try:
-            from trezorui import Display
-
-            display = Display()
-
-            # Step 1: Load and show layer2
-            if hasattr(display, "cover_background_load_jpeg"):
-                try:
-                    from storage import device
-
-                    lockscreen_path = device.get_homescreen()
-
-                    if not lockscreen_path:
-                        display_path = "res/wallpaper-1.jpg"
-                    else:
-                        if lockscreen_path.startswith("A:/"):
-                            display_path = lockscreen_path[
-                                3:
-                            ]  # Create dedicated variable for display system
-                        elif lockscreen_path.startswith("A:1:"):
-                            display_path = lockscreen_path[
-                                2:
-                            ]  # A:1:/res/wallpapers/xxx -> 1:/res/wallpapers/xxx
-                        else:
-                            display_path = lockscreen_path
-
-
-                    display.cover_background_load_jpeg(display_path)
-                    print("MainScreen: Layer2 background loaded")
-
-                except Exception:
-                    # Use pure black background as fallback
-                    if hasattr(display, "cover_background_set_image"):
-                        width, height = 480, 800
-                        black_image = bytearray(width * height * 2)
-                        for i in range(len(black_image)):
-                            black_image[i] = 0x00
-                        display.cover_background_set_image(bytes(black_image))
-
-            # Step 2: Show layer2 (initial position at top of screen, ready to show downward)
-            if hasattr(display, "cover_background_animate_to_y"):
-                # Key modification: show Layer2 first then set position, avoid enabling unconfigured Layer
-                if hasattr(display, "cover_background_set_visible"):
-                    display.cover_background_set_visible(True)
-                if hasattr(display, "cover_background_show"):
-                    display.cover_background_show()  # Show first, already properly configured
-                display.cover_background_move_to_y(0)  # Then set position
-                print("MainScreen: Layer2 shown at screen top")
-
-                # Step 3: Immediately show AppDrawer and restore original background (covered by layer2)
-                def show_appdrawer_behind_layer2():
-                    if hasattr(self.apps, "show"):
-                        self.apps.show()
-                        print(
-                            "MainScreen: AppDrawer shown behind layer2 with proper gesture handling"
-                        )
-
-                # Brief delay before showing AppDrawer (let layer2 finish displaying first)
-                show_timer = lv.timer_create(
-                    lambda t: show_appdrawer_behind_layer2(), 50, None  # 50ms delay
-                )
-                show_timer.set_repeat_count(1)
-                # Track timer
-                global _active_timers
-                _active_timers.append(show_timer)
-
-                # Step 4: After delay, slide layer2 up and out of screen
-                def start_layer2_animation():
-                    display.cover_background_animate_to_y(
-                        -800, 200
-                    )  # 200ms animation (optimized response time)
-
-                    # Step 5: Hide layer2 after animation complete
-                    def on_slide_complete():
-                        global _animation_in_progress
-
-                        if hasattr(display, "cover_background_hide"):
-                            display.cover_background_hide()
-
-                        _animation_in_progress = False
-
-                        # Clean timers and force memory cleanup
-                        cleanup_timers()
-                        force_memory_cleanup()
-
-                    # Hide layer2 after animation complete
-                    completion_timer = lv.timer_create(
-                        lambda t: on_slide_complete(),
-                        350,
-                        None,  # 300ms animation + 50ms buffer
-                    )
-                    completion_timer.set_repeat_count(1)
-                    # Track timer
-                    _active_timers.append(completion_timer)
-
-                animation_timer = lv.timer_create(
-                    lambda t: start_layer2_animation(),
-                    100,
-                    None,  # 100ms delay (reduced from 150ms)
-                )
-                animation_timer.set_repeat_count(1)
-                # Track timer
-                _active_timers.append(animation_timer)
-
-        except Exception as e:
-            cancel_pending_animations("show_layer2_and_appdrawer_error")
-            print(f"MainScreen: Error in show_layer2_and_appdrawer: {e}")
+                print("[DEBUG] AppDrawer shown via fallback (error path)")
 
     def _get_title_labels(self):
         labels = []
@@ -1003,10 +525,7 @@ class MainScreen(Screen):
     def _cancel_title_fade(self):
         labels = self._get_title_labels()
         for label in labels:
-            try:
-                lv.anim_del(label, None)
-            except:
-                pass
+            lv.anim_del(label, None)
             label.set_style_text_opa(lv.OPA.COVER, 0)
             label.invalidate()
         if hasattr(self, "_title_fade_anims"):
@@ -1070,10 +589,7 @@ class MainScreen(Screen):
             return _ready_cb
 
         for label in labels:
-            try:
-                lv.anim_del(label, None)
-            except:
-                pass
+            lv.anim_del(label, None)
             fade_anim = lv.anim_t()
             fade_anim.init()
             fade_anim.set_var(label)
@@ -1105,9 +621,23 @@ class MainScreen(Screen):
 
     def change_state(self, busy: bool):
         if busy:
-            self.clear_flag(lv.obj.FLAG.CLICKABLE)
-            self.up_arrow.add_flag(lv.obj.FLAG.HIDDEN)
-            self.bottom_tips.set_text(_(i18n_keys.BUTTON__PROCESSING))
+            # Disable click interactions and show processing hints
+            try:
+                self.clear_flag(lv.obj.FLAG.CLICKABLE)
+            except Exception:
+                pass
+            if hasattr(self, "up_arrow") and self.up_arrow:
+                try:
+                    self.up_arrow.add_flag(lv.obj.FLAG.HIDDEN)
+                except Exception:
+                    pass
+            if hasattr(self, "bottom_tips") and self.bottom_tips:
+                try:
+                    # Ensure tips are visible and show processing text
+                    self.bottom_tips.clear_flag(lv.obj.FLAG.HIDDEN)
+                    self.bottom_tips.set_text(_(i18n_keys.BUTTON__PROCESSING))
+                except Exception:
+                    pass
 
             # Ensure title and subtitle are visible during busy state
             if hasattr(self, "title") and self.title:
@@ -1115,9 +645,23 @@ class MainScreen(Screen):
             if hasattr(self, "subtitle") and self.subtitle:
                 self.subtitle.clear_flag(lv.obj.FLAG.HIDDEN)
         else:
-            self.add_flag(lv.obj.FLAG.CLICKABLE)
-            self.up_arrow.clear_flag(lv.obj.FLAG.HIDDEN)
-            self.bottom_tips.set_text(_(i18n_keys.BUTTON__SWIPE_TO_SHOW_APPS))
+            # Restore normal interactions and hints
+            try:
+                self.add_flag(lv.obj.FLAG.CLICKABLE)
+            except Exception:
+                pass
+            if hasattr(self, "up_arrow") and self.up_arrow:
+                try:
+                    self.up_arrow.clear_flag(lv.obj.FLAG.HIDDEN)
+                except Exception:
+                    pass
+            if hasattr(self, "bottom_tips") and self.bottom_tips:
+                try:
+                    # Ensure tips are visible and restore default text
+                    self.bottom_tips.clear_flag(lv.obj.FLAG.HIDDEN)
+                    self.bottom_tips.set_text(_(i18n_keys.BUTTON__SWIPE_TO_SHOW_APPS))
+                except Exception:
+                    pass
 
             # Keep title and subtitle visible in non-busy state too
             if hasattr(self, "title") and self.title:
@@ -1217,8 +761,6 @@ class MainScreen(Screen):
 
             self.add_event_cb(self.on_click, lv.EVENT.CLICKED, None)
 
-            # Initially allow gesture bubbling when AppDrawer is hidden
-            # This will be managed by show/hide methods
             self.add_flag(lv.obj.FLAG.GESTURE_BUBBLE)
             self.add_event_cb(self.on_gesture, lv.EVENT.GESTURE, None)
 
@@ -1227,6 +769,7 @@ class MainScreen(Screen):
             # Align content container to screen-left to avoid early clip on slide-out
             self.main_cont.set_pos(0, 75)
             self.main_cont.add_flag(lv.obj.FLAG.EVENT_BUBBLE)
+            self.main_cont.add_flag(lv.obj.FLAG.GESTURE_BUBBLE)  # Allow gesture events to bubble up
             self.main_cont.set_style_pad_all(0, 0)
             self.main_cont.set_style_border_width(0, 0)
             self.main_cont.set_style_bg_opa(lv.OPA.TRANSP, 0)
@@ -1250,6 +793,7 @@ class MainScreen(Screen):
                 page_cont.set_size(self.page_width, self.page_height)
                 page_cont.set_pos(0, 0)
                 page_cont.add_flag(lv.obj.FLAG.EVENT_BUBBLE)
+                page_cont.add_flag(lv.obj.FLAG.GESTURE_BUBBLE)  # Allow gesture events to bubble up
                 page_cont.clear_flag(lv.obj.FLAG.SCROLLABLE)
                 # Use inline styles
                 page_cont.add_style(
@@ -1322,6 +866,7 @@ class MainScreen(Screen):
             cont.set_size(144, 214)  # Updated to match main branch
             cont.set_pos(x, y)
             cont.add_flag(lv.obj.FLAG.EVENT_BUBBLE)
+            cont.add_flag(lv.obj.FLAG.GESTURE_BUBBLE)  # Allow gesture events to bubble up
             # Disable container scrolling to reduce unnecessary calculations
             cont.clear_flag(lv.obj.FLAG.SCROLLABLE)
 
@@ -1364,8 +909,6 @@ class MainScreen(Screen):
             label.set_long_mode(lv.label.LONG.WRAP)  # Auto wrap to 2 lines instead of truncating with dots
             label.set_style_max_height(52, 0)  # 26px * 2 = 52px for 2 lines
 
-            # Use absolute positioning instead of align_to to avoid layout calculation issues
-            # Position: below button (144px) + 8px gap, centered horizontally
             label.set_pos(0, 144 + 8)
 
             self.text_label[text_key] = label
@@ -1391,20 +934,15 @@ class MainScreen(Screen):
             except Exception:
                 pass
 
-        def create_down_arrow(self):
-            img_down = lv.imgbtn(self)
-            img_down.set_size(40, 40)
-            img_down.set_style_bg_img_src("A:/res/slide-down.jpg", 0)
-            img_down.align(lv.ALIGN.TOP_MID, 0, 64)
-            img_down.add_event_cb(lambda e: self.dismiss(), lv.EVENT.CLICKED, None)
-            img_down.set_ext_click_area(100)
-
         def init_indicators(self):
             self.container = ContainerFlexRow(self, None, padding_col=0)
             self.container.align(lv.ALIGN.BOTTOM_MID, 0, -32)
             self.indicators = [
                 Indicator(self.container, i) for i in range(self.PAGE_SIZE)
             ]
+
+        def set_position(self, val):
+            pass
 
         def init_anim(self):
             self.show_anim = Anim(
@@ -1431,53 +969,46 @@ class MainScreen(Screen):
                 delay=0 if not __debug__ else APP_DRAWER_DOWN_DELAY,
             )
 
-        def set_position(self, val):
-            pass
-
         def on_gesture(self, event_obj):
             global _animation_in_progress
             code = event_obj.code
             is_hidden = self.has_flag(lv.obj.FLAG.HIDDEN)
+            target = event_obj.get_target()
+            print(f"[DEBUG] AppDrawer.on_gesture: target={target}, code={code}, hidden={is_hidden}")
 
             if _animation_in_progress:
+                print("[DEBUG] AppDrawer gesture blocked: animation in progress")
                 return
 
             if code == lv.EVENT.GESTURE:
                 if is_hidden:
+                    print("[DEBUG] AppDrawer gesture blocked: drawer is hidden")
                     return
 
                 indev = lv.indev_get_act()
                 _dir = indev.get_gesture_dir()
+                print(f"[DEBUG] AppDrawer gesture direction: {_dir} (BOTTOM={lv.DIR.BOTTOM}, TOP={lv.DIR.TOP}, LEFT={lv.DIR.LEFT}, RIGHT={lv.DIR.RIGHT})")
 
                 if _dir == lv.DIR.BOTTOM:
+                    print("[DEBUG] DOWN gesture: hiding to mainscreen")
                     self.hide_to_mainscreen()
                 elif _dir == lv.DIR.TOP:
+                    print("[DEBUG] UP gesture: ignored in appdrawer")
                     return
                 else:
+                    print(f"[DEBUG] LEFT/RIGHT gesture: handling page transition")
                     self.handle_page_gesture(_dir)
 
         def hide_to_mainscreen(self):
-            global _animation_in_progress, _animation_start_time
+            global _animation_in_progress
 
             # Prevent duplicate calls
             if _animation_in_progress:
                 return
 
-            # Check operation frequency
-            if not check_operation_frequency():
-                return
-
-            if __debug__:
-                global _operation_count
-                print(
-                    f"AppDrawer: Starting hide_to_mainscreen (operation #{_operation_count})"
-                )
 
             try:
                 _animation_in_progress = True
-                _animation_start_time = get_timestamp()
-
-                
 
                 from trezorui import Display
 
@@ -1519,12 +1050,6 @@ class MainScreen(Screen):
                             gc.collect()
                             display.cover_background_load_jpeg(display_path)
                             _last_jpeg_loaded = display_path
-
-                        else:
-                            if __debug__:
-                                print(
-                                    f"AppDrawer: Layer2 background already loaded, skipping: {display_path}"
-                                )
 
                     except Exception as jpeg_error:
                         # Use pure black background as fallback
@@ -1603,7 +1128,7 @@ class MainScreen(Screen):
 
             except Exception as e:
                 self.hide_to_mainscreen_fallback()
-                cancel_pending_animations("appdrawer_hide_error")
+                cancel_pending_animations()
                 _animation_in_progress = False
 
         def hide_to_mainscreen_fallback(self):
@@ -1632,11 +1157,8 @@ class MainScreen(Screen):
             # Optimization: if animation is in late stage, allow new gestures
             if self.page_animating:
                 # Cancel the in-flight animation and settle immediately to avoid jitter
-                try:
-                    for handle in self._page_anim_handles:
-                        lv.anim_del(handle, None)
-                except:
-                    pass
+                for handle in self._page_anim_handles:
+                    lv.anim_del(handle, None)
                 # Complete current animation immediately
                 if hasattr(self, "_page_anim_target"):
                     self._on_page_anim_ready(self.current_page, self._page_anim_target)
@@ -1720,17 +1242,7 @@ class MainScreen(Screen):
             # Try to use cached page content
             if self.PRERENDER_ENABLED and self._prerender_manager:
                 cached_page = self._prerender_manager.get_cached_page(target_index)
-                if cached_page and __debug__:
-                    print(f"AppDrawer: Using cached content for page {target_index}")
-
-            # Skip GC before animation to avoid stuttering
-            # GC will be performed after animation completes
-
-            # Optimization: pre-refresh once to reduce first frame delay
-            try:
-                lv.refr_now(None)
-            except:
-                pass
+            lv.refr_now(None)
 
             # Ensure the incoming page starts off-screen in the intended direction.
             slide_distance = self.page_width if self.page_width else 336
@@ -1788,10 +1300,7 @@ class MainScreen(Screen):
             ]
 
             # Immediately refresh once to minimise initial lag
-            try:
-                lv.refr_now(None)
-            except:
-                pass
+            lv.refr_now(None)
 
             # Optimize animation refresh logic
             def animation_refresh():
@@ -1799,10 +1308,7 @@ class MainScreen(Screen):
                     try:
                         lv.task_handler()
                     except:
-                        try:
-                            lv.refr_now(None)
-                        except:
-                            pass
+                        lv.refr_now(None)
 
             refresh_interval = 16  # roughly 60 FPS to reduce timer pressure
             refresh_repeat = max(1, (anim_time + refresh_interval - 1) // refresh_interval)
@@ -1831,29 +1337,19 @@ class MainScreen(Screen):
             self._page_anim_handles = []
 
             # Force a final refresh to ensure the page settles cleanly
-            try:
-                lv.refr_now(None)
-            except:
-                pass
+            lv.refr_now(None)
 
             # Delay memory cleanup to avoid affecting final rendering
             def delayed_gc():
-                try:
-                    import gc
-
-                    gc.collect()
-                except:
-                    pass
+                import gc
+                gc.collect()
 
             # Schedule memory cleanup slightly after the animation ends
             def schedule_gc():
                 gc_timer = lv.timer_create(lambda t: delayed_gc(), 50, None)
                 gc_timer.set_repeat_count(1)
 
-            try:
-                schedule_gc()
-            except:
-                pass
+            schedule_gc()
 
         def show_anim_start_cb(self, _anim):
             self.parent.hidden_others()
@@ -1922,10 +1418,7 @@ class MainScreen(Screen):
                 # Clean up existing NftGallery instance to allow fresh creation
                 if hasattr(NftGallery, "_instance"):
                     old_instance = NftGallery._instance
-                    try:
-                        old_instance.delete()
-                    except:
-                        pass
+                    old_instance.delete()
                     del NftGallery._instance
 
                 # Create new NftGallery instance
@@ -1951,33 +1444,6 @@ class MainScreen(Screen):
 
                 self._prerender_manager = PreRenderManager(self)
             except Exception as e:
-                self._prerender_manager = None
-
-        def _render_page_content(self, page_index, target_container):
-            if page_index < 0 or page_index >= self.PAGE_SIZE:
-                return
-
-            # Copy page content to target container
-            source_page = self.page_conts[page_index]
-            if not source_page:
-                return
-
-            # Clear target container
-            child_cnt = target_container.get_child_cnt()
-            for i in range(child_cnt - 1, -1, -1):
-                child = target_container.get_child(i)
-                if child:
-                    child.del_()
-
-            # Copy all app items to target container
-            if hasattr(self, "page_items") and page_index < len(self.page_items):
-                items = self.page_items[page_index]
-                for item in items:
-                    pass
-
-        def cleanup_prerender(self):
-            if self._prerender_manager:
-                self._prerender_manager.clear()
                 self._prerender_manager = None
 
 
@@ -3445,12 +2911,7 @@ class ScanScreen(Screen):
 
     def _can_transition_to(self, new_state: int):
         if new_state not in ScanScreen.VALID_TRANSITIONS[self.state]:
-            if __debug__:
-                raise ValueError(
-                    f"Invalid state transition: {self.state} -> {new_state}"
-                )
-            else:
-                self.notify_close()
+            self.notify_close()
 
     def _fsm_show(self, state: int = SCAN_STATE_IDLE):
         if state == ScanScreen.SCAN_STATE_IDLE:
@@ -3495,498 +2956,6 @@ class ScanScreen(Screen):
 
     def _load_scr(self, scr: "Screen", back: bool = False) -> None:
         lv.scr_load(scr)
-
-
-if __debug__:
-    from .common import SETTINGS_MOVE_TIME, SETTINGS_MOVE_DELAY
-
-    class UITest(lv.obj):
-        def __init__(self) -> None:
-            super().__init__(lv.layer_sys())
-            self.set_size(lv.pct(100), lv.pct(100))
-            self.align(lv.ALIGN.TOP_LEFT, 0, 0)
-            self.set_style_bg_color(lv_colors.BLACK, 0)
-            self.set_style_pad_all(0, 0)
-            self.set_style_border_width(0, 0)
-            self.set_style_radius(0, 0)
-            self.set_style_bg_img_src("A:/res/wallpaper-test.png", 0)
-            self.add_flag(lv.obj.FLAG.CLICKABLE)
-            self.clear_flag(lv.obj.FLAG.SCROLLABLE)
-            self.add_event_cb(self.on_click, lv.EVENT.CLICKED, None)
-
-        def on_click(self, _event_obj):
-            self.delete()
-
-    class AnimationSettings(Screen):
-        def __init__(self, prev_scr=None):
-            if not hasattr(self, "_init"):
-                self._init = True
-                kwargs = {
-                    "prev_scr": prev_scr,
-                    "nav_back": True,
-                }
-                super().__init__(**kwargs)
-            else:
-                return
-
-            # region
-            self.app_drawer_up = lv.label(self.content_area)
-            self.app_drawer_up.set_size(456, lv.SIZE.CONTENT)
-            self.app_drawer_up.add_style(
-                StyleWrapper()
-                .pad_all(12)
-                .text_font(font_GeistRegular30)
-                .text_color(lv_colors.WHITE),
-                0,
-            )
-            self.app_drawer_up.set_text("主页上滑动画时间:")
-            self.app_drawer_up.align_to(self.nav_back, lv.ALIGN.OUT_BOTTOM_LEFT, 12, 20)
-
-            self.slider = lv.slider(self.content_area)
-            self.slider.set_size(456, 80)
-            self.slider.set_ext_click_area(20)
-            self.slider.set_range(20, 400)
-            self.slider.set_value(APP_DRAWER_UP_TIME, lv.ANIM.OFF)
-            self.slider.align_to(self.app_drawer_up, lv.ALIGN.OUT_BOTTOM_LEFT, 0, 20)
-
-            self.slider.add_style(
-                StyleWrapper().border_width(0).radius(40).bg_color(lv_colors.GRAY_1), 0
-            )
-            self.slider.add_style(
-                StyleWrapper().bg_color(lv_colors.WHITE).pad_all(-50), lv.PART.KNOB
-            )
-            self.slider.add_style(
-                StyleWrapper().radius(0).bg_color(lv_colors.WHITE), lv.PART.INDICATOR
-            )
-            self.percent = lv.label(self.slider)
-            self.percent.align(lv.ALIGN.CENTER, 0, 0)
-            self.percent.add_style(
-                StyleWrapper()
-                .text_font(font_GeistRegular30)
-                .text_color(lv_colors.BLUE),
-                0,
-            )
-            self.percent.set_text(f"{APP_DRAWER_UP_TIME} ms")
-            self.slider.clear_flag(lv.obj.FLAG.GESTURE_BUBBLE)
-            self.slider.add_flag(lv.obj.FLAG.EVENT_BUBBLE)
-
-            self.app_drawer_up_delay = lv.label(self.content_area)
-            self.app_drawer_up_delay.set_size(456, lv.SIZE.CONTENT)
-            self.app_drawer_up_delay.add_style(
-                StyleWrapper()
-                .pad_all(12)
-                .text_font(font_GeistRegular30)
-                .text_color(lv_colors.WHITE),
-                0,
-            )
-            self.app_drawer_up_delay.set_text("主页上滑动画延时:")
-            self.app_drawer_up_delay.align_to(
-                self.slider, lv.ALIGN.OUT_BOTTOM_LEFT, 0, 20
-            )
-
-            self.slider1 = lv.slider(self.content_area)
-            self.slider1.set_size(456, 80)
-            self.slider1.set_ext_click_area(20)
-            self.slider1.set_range(0, 80)
-            self.slider1.set_value(APP_DRAWER_UP_DELAY, lv.ANIM.OFF)
-            self.slider1.align_to(
-                self.app_drawer_up_delay, lv.ALIGN.OUT_BOTTOM_LEFT, 0, 20
-            )
-
-            self.slider1.add_style(
-                StyleWrapper().border_width(0).radius(40).bg_color(lv_colors.GRAY_1), 0
-            )
-            self.slider1.add_style(
-                StyleWrapper().bg_color(lv_colors.WHITE).pad_all(-50), lv.PART.KNOB
-            )
-            self.slider1.add_style(
-                StyleWrapper().radius(0).bg_color(lv_colors.WHITE), lv.PART.INDICATOR
-            )
-            self.percent1 = lv.label(self.slider1)
-            self.percent1.align(lv.ALIGN.CENTER, 0, 0)
-            self.percent1.add_style(
-                StyleWrapper()
-                .text_font(font_GeistRegular30)
-                .text_color(lv_colors.BLUE),
-                0,
-            )
-            self.percent1.set_text(f"{APP_DRAWER_UP_DELAY} ms")
-            self.slider1.clear_flag(lv.obj.FLAG.GESTURE_BUBBLE)
-            self.slider1.add_flag(lv.obj.FLAG.EVENT_BUBBLE)
-            # endregion
-            # region
-
-            self.app_drawer_down = lv.label(self.content_area)
-            self.app_drawer_down.set_size(456, lv.SIZE.CONTENT)
-            self.app_drawer_down.add_style(
-                StyleWrapper()
-                .pad_all(12)
-                .text_font(font_GeistRegular30)
-                .text_color(lv_colors.WHITE),
-                0,
-            )
-            self.app_drawer_down.set_text("主页下滑动画时间:")
-            self.app_drawer_down.align_to(self.slider1, lv.ALIGN.OUT_BOTTOM_LEFT, 0, 20)
-
-            self.slider2 = lv.slider(self.content_area)
-            self.slider2.set_size(456, 80)
-            self.slider2.set_ext_click_area(20)
-            self.slider2.set_range(20, 400)
-            self.slider2.set_value(APP_DRAWER_DOWN_TIME, lv.ANIM.OFF)
-            self.slider2.align_to(self.app_drawer_down, lv.ALIGN.OUT_BOTTOM_LEFT, 0, 20)
-
-            self.slider2.add_style(
-                StyleWrapper().border_width(0).radius(40).bg_color(lv_colors.GRAY_1), 0
-            )
-            self.slider2.add_style(
-                StyleWrapper().bg_color(lv_colors.WHITE).pad_all(-50), lv.PART.KNOB
-            )
-            self.slider2.add_style(
-                StyleWrapper().radius(0).bg_color(lv_colors.WHITE), lv.PART.INDICATOR
-            )
-            self.percent2 = lv.label(self.slider2)
-            self.percent2.align(lv.ALIGN.CENTER, 0, 0)
-            self.percent2.add_style(
-                StyleWrapper()
-                .text_font(font_GeistRegular30)
-                .text_color(lv_colors.BLUE),
-                0,
-            )
-            self.percent2.set_text(f"{APP_DRAWER_DOWN_TIME} ms")
-            self.slider2.clear_flag(lv.obj.FLAG.GESTURE_BUBBLE)
-            self.slider2.add_flag(lv.obj.FLAG.EVENT_BUBBLE)
-
-            self.app_drawer_down_delay = lv.label(self.content_area)
-            self.app_drawer_down_delay.set_size(456, lv.SIZE.CONTENT)
-            self.app_drawer_down_delay.add_style(
-                StyleWrapper()
-                .pad_all(12)
-                .text_font(font_GeistRegular30)
-                .text_color(lv_colors.WHITE),
-                0,
-            )
-            self.app_drawer_down_delay.set_text("主页下滑动画延时:")
-            self.app_drawer_down_delay.align_to(
-                self.slider2, lv.ALIGN.OUT_BOTTOM_LEFT, 0, 20
-            )
-
-            self.slider3 = lv.slider(self.content_area)
-            self.slider3.set_size(456, 80)
-            self.slider3.set_ext_click_area(20)
-            self.slider3.set_range(0, 80)
-            self.slider3.set_value(APP_DRAWER_DOWN_DELAY, lv.ANIM.OFF)
-            self.slider3.align_to(
-                self.app_drawer_down_delay, lv.ALIGN.OUT_BOTTOM_LEFT, 0, 20
-            )
-
-            self.slider3.add_style(
-                StyleWrapper().border_width(0).radius(40).bg_color(lv_colors.GRAY_1), 0
-            )
-            self.slider3.add_style(
-                StyleWrapper().bg_color(lv_colors.WHITE).pad_all(-50), lv.PART.KNOB
-            )
-            self.slider3.add_style(
-                StyleWrapper().radius(0).bg_color(lv_colors.WHITE), lv.PART.INDICATOR
-            )
-            self.percent3 = lv.label(self.slider3)
-            self.percent3.align(lv.ALIGN.CENTER, 0, 0)
-            self.percent3.add_style(
-                StyleWrapper()
-                .text_font(font_GeistRegular30)
-                .text_color(lv_colors.BLUE),
-                0,
-            )
-            self.percent3.set_text(f"{APP_DRAWER_DOWN_DELAY} ms")
-            self.slider3.clear_flag(lv.obj.FLAG.GESTURE_BUBBLE)
-            self.slider3.add_flag(lv.obj.FLAG.EVENT_BUBBLE)
-            # endregion
-            # region
-            self.cur_up_path_cb_type = lv.label(self.content_area)
-            self.cur_up_path_cb_type.set_size(456, lv.SIZE.CONTENT)
-            self.cur_up_path_cb_type.add_style(
-                StyleWrapper()
-                .pad_all(12)
-                .text_font(font_GeistRegular30)
-                .text_color(lv_colors.WHITE),
-                0,
-            )
-            self.set_cur_path_cb_type(0)
-            self.cur_up_path_cb_type.align_to(
-                self.slider3, lv.ALIGN.OUT_BOTTOM_LEFT, 0, 20
-            )
-
-            self.cur_sown_path_cb_type = lv.label(self.content_area)
-            self.cur_sown_path_cb_type.set_size(456, lv.SIZE.CONTENT)
-            self.cur_sown_path_cb_type.add_style(
-                StyleWrapper()
-                .pad_all(12)
-                .text_font(font_GeistRegular30)
-                .text_color(lv_colors.WHITE),
-                0,
-            )
-            self.set_cur_path_cb_type(1)
-            self.cur_sown_path_cb_type.align_to(
-                self.cur_up_path_cb_type, lv.ALIGN.OUT_BOTTOM_LEFT, 0, 20
-            )
-
-            self.container = ContainerFlexCol(
-                self.content_area,
-                self.cur_sown_path_cb_type,
-                padding_row=2,
-                pos=(0, 20),
-            )
-
-            from .components.listitem import ListItemWithLeadingCheckbox
-
-            self.path_up = ListItemWithLeadingCheckbox(
-                self.container,
-                "修改主页上滑动画类型",
-            )
-            self.path_up.enable_bg_color(False)
-            self.path_down.enable_bg_color(False)
-            self.path_liner = ListItemBtn(
-                self.container,
-                "path liner",
-            )
-            self.path_ease_in = ListItemBtn(
-                self.container,
-                "path ease in(slow at the beginning)",
-            )
-            self.path_ease_out = ListItemBtn(
-                self.container,
-                "path ease out(slow at the end)",
-            )
-            self.path_ease_in_out = ListItemBtn(
-                self.container,
-                "path ease in out(slow at the beginning and end)",
-            )
-            self.path_over_shoot = ListItemBtn(
-                self.container,
-                "path over shoot(overshoot the end value)",
-            )
-            self.path_bounce = ListItemBtn(
-                self.container,
-                "path bounce(bounce back a little from the end value (like hitting a wall))",
-            )
-            self.path_step = ListItemBtn(
-                self.container,
-                "path step(change in one step at the end)",
-            )
-            # endregion
-
-            # region
-            self.setting_scr = lv.label(self.content_area)
-            self.setting_scr.set_size(456, lv.SIZE.CONTENT)
-            self.setting_scr.add_style(
-                StyleWrapper()
-                .pad_all(12)
-                .text_font(font_GeistRegular30)
-                .text_color(lv_colors.WHITE),
-                0,
-            )
-            self.setting_scr.set_text("设置页面动画时间:")
-            self.setting_scr.align_to(self.container, lv.ALIGN.OUT_BOTTOM_LEFT, 0, 40)
-
-            self.slider4 = lv.slider(self.content_area)
-            self.slider4.set_size(456, 80)
-            self.slider4.set_ext_click_area(20)
-            self.slider4.set_range(20, 400)
-
-            self.slider4.set_value(SETTINGS_MOVE_TIME, lv.ANIM.OFF)
-            self.slider4.align_to(self.setting_scr, lv.ALIGN.OUT_BOTTOM_LEFT, 0, 20)
-
-            self.slider4.add_style(
-                StyleWrapper().border_width(0).radius(40).bg_color(lv_colors.GRAY_1), 0
-            )
-            self.slider4.add_style(
-                StyleWrapper().bg_color(lv_colors.WHITE).pad_all(-50), lv.PART.KNOB
-            )
-            self.slider4.add_style(
-                StyleWrapper().radius(0).bg_color(lv_colors.WHITE), lv.PART.INDICATOR
-            )
-            self.percent4 = lv.label(self.slider4)
-            self.percent4.align(lv.ALIGN.CENTER, 0, 0)
-            self.percent4.add_style(
-                StyleWrapper()
-                .text_font(font_GeistRegular30)
-                .text_color(lv_colors.BLUE),
-                0,
-            )
-            self.percent4.set_text(f"{SETTINGS_MOVE_TIME} ms")
-            self.slider4.clear_flag(lv.obj.FLAG.GESTURE_BUBBLE)
-            self.slider4.add_flag(lv.obj.FLAG.EVENT_BUBBLE)
-
-            self.setting_scr_delay = lv.label(self.content_area)
-            self.setting_scr_delay.set_size(456, lv.SIZE.CONTENT)
-            self.setting_scr_delay.add_style(
-                StyleWrapper()
-                .pad_all(12)
-                .text_font(font_GeistRegular30)
-                .text_color(lv_colors.WHITE),
-                0,
-            )
-            self.setting_scr_delay.set_text("设置页面动画延时:")
-            self.setting_scr_delay.align_to(
-                self.slider4, lv.ALIGN.OUT_BOTTOM_LEFT, 0, 20
-            )
-
-            self.slider5 = lv.slider(self.content_area)
-            self.slider5.set_size(456, 80)
-            self.slider5.set_ext_click_area(20)
-            self.slider5.set_range(0, 80)
-            self.slider5.set_value(SETTINGS_MOVE_DELAY, lv.ANIM.OFF)
-            self.slider5.align_to(
-                self.setting_scr_delay, lv.ALIGN.OUT_BOTTOM_LEFT, 0, 20
-            )
-
-            self.slider5.add_style(
-                StyleWrapper().border_width(0).radius(40).bg_color(lv_colors.GRAY_1), 0
-            )
-            self.slider5.add_style(
-                StyleWrapper().bg_color(lv_colors.WHITE).pad_all(-50), lv.PART.KNOB
-            )
-            self.slider5.add_style(
-                StyleWrapper().radius(0).bg_color(lv_colors.WHITE), lv.PART.INDICATOR
-            )
-            self.percent5 = lv.label(self.slider5)
-            self.percent5.align(lv.ALIGN.CENTER, 0, 0)
-            self.percent5.add_style(
-                StyleWrapper()
-                .text_font(font_GeistRegular30)
-                .text_color(lv_colors.BLUE),
-                0,
-            )
-            self.percent5.set_text(f"{SETTINGS_MOVE_DELAY} ms")
-            self.slider5.clear_flag(lv.obj.FLAG.GESTURE_BUBBLE)
-            self.slider5.add_flag(lv.obj.FLAG.EVENT_BUBBLE)
-            # endregion
-
-            self.add_event_cb(self.on_value_changed, lv.EVENT.VALUE_CHANGED, None)
-            self.add_event_cb(self.on_click, lv.EVENT.CLICKED, None)
-
-        def on_nav_back(self, event_obj):
-            pass
-
-        def on_click(self, event_obj):
-            global APP_DRAWER_UP_PATH_CB, APP_DRAWER_DOWN_PATH_CB
-            # _code = event_obj.code
-            target = event_obj.get_target()
-            if target == self.path_liner:
-                print("path_liner clicked")
-                if self.path_up.checkbox.get_state() & lv.STATE.CHECKED:
-                    print("path_up checked")
-                    APP_DRAWER_UP_PATH_CB = PATH_LINEAR
-                if self.path_down.checkbox.get_state() & lv.STATE.CHECKED:
-                    APP_DRAWER_DOWN_PATH_CB = PATH_LINEAR
-            elif target == self.path_ease_in:
-                print("path_ease_in clicked")
-                if self.path_up.checkbox.get_state() & lv.STATE.CHECKED:
-                    APP_DRAWER_UP_PATH_CB = PATH_EASE_IN
-                if self.path_down.checkbox.get_state() & lv.STATE.CHECKED:
-                    APP_DRAWER_DOWN_PATH_CB = PATH_EASE_IN
-            elif target == self.path_ease_out:
-                print("path_ease_out clicked")
-                if self.path_up.checkbox.get_state() & lv.STATE.CHECKED:
-                    APP_DRAWER_UP_PATH_CB = PATH_EASE_OUT
-                if self.path_down.checkbox.get_state() & lv.STATE.CHECKED:
-                    APP_DRAWER_DOWN_PATH_CB = PATH_EASE_OUT
-            elif target == self.path_ease_in_out:
-                print("path_ease_in_out clicked")
-                if self.path_up.checkbox.get_state() & lv.STATE.CHECKED:
-                    APP_DRAWER_UP_PATH_CB = PATH_EASE_IN_OUT
-                if self.path_down.checkbox.get_state() & lv.STATE.CHECKED:
-                    APP_DRAWER_DOWN_PATH_CB = PATH_EASE_IN_OUT
-            elif target == self.path_over_shoot:
-                print("path_over_shoot clicked")
-                if self.path_up.checkbox.get_state() & lv.STATE.CHECKED:
-                    APP_DRAWER_UP_PATH_CB = PATH_OVER_SHOOT
-                if self.path_down.checkbox.get_state() & lv.STATE.CHECKED:
-                    APP_DRAWER_DOWN_PATH_CB = PATH_OVER_SHOOT
-            elif target == self.path_bounce:
-                print("path_bounce clicked")
-                if self.path_up.checkbox.get_state() & lv.STATE.CHECKED:
-                    APP_DRAWER_UP_PATH_CB = PATH_BOUNCE
-                if self.path_down.checkbox.get_state() & lv.STATE.CHECKED:
-                    APP_DRAWER_DOWN_PATH_CB = PATH_BOUNCE
-            elif target == self.path_step:
-                print("path_step clicked")
-                if self.path_up.checkbox.get_state() & lv.STATE.CHECKED:
-                    APP_DRAWER_UP_PATH_CB = PATH_STEP
-                if self.path_down.checkbox.get_state() & lv.STATE.CHECKED:
-                    APP_DRAWER_DOWN_PATH_CB = PATH_STEP
-
-            if self.path_up.checkbox.get_state() & lv.STATE.CHECKED:
-                self.set_cur_path_cb_type(0)
-                MainScreen._instance.apps.show_anim.set_path_cb(APP_DRAWER_UP_PATH_CB)
-            if self.path_down.checkbox.get_state() & lv.STATE.CHECKED:
-                self.set_cur_path_cb_type(1)
-                MainScreen._instance.apps.dismiss_anim.set_path_cb(
-                    APP_DRAWER_DOWN_PATH_CB
-                )
-
-        def get_path_cb_str(self, path_cb):
-            if path_cb is PATH_LINEAR:
-                return "path_linear"
-            elif path_cb is PATH_EASE_IN:
-                return "path_ease_in"
-            elif path_cb is PATH_EASE_OUT:
-                return "path_ease_out"
-            elif path_cb is PATH_EASE_IN_OUT:
-                return "path_ease_in_out"
-            elif path_cb is PATH_OVER_SHOOT:
-                return "path_overshoot"
-            elif path_cb is PATH_BOUNCE:
-                return "path_bounce"
-            elif path_cb is PATH_STEP:
-                return "path_step"
-            else:
-                return "path_linear"
-
-        def set_cur_path_cb_type(self, type: int):
-            global APP_DRAWER_UP_PATH_CB, APP_DRAWER_DOWN_PATH_CB
-            if type == 0:
-                self.cur_up_path_cb_type.set_text(
-                    f"current up anim type : {self.get_path_cb_str(APP_DRAWER_UP_PATH_CB)}"
-                )
-            elif type == 1:
-                self.cur_sown_path_cb_type.set_text(
-                    f"current down anim type: {self.get_path_cb_str(APP_DRAWER_DOWN_PATH_CB)}"
-                )
-            else:
-                raise ValueError("type is not valid")
-
-        def on_value_changed(self, event_obj):
-            global APP_DRAWER_UP_TIME, APP_DRAWER_UP_DELAY, APP_DRAWER_DOWN_TIME, APP_DRAWER_DOWN_DELAY, SETTINGS_MOVE_TIME, SETTINGS_MOVE_DELAY
-
-            target = event_obj.get_target()
-            if target == self.slider:
-                value = target.get_value()
-                APP_DRAWER_UP_TIME = value
-                MainScreen._instance.apps.show_anim.set_time(value)
-                self.percent.set_text(f"{value} ms")
-            elif target == self.slider1:
-                value = target.get_value()
-                APP_DRAWER_UP_DELAY = value
-                MainScreen._instance.apps.show_anim.set_delay(value)
-                self.percent1.set_text(f"{value} ms")
-            elif target == self.slider2:
-                value = target.get_value()
-                APP_DRAWER_DOWN_TIME = value
-                MainScreen._instance.apps.dismiss_anim.set_time(value)
-                self.percent2.set_text(f"{value} ms")
-            elif target == self.slider3:
-                value = target.get_value()
-                APP_DRAWER_DOWN_DELAY = value
-                MainScreen._instance.apps.dismiss_anim.set_delay(value)
-                self.percent3.set_text(f"{value} ms")
-            elif target == self.slider4:
-                value = target.get_value()
-                SETTINGS_MOVE_TIME = value
-                self.percent4.set_text(f"{value} ms")
-            elif target == self.slider5:
-                value = target.get_value()
-                SETTINGS_MOVE_DELAY = value
-                self.percent5.set_text(f"{value} ms")
 
 
 class FingerprintTest(Screen):
@@ -4195,8 +3164,6 @@ class DisplayScreen(AnimScreen):
             targets.append(self.auto_container)
         if hasattr(self, "device_info_container") and self.device_info_container:
             targets.append(self.device_info_container)
-        # Ensure the lockscreen device name + BLE ID description label
-        # follows the page transition animations as well.
         if (
             hasattr(self, "device_name_description")
             and self.device_name_description
@@ -4276,8 +3243,6 @@ class DisplayScreen(AnimScreen):
             0,
         )
 
-        # Set initial switch state based on storage setting
-        # ListItemBtnWithSwitch defaults to CHECKED, so we need to handle both cases
         current_setting = storage_device.is_device_name_display_enabled()
         if current_setting is None or current_setting:
             # Keep it checked (default when not set or enabled)
@@ -4301,10 +3266,8 @@ class DisplayScreen(AnimScreen):
         self.device_name_description.set_text(
             _(i18n_keys.BUTTON__MODEL_NAME_BLUETOOTH_ID_DESC),
         )
-        # Use simple positioning instead of align_to to avoid deadlock  
+        # Use simple positioning instead of align_to to avoid deadlock
         self.device_name_description.set_pos(15, 550)  # Moved right (24) to match ListItem padding
-        if __debug__:
-            print("DisplayScreen: Description label created with static positioning")
 
         # Disable elastic scrolling and scrollbar to match other pages
         self.content_area.clear_flag(lv.obj.FLAG.SCROLL_ELASTIC)
@@ -4331,8 +3294,6 @@ class DisplayScreen(AnimScreen):
             self.autolock.label_left.set_text(_(i18n_keys.TITLE__AUTO_LOCK))
         if hasattr(self, "shutdown"):
             self.shutdown.label_left.set_text(_(i18n_keys.ITEM__SHUTDOWN))
-        # Note: ListItemBtnWithSwitch doesn't expose label_left as an attribute
-        # The text is set during construction and cannot be changed after
         if hasattr(self, "device_name_description"):
             self.device_name_description.set_text(
                 _(i18n_keys.BUTTON__MODEL_NAME_BLUETOOTH_ID_DESC)
@@ -4517,9 +3478,6 @@ class AppdrawerBackgroundSetting(AnimScreen):
         # Disable animations for lock screen preview
         return []
 
-    def _safe_preview_src(self, path, context: str = "AppdrawerPreview") -> str:
-        return _lvgl_safe_wallpaper_src(path, context)
-
     def __init__(
         self, prev_scr=None, selected_wallpaper=None, return_from_wallpaper=False
     ):
@@ -4605,8 +3563,6 @@ class AppdrawerBackgroundSetting(AnimScreen):
                 self.current_wallpaper_path = "A:/res/wallpaper-2.jpg"
                 self.lockscreen_preview.set_src("A:/res/wallpaper-2.jpg")
 
-        # Use zoom scaling instead of set_size to properly fit wallpaper
-        # Use actual wallpaper size 480x800 instead of NFT size 456x456
         self.lockscreen_preview.set_size(lv.SIZE.CONTENT, lv.SIZE.CONTENT)
         # Disable scrollbars on the image itself
         self.lockscreen_preview.clear_flag(lv.obj.FLAG.SCROLLABLE)
@@ -4666,9 +3622,6 @@ class AppdrawerBackgroundSetting(AnimScreen):
         self.change_button.align_to(
             self.preview_container, lv.ALIGN.OUT_BOTTOM_MID, 0, 10
         )
-        # Remove border from the button_icon (icon itself is an image, so no border by default)
-        # But to be sure, also remove border from the button itself
-        # Use cached style to avoid memory issues during frequent scrolling
         if "appdrawer_change_button" not in _cached_styles:
             _cached_styles["appdrawer_change_button"] = StyleWrapper().border_width(0).radius(40)
         self.change_button.add_style(_cached_styles["appdrawer_change_button"], 0)
@@ -4757,8 +3710,7 @@ class AppdrawerBackgroundSetting(AnimScreen):
             self.invalidate()
 
         except Exception as e:
-            if __debug__:
-                print(f"[AppdrawerBackgroundSetting.refresh_text] Error during refresh: {e}")
+            pass
 
     async def _first_frame_fix(self):
         import utime
@@ -4853,16 +3805,10 @@ class AppdrawerBackgroundSetting(AnimScreen):
                             lock_screen.add_style(style, 0)
                             lock_screen.invalidate()
                     except Exception as lock_error:
-                        if __debug__:
-                            print(
-                                f"[AppdrawerBackgroundSetting] LockScreen refresh error: {lock_error}"
-                            )
+                        pass
 
                 except Exception as e:
-                    if __debug__:
-                        print(
-                            f"AppdrawerBackgroundSetting: Error saving lockscreen: {e}"
-                        )
+                    pass
             if self.prev_scr is not None:
                 self.load_screen(self.prev_scr, destroy_self=True)
 
@@ -4908,9 +3854,7 @@ class WallperChange(AnimScreen):
                         file_name_list.append(name)
 
             except Exception as e:
-                if __debug__:  # Enable error logging for debugging
-                    print(f"[WallpaperChange] Error accessing wallpapers: {e}")
-                    print(f"[WallpaperChange] Trying to scan: 1:/res/wallpapers")
+                pass
 
         # If we found custom wallpapers but wp_cnts is 0, update the count to prevent deletion
         if len(file_name_list) > 0 and storage_device.get_wp_cnts() == 0:
@@ -4978,8 +3922,6 @@ class WallperChange(AnimScreen):
             pad_gap=12,
         )
         self.container.align_to(self.nav_back, lv.ALIGN.OUT_BOTTOM_LEFT, -6, 20)
-        # Don't hide container to avoid black screen on entry
-        # self.container.add_flag(lv.obj.FLAG.HIDDEN)
 
         # Enable event bubbling for the container
         self.container.add_flag(lv.obj.FLAG.EVENT_BUBBLE)
@@ -5153,8 +4095,6 @@ class WallperChange(AnimScreen):
                 current_wp.selection_checkbox_img = selection_checkbox_img
                 current_wp.is_selected = False  # Track selection state
 
-                # Create remove icon for each custom wallpaper (initially hidden)
-                # Use remove_icon.png directly with 44px hot area
                 remove_icon = lv.btn(self.container)
                 remove_icon.set_size(44, 44)  # 44px hot area
                 remove_icon.clear_flag(lv.obj.FLAG.SCROLLABLE)
@@ -5191,10 +4131,6 @@ class WallperChange(AnimScreen):
                 # Store remove icon reference in the wallpaper object
                 current_wp.remove_icon = remove_icon
 
-                # Debug output disabled for performance when many wallpapers are present
-
-            # After finishing the loop, advance current_row by the
-            # number of rows consumed by the custom wallpapers grid.
             current_row += custom_rows
         else:
             # No custom wallpapers - show instructional text
@@ -5320,19 +4256,12 @@ class WallperChange(AnimScreen):
                     # Simple invalidate without risky source reloading
                     wp.invalidate()
                 except Exception as e:
-                    if __debug__:
-                        print(f"[WallperChange] Error refreshing wp: {e}")
+                    pass
 
         # Also refresh the container
         if hasattr(self, "container"):
-            try:
-                self.container.invalidate()
-            except:
-                pass
-            try:
-                self.container.clear_flag(lv.obj.FLAG.HIDDEN)
-            except:
-                pass
+            self.container.invalidate()
+            self.container.clear_flag(lv.obj.FLAG.HIDDEN)
 
     def on_click(self, event_obj):
         code = event_obj.code
@@ -5375,8 +4304,6 @@ class WallperChange(AnimScreen):
                             current_blur_state = getattr(
                                 self.prev_scr, "is_blur_active", False
                             )
-                            # Performance: Skip blur state debug
-                            # Check if we're selecting the same wallpaper and can reuse the existing screen
                             current_wallpaper = getattr(
                                 self.prev_scr, "current_wallpaper_path", ""
                             )
@@ -5525,32 +4452,23 @@ class WallperChange(AnimScreen):
         if self.edit_mode or not getattr(self, "custom_wps", None):
             return
 
-        if __debug__:
-            print("WallpaperChange: Edit button clicked - entering edit mode")
-
         self._enter_edit_mode()
 
     def on_delete_button_clicked(self, event_obj):
         if not self.edit_mode or not self.selected_wallpapers:
             return
 
-        if __debug__:
-            print(f"WallpaperChange: Delete button clicked - deleting {len(self.selected_wallpapers)} selected wallpapers")
-
         # Move selected wallpapers to marked_for_deletion and delete immediately
         self.marked_for_deletion = self.selected_wallpapers.copy()
         self.delete_marked_files()
         self.selected_wallpapers.clear()
-        
+
         # Exit edit mode after deletion
         self._exit_edit_mode(commit=False)
 
     def on_done_button_clicked(self, event_obj):
         if not self.edit_mode:
             return
-
-        if __debug__:
-            print("WallpaperChange: Done button clicked - exiting edit mode")
 
         self._exit_edit_mode(commit=False)  # Exit without deleting
 
@@ -5602,8 +4520,6 @@ class WallperChange(AnimScreen):
                 wp.selection_checkbox.add_flag(lv.obj.FLAG.HIDDEN)
 
         if not commit:
-            if __debug__:
-                print("WallpaperChange: Exit edit mode without committing deletions")
             self.selected_wallpapers.clear()
             return
 
@@ -5613,17 +4529,6 @@ class WallperChange(AnimScreen):
             self.marked_for_deletion = self.selected_wallpapers.copy()
             self.delete_marked_files()
             self.selected_wallpapers.clear()
-
-    def _highlight_active_wallpaper(self):
-        active_path = self._get_active_wallpaper_path()
-        active_normalized = self._normalize_wallpaper_path(active_path)
-
-        for wp in getattr(self, "wps", []):
-            wp_normalized = self._normalize_wallpaper_path(getattr(wp, "img_path", ""))
-            is_selected = active_normalized is not None and (
-                wp_normalized == active_normalized
-            )
-            wp.set_checked(is_selected)
 
     def _get_active_wallpaper_path(self):
         if hasattr(self.prev_scr, "current_wallpaper_path"):
@@ -5703,10 +4608,7 @@ class WallperChange(AnimScreen):
                     try:
                         io.fatfs.unlink(original_path)
                     except:
-                        if __debug__:
-                            print(
-                                f"WallpaperChange: Original file {original_path} not found or already deleted"
-                            )
+                        pass
 
                     # Delete zoom file (add zoom- prefix)
                     zoom_filename = f"zoom-{filename}"
@@ -5714,10 +4616,7 @@ class WallperChange(AnimScreen):
                     try:
                         io.fatfs.unlink(zoom_path)
                     except:
-                        if __debug__:
-                            print(
-                                f"WallpaperChange: Zoom file {zoom_path} not found or already deleted"
-                            )
+                        pass
 
                     # Delete blur file if it exists
                     blur_filename = filename.replace(".jpg", "-blur.jpg").replace(
@@ -5726,23 +4625,15 @@ class WallperChange(AnimScreen):
                     blur_path = f"1:/res/wallpapers/{blur_filename}"
                     try:
                         io.fatfs.unlink(blur_path)
-                        if __debug__:
-                            print(
-                                f"WallpaperChange: Successfully deleted blur file: {blur_path}"
-                            )
                     except:
-                        if __debug__:
-                            print(
-                                f"WallpaperChange: Blur file {blur_path} not found or already deleted"
-                            )
+                        pass
 
                     # Check if this wallpaper is currently in use and replace it
                     self.replace_if_in_use(img_path)
 
 
             except Exception as e:
-                if __debug__:
-                    print(f"WallpaperChange: Error deleting {wallpaper.img_path}: {e}")
+                pass
 
         # Clear the marked for deletion set
         self.marked_for_deletion.clear()
@@ -5784,10 +4675,7 @@ class WallperChange(AnimScreen):
                 storage_device.set_homescreen(replacement_path)
 
         except Exception as e:
-            if __debug__:
-                print(
-                    f"WallpaperChange: Error checking/replacing wallpapers in use: {e}"
-                )
+            pass
 
     def eventhandler(self, event_obj):
         event = event_obj.code
@@ -5806,31 +4694,22 @@ class WallperChange(AnimScreen):
                             else:
                                 self.load_screen(self.prev_scr, destroy_self=True)
                         except Exception as e:
-                            if __debug__:
-                                print(f"WallperChange: Navigation failed: {e}")
                             try:
-                                if __debug__:
-                                    print("WallperChange: Trying direct load with return animation")
                                 self._load_scr(self.prev_scr, back=True)
                                 self.del_delayed(100)
                             except Exception as fallback_e:
-                                if __debug__:
-                                    print(f"WallperChange: Direct load also failed: {fallback_e}")
                                 try:
                                     from .homescreen import SettingsScreen
                                     settings_screen = SettingsScreen()
                                     self._load_scr(settings_screen, back=True)
                                     self.del_delayed(100)
                                 except Exception as final_e:
-                                    if __debug__:
-                                        print(f"WallperChange: Final fallback failed: {final_e}")
+                                    pass
                     return
                 elif hasattr(self, "rti_btn") and target == self.rti_btn:
                     self.on_click_ext(target)
                     return
 
-        # For all other events (like wallpaper selection), handle them directly
-        # Don't call super().eventhandler() to avoid the singleton instance issues
         if event == lv.EVENT.CLICKED:
             # This should trigger the on_click method for wallpaper selections
             self.on_click(event_obj)
@@ -5906,8 +4785,6 @@ class ShutdownSetting(AnimScreen):
 
 def get_autolock_delay_str() -> str:
     delay_ms = storage_device.get_autolock_delay_ms()
-    if __debug__:
-        print(f"[get_autolock_delay_str] Input delay_ms: {delay_ms}")
 
     if delay_ms == 0 or delay_ms == storage_device.AUTOLOCK_DELAY_MAXIMUM:
         result = _(i18n_keys.OPTION__NEVER)
@@ -5927,8 +4804,6 @@ def get_autolock_delay_str() -> str:
             i18n_keys.OPTION__STR_HOUR if hours == 1 else i18n_keys.OPTION__STR_HOURS
         ).format(hours)
 
-    if __debug__:
-        print(f"[get_autolock_delay_str] Formatted result: '{result}'")
     return result
 
 
@@ -6623,9 +5498,6 @@ class AutoShutDownSetting(AnimScreen):
         # Get current shutdown delay
         cur_delay_ms = storage_device.get_autoshutdown_delay_ms()
 
-        if __debug__:
-            print(f"[AutoShutDownSetting] Current shutdown delay ms: {cur_delay_ms}")
-
         self.container = ContainerFlexCol(self.content_area, self.title, padding_row=2)
         self.setting_items = [1, 2, 5, 10, "Never", None]
         has_custom = True
@@ -6644,11 +5516,6 @@ class AutoShutDownSetting(AnimScreen):
                 ).format(int(item))
             else:
                 item = _(i18n_keys.ITEM__STATUS__NEVER)
-
-            if __debug__:
-                print(
-                    f"[AutoShutDownSetting] Item {index}: original='{original_item}', formatted='{item}'"
-                )
 
             self.btns[index] = ListItemBtn(
                 self.container, item, has_next=False, use_transition=False
@@ -7317,8 +6184,7 @@ class WallpaperScreen(AnimScreen):
                     del AppdrawerBackgroundSetting._instance
                 AppdrawerBackgroundSetting(self)
             except Exception as e:
-                if __debug__:
-                    print(f"[WallpaperScreen] Error creating AppdrawerBackgroundSetting: {e}")
+                pass
         elif target == self.home_screen:
             HomeScreenSetting(self)
         else:
@@ -7360,10 +6226,6 @@ class HomeScreenSetting(AnimScreen):
                 if preserve_blur_state and preserve_blur_state is True:
                     blur_path = self._get_blur_wallpaper_path(display_path)
                     if blur_path and self._blur_wallpaper_exists(blur_path):
-                        if __debug__:
-                            print(
-                                f"[HomeScreenSetting.__init__] Blur version exists, using blur: {blur_path}"
-                            )
                         final_display_path = blur_path
                         self.is_blur_active = True
 
@@ -7517,12 +6379,8 @@ class HomeScreenSetting(AnimScreen):
 
             self.app_icons.append(icon_img)
         # Create button group
-        if __debug__:
-            print("[HomeScreenSetting.__init__] Creating buttons")
         self._create_buttons()
 
-        # Simplified button positioning - use relative position instead of absolute position
-        # Schedule a one-shot full refresh to eliminate first-frame artifacts
         try:
             from trezor import loop as _loop
 
@@ -7552,15 +6410,6 @@ class HomeScreenSetting(AnimScreen):
         button.add_style(StyleWrapper().border_width(0).radius(40), 0)
         button.add_flag(lv.obj.FLAG.CLICKABLE)
         button.clear_flag(lv.obj.FLAG.EVENT_BUBBLE)
-
-        # For testing, add background color to button
-        if __debug__:
-            button.add_style(
-                StyleWrapper()
-                .bg_color(lv.palette_main(lv.PALETTE.BLUE))
-                .bg_opa(lv.OPA._50),
-                0,
-            )
 
         # Create icon
         icon = lv.img(button)
@@ -7614,47 +6463,6 @@ class HomeScreenSetting(AnimScreen):
         # Initialize blur button state
         self._update_blur_button_state()
 
-
-    def _update_wallpaper(self, wallpaper_path, preserve_blur_state=None):
-        self.selected_wallpaper = wallpaper_path
-        self.original_wallpaper_path = wallpaper_path
-
-        # For Custom wallpapers, need to convert path for display
-        display_path = wallpaper_path
-        if wallpaper_path and "/res/wallpapers/" in wallpaper_path:
-            # Use A:1: prefix (previously worked)
-            if wallpaper_path.startswith("A:/res/wallpapers/"):
-                display_path = wallpaper_path.replace(
-                    "A:/res/wallpapers/", "A:1:/res/wallpapers/"
-                )
-            if __debug__:
-                print(
-                    f"[HomeScreenSetting._update_wallpaper] Converted path for display: {display_path}"
-                )
-
-        # Handle blur state preservation
-        self.is_blur_active = False  # Default to original
-        final_display_path = display_path
-
-        # If we should preserve blur state and it was active, check for blur version
-        if preserve_blur_state and preserve_blur_state is True:
-            blur_path = self._get_blur_wallpaper_path(display_path)
-            if blur_path and self._blur_wallpaper_exists(blur_path):
-                if __debug__:
-                    print(
-                        f"[HomeScreenSetting._update_wallpaper] Blur version exists, using blur: {blur_path}"
-                    )
-                final_display_path = blur_path
-                self.is_blur_active = True
-
-
-        self.current_wallpaper_path = final_display_path
-        if hasattr(self, "homescreen_preview"):
-
-            self.homescreen_preview.set_src(final_display_path)
-
-            self._update_blur_button_state()
-
     def on_select_clicked(self, event_obj):
 
         WallperChange(prev_scr=self)
@@ -7665,8 +6473,6 @@ class HomeScreenSetting(AnimScreen):
 
         if event == lv.EVENT.CLICKED:
             if utils.lcd_resume():
-                if __debug__:
-                    print("[HomeScreenSetting.eventhandler] LCD resume, returning")
                 return
 
             # Handle navigation buttons
@@ -7682,10 +6488,7 @@ class HomeScreenSetting(AnimScreen):
                                 fallback_screen = WallpaperScreen()
                                 self.load_screen(fallback_screen, destroy_self=True)
                             except Exception as fallback_error:
-                                if __debug__:
-                                    print(
-                                        f"[HomeScreenSetting.eventhandler] Fallback also failed: {fallback_error}"
-                                    )
+                                pass
                     return
                 elif hasattr(self, "rti_btn") and target == self.rti_btn:
                     self.on_click_ext(target)
@@ -7696,27 +6499,6 @@ class HomeScreenSetting(AnimScreen):
     def refresh_text(self):
         if hasattr(self, "change_label"):
             self.change_label.set_text(_(i18n_keys.BUTTON__CHANGE))
-
-    def refresh_images_after_animation(self):
-
-        try:
-            if hasattr(self, "homescreen_preview") and self.homescreen_preview:
-                # Check current image source state
-                current_src = self.homescreen_preview.get_src()
-
-                # If Blob object is returned, image object needs to be rebuilt
-                if (
-                    str(current_src).lower() == "blob"
-                    or current_src is None
-                    or current_src == ""
-                ):
-                    self._rebuild_image_object()
-
-        except Exception as e:
-            if __debug__:
-                print(
-                    f"[HomeScreenSetting.refresh_images_after_animation] Error during refresh: {e}"
-                )
 
     def __del__(self):
         try:
@@ -7760,10 +6542,7 @@ class HomeScreenSetting(AnimScreen):
                 # Use same set_src calling method as button icons
                 self.homescreen_preview.set_src(target_path)
         except Exception as e:
-            if __debug__:
-                print(
-                    f"[HomeScreenSetting._rebuild_image_object] Button-style creation error: {e}"
-                )
+            pass
         if hasattr(self, "blur_label"):
             self.blur_label.set_text("Blur")
 
@@ -7792,16 +6571,9 @@ class HomeScreenSetting(AnimScreen):
                     fallback_screen = WallpaperScreen()
                     self.load_screen(fallback_screen, destroy_self=True)
                 except Exception as fallback_error:
-                    if __debug__:
-                        print(
-                            f"[HomeScreenSetting.on_click_ext] Fallback also failed: {fallback_error}"
-                        )
+                    pass
 
     def _get_blur_wallpaper_path(self, original_path):
-        if __debug__:
-            print(
-                f"[HomeScreenSetting._get_blur_wallpaper_path] original_path={original_path}"
-            )
         if not original_path:
             return None
 
@@ -7939,8 +6711,6 @@ class HomeScreenSetting(AnimScreen):
                 # Currently showing blur version
                 self.is_blur_active = True
                 self.current_wallpaper_path = current_homescreen
-                # Get original path by removing '-blur' more carefully
-                # Split by '.' to get extension, then remove '-blur' from the name part
                 path_parts = current_homescreen.rsplit(".", 1)
                 if len(path_parts) == 2:
                     name_part, ext = path_parts
@@ -7964,22 +6734,6 @@ class HomeScreenSetting(AnimScreen):
             self.original_wallpaper_path = current_homescreen
             self.current_wallpaper_path = current_homescreen
             self.is_blur_active = False
-
-    def set_wallpaper(self, wallpaper_path):
-        if __debug__:
-            print(
-                f"[HomeScreenSetting.set_wallpaper] Setting wallpaper to {wallpaper_path}"
-            )
-        if wallpaper_path:
-            self.original_wallpaper_path = wallpaper_path
-            self.current_wallpaper_path = wallpaper_path
-            self.is_blur_active = False
-            self.homescreen_preview.set_src(wallpaper_path)
-            self._update_blur_button_state()
-            if __debug__:
-                print(
-                    f"[HomeScreenSetting.set_wallpaper] Wallpaper set to {wallpaper_path}"
-                )
 
 
 class WallPaperManage(Screen):
@@ -8158,13 +6912,6 @@ class SecurityScreen(AnimScreen):
             elif target == self.usb_lock:
                 UsbLockSetting(self)
             elif target == self.fingerprint:
-                # from trezor.lvglui.scrs import fingerprints
-
-                # if fingerprints.has_fingerprints():
-                #     # from trezor import config
-
-                #     # if config.has_pin():
-                #     #     config.lock()
                 from apps.common.request_pin import verify_user_pin
 
                 workflow.spawn(
@@ -8182,8 +6929,7 @@ class SecurityScreen(AnimScreen):
             elif target == self.safety_check:
                 SafetyCheckSetting(self)
             else:
-                if __debug__:
-                    print("unknown")
+                pass
         # pyright: on
 
 
@@ -8417,12 +7163,6 @@ class FingerprintSetting(AnimScreen):
 
         valid_fps = [fp for fp in self.fingerprint_list if fp is not None]
 
-        if __debug__:
-            print(f"fingerprint_list: {self.fingerprint_list}")
-            print(f"group_data: {group_data}")
-            print(f"valid_fps: {valid_fps}")
-            print(f"counter: {counter}")
-
         def _filter_and_pad_group(grp, valid_fps):
             if not grp:
                 return None
@@ -8466,9 +7206,6 @@ class FingerprintSetting(AnimScreen):
                 self.groups = [{"group_id": idx, "indexes": indexes}]
             else:
                 self.groups = []
-
-        if __debug__:
-            print(f"groups: {self.groups}")
 
         self.added_fingerprints = []
         if not self.data_new_version:
@@ -9468,8 +8205,7 @@ class UserGuide(AnimScreen):
             elif target == self.need_help:
                 HelpDetails()
             else:
-                if __debug__:
-                    print("Unknown")
+                pass
 
     def _load_scr(self, scr: "AnimScreen", back: bool = False) -> None:
         if self.from_appdrawer:
@@ -9540,8 +8276,7 @@ class BaseTutorial(AnimScreen):
             elif target == self.recovery_phrase:
                 RecoveryPhraseDetails()
             else:
-                if __debug__:
-                    print("Unknown")
+                pass
 
 
 class SecurityProtection(AnimScreen):
@@ -9629,8 +8364,7 @@ class SecurityProtection(AnimScreen):
 
                 PasskeysRegister()
             else:
-                if __debug__:
-                    print("Unknown")
+                pass
 
 
 class AttachToPinDetails(FullSizeWindow):
