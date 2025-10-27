@@ -141,6 +141,56 @@ async def upload_res(ctx: wire.Context, msg: ResourceUpload) -> Success:
                 return Success(message="Success")
             else:
                 raise wire.DataError("File already exists")
+
+    # If wallpaper base-name didn't match (e.g., blur hash changed),
+    # try to detect an existing pair by size (normal + zoom) and reuse it.
+    if res_type == ResourceType.WallPaper:
+        try:
+            for size, _attrs, name in io.fatfs.listdir("1:/res/wallpapers"):
+                # Only consider zoom files with matching extension
+                if size <= 0 or not name.startswith("zoom-"):
+                    continue
+                dot_idx = name.rfind(".")
+                if dot_idx <= 0:
+                    continue
+                ext = name[dot_idx + 1 :]
+                if ext != res_ext:
+                    continue
+
+                # Original counterpart (remove 'zoom-' prefix)
+                orig_name = name[5:]
+                zoom_path = f"1:res/wallpapers/{name}"
+                orig_path = f"1:res/wallpapers/{orig_name}"
+
+                try:
+                    zoom_size, _, _ = io.fatfs.stat(zoom_path)
+                    orig_size, _, _ = io.fatfs.stat(orig_path)
+                except BaseException:
+                    continue
+
+                if zoom_size == res_zoom_size and orig_size == res_size:
+                    # Found an existing pair matching sizes; treat as the same image.
+                    new_path = f"1:/res/wallpapers/{file_name}.{res_ext}"
+                    new_path_zoom = f"1:/res/wallpapers/zoom-{file_name}.{res_ext}"
+                    io.fatfs.rename(orig_path, new_path)
+                    io.fatfs.rename(zoom_path, new_path_zoom)
+
+                    # Best-effort: move existing blur if present, but do not require it.
+                    try:
+                        old_base = orig_name[:dot_idx - 5]  # strip extension from orig_name
+                        # orig_name is e.g. 'wp-xxxx-ttt.jpg'; compute base without '.ext'
+                        if "." in orig_name:
+                            old_base = orig_name[: orig_name.rfind(".")]
+                        old_blur = f"1:res/wallpapers/{old_base}-blur.{res_ext}"
+                        new_blur = f"1:/res/wallpapers/{file_name}-blur.{res_ext}"
+                        io.fatfs.rename(old_blur, new_blur)
+                    except BaseException:
+                        pass
+
+                    return Success(message="Success")
+        except BaseException:
+            # Any filesystem error falls back to normal upload path below.
+            pass
     # directly upload without confirmation
 
     config_path = ""
