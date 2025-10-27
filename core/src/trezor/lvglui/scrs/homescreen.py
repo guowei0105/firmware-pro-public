@@ -5758,16 +5758,29 @@ class WallperChange(AnimScreen):
         import storage.device as storage_device
 
         try:
-            current_homescreen = storage_device.get_homescreen()
+            current_homescreen = storage_device.get_appdrawer_background()
             current_lockscreen = storage_device.get_homescreen()
             replacement_path = "A:/res/wallpaper-7.jpg"
 
-            # Check homescreen
-            if current_homescreen and deleted_path in current_homescreen:
+            base_name = deleted_path.split("/")[-1]
+            blur_name = base_name
+            for ext in (".jpg", ".jpeg", ".png"):
+                if base_name.lower().endswith(ext):
+                    blur_name = base_name[: -len(ext)] + "-blur" + ext
+                    break
+
+            if current_homescreen and (
+                deleted_path in current_homescreen
+                or current_homescreen.endswith("/" + base_name)
+                or current_homescreen.endswith("/" + blur_name)
+            ):
                 storage_device.set_appdrawer_background(replacement_path)
 
-            # Check lockscreen
-            if current_lockscreen and deleted_path in current_lockscreen:
+            if current_lockscreen and (
+                deleted_path in current_lockscreen
+                or current_lockscreen.endswith("/" + base_name)
+                or current_lockscreen.endswith("/" + blur_name)
+            ):
                 storage_device.set_homescreen(replacement_path)
 
         except Exception as e:
@@ -8026,8 +8039,41 @@ class WallPaperManage(Screen):
     def del_callback(self):
         io.fatfs.unlink(self.img_path[2:])
         io.fatfs.unlink(self.zoom_path[2:])
-        if storage_device.get_homescreen() == self.img_path:
-            storage_device.set_appdrawer_background(utils.get_default_wallpaper())
+
+        try:
+            replacement_path = "A:/res/wallpaper-7.jpg"
+            deleted_name = self.img_path.split("/")[-1]
+            blur_name = deleted_name
+            for ext in (".jpg", ".jpeg", ".png"):
+                if deleted_name.lower().endswith(ext):
+                    blur_name = deleted_name[: -len(ext)] + "-blur" + ext
+                    break
+
+            current_home = storage_device.get_appdrawer_background()
+            current_lock = storage_device.get_homescreen()
+
+            if current_home and (
+                current_home == self.img_path
+                or current_home.endswith("/" + deleted_name)
+                or current_home.endswith("/" + blur_name)
+            ):
+                storage_device.set_appdrawer_background(replacement_path)
+
+            if current_lock and (
+                current_lock == self.img_path
+                or current_lock.endswith("/" + deleted_name)
+                or current_lock.endswith("/" + blur_name)
+            ):
+                storage_device.set_homescreen(replacement_path)
+
+            try:
+                global _last_jpeg_loaded
+                _last_jpeg_loaded = None
+            except Exception:
+                pass
+        except Exception:
+            pass
+
         self.load_screen(self.prev_scr, destroy_self=True)
 
     def eventhandler(self, event_obj):

@@ -301,9 +301,40 @@ class NftManager(AnimScreen):
     def del_callback(self):
         trezor_io.fatfs.unlink(self.zoom_path[2:])
         trezor_io.fatfs.unlink(self.img_path[2:])
-        trezor_io.fatfs.unlink("1:/res/nfts/desc/" + self.file_name.split(".")[0] + ".json")
-        if storage_device.get_homescreen() == self.img_path:
-            storage_device.set_appdrawer_background(utils.get_default_wallpaper())
+        trezor_io.fatfs.unlink(
+            "1:/res/nfts/desc/" + self.file_name.split(".")[0] + ".json"
+        )
+
+        try:
+            replacement_path = "A:/res/wallpaper-7.jpg"
+            deleted_name = self.img_path.split("/")[-1]
+
+            current_home = storage_device.get_appdrawer_background()
+            current_lock = storage_device.get_homescreen()
+
+            if current_home and (
+                current_home == self.img_path or current_home.endswith("/" + deleted_name)
+            ):
+                storage_device.set_appdrawer_background(replacement_path)
+
+            if current_lock and (
+                current_lock == self.img_path or current_lock.endswith("/" + deleted_name)
+            ):
+                storage_device.set_homescreen(replacement_path)
+
+            try:
+                from .homescreen import _last_jpeg_loaded  # type: ignore
+            except Exception:
+                pass
+            else:
+                try:
+                    import trezor.lvglui.scrs.homescreen as hs_mod
+                    hs_mod._last_jpeg_loaded = None
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
         self.load_screen(self.prev_scr, destroy_self=True)
 
     def on_nav_back(self, event_obj):
