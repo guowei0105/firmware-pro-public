@@ -1,8 +1,17 @@
 # according to ISO_639-1 and ISO-3166 country codes
+# All 11 languages
 langs = [
     ("en", "English"),
     ("zh_cn", "简体中文"),
     ("zh_hk", "繁體中文"),
+    ("ja", "日本語"),
+    ("ko", "한국어"),
+    ("fr", "Français"),
+    ("de", "Deutsch"),
+    ("ru", "Русский"),
+    ("es", "Español"),
+    ("it", "Italiano"),
+    ("pt_br", "Português (Brasil)"),
 ]
 
 langs_keys = [x[0] for x in langs]
