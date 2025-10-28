@@ -87,8 +87,64 @@ def cancel_pending_animations() -> None:
     _hide_cover_background()
 
 
- 
+def show_appdrawer_immediate() -> bool:
+    """Show the AppDrawer right away (no animation).
 
+    Intended to be called just after MainScreen is constructed (e.g. post-unlock)
+    so users land directly on the app icon grid.
+    Returns True on success, False otherwise.
+    """
+    try:
+        # Ensure we have a MainScreen instance
+        ms = None
+        if hasattr(MainScreen, "_instance") and MainScreen._instance:
+            ms = MainScreen._instance
+
+        if ms is None:
+            # Best-effort: try to find an existing MainScreen in utils.SCREENS
+            import trezor.utils as _utils
+            for _scr in reversed(_utils.SCREENS):
+                if _scr.__class__.__name__ == "MainScreen":
+                    ms = _scr
+                    MainScreen._instance = _scr  # type: ignore[attr-defined]
+                    break
+
+        if ms is None:
+            return False
+
+        # Cancel any animations and hide temporary cover layers
+        cancel_pending_animations()
+
+        # Refresh the background for AppDrawer
+        if hasattr(ms, "refresh_appdrawer_background"):
+            ms.refresh_appdrawer_background()
+
+        # Hide main screen elements
+        ms.hidden_others(True)
+        if hasattr(ms, "up_arrow") and ms.up_arrow:
+            ms.up_arrow.add_flag(lv.obj.FLAG.HIDDEN)
+        if hasattr(ms, "bottom_tips") and ms.bottom_tips:
+            ms.bottom_tips.add_flag(lv.obj.FLAG.HIDDEN)
+
+        # Show AppDrawer content immediately
+        if not hasattr(ms, "apps") or not ms.apps:
+            return False
+
+        ms.apps.clear_flag(lv.obj.FLAG.HIDDEN)
+        ms.apps.clear_flag(lv.obj.FLAG.GESTURE_BUBBLE)
+        ms.apps.visible = True
+
+        # Ensure the screen is active and refresh once
+        if lv.scr_act() != ms:
+            lv.scr_load(ms)
+        lv.refr_now(None)
+
+        return True
+    except Exception:
+        return False
+
+
+ 
 def _lvgl_safe_wallpaper_src(path, context: str = "") -> str:
 
     if not path:
@@ -323,6 +379,10 @@ class MainScreen(Screen):
         self.apps.add_flag(lv.obj.FLAG.HIDDEN)
         # Gesture handling for MainScreen
         self.add_event_cb(self.on_main_gesture, lv.EVENT.GESTURE, None)
+
+        # Set singleton instance (important for later access)
+        MainScreen._instance = self
+
         save_app_obj(self)
         print("[DEBUG] MainScreen.__init__ completed, gesture callback registered")
 
@@ -436,6 +496,7 @@ class MainScreen(Screen):
 
                         # Show AppDrawer
                         self.apps.clear_flag(lv.obj.FLAG.HIDDEN)
+                        # CRITICAL: Remove GESTURE_BUBBLE to prevent MainScreen from interfering
                         self.apps.clear_flag(lv.obj.FLAG.GESTURE_BUBBLE)
                         self.apps.visible = True
 
@@ -513,6 +574,7 @@ class MainScreen(Screen):
                 if hasattr(self, "bottom_tips"):
                     self.bottom_tips.add_flag(lv.obj.FLAG.HIDDEN)
                 self.apps.clear_flag(lv.obj.FLAG.HIDDEN)
+                # CRITICAL: Remove GESTURE_BUBBLE to prevent MainScreen from interfering
                 self.apps.clear_flag(lv.obj.FLAG.GESTURE_BUBBLE)
                 self.apps.visible = True
                 print("[DEBUG] AppDrawer shown via fallback (error path)")
@@ -1073,6 +1135,9 @@ class MainScreen(Screen):
                         self.parent.up_arrow.clear_flag(lv.obj.FLAG.HIDDEN)
                     if hasattr(self.parent, "bottom_tips"):
                         self.parent.bottom_tips.clear_flag(lv.obj.FLAG.HIDDEN)
+                    # CRITICAL: Restore content_area visibility
+                    if hasattr(self.parent, "content_area") and self.parent.content_area:
+                        self.parent.content_area.clear_flag(lv.obj.FLAG.HIDDEN)
                     if hasattr(self.parent, "dev_state"):
                         self.parent.dev_state.show()
 
@@ -1139,7 +1204,7 @@ class MainScreen(Screen):
             self.add_flag(lv.obj.FLAG.HIDDEN)
             self.add_flag(lv.obj.FLAG.GESTURE_BUBBLE)
             self.visible = False
-            
+
             # Ensure animation flag is properly reset
             _animation_in_progress = False
             cleanup_timers()
@@ -1151,6 +1216,9 @@ class MainScreen(Screen):
                 self.parent.up_arrow.clear_flag(lv.obj.FLAG.HIDDEN)
             if hasattr(self.parent, "bottom_tips"):
                 self.parent.bottom_tips.clear_flag(lv.obj.FLAG.HIDDEN)
+            # CRITICAL: Restore content_area visibility
+            if hasattr(self.parent, "content_area") and self.parent.content_area:
+                self.parent.content_area.clear_flag(lv.obj.FLAG.HIDDEN)
             if hasattr(self.parent, "dev_state"):
                 self.parent.dev_state.show()
 
