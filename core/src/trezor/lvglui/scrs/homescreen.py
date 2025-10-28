@@ -729,6 +729,7 @@ class MainScreen(Screen):
             self.icon = lv.img(self)
             self.icon.set_align(lv.ALIGN.LEFT_MID)
             self.icon.set_src("A:/res/alert-warning-yellow-solid.png")
+            self.icon.set_antialias(True)  # Enable anti-aliasing for smooth edges
             self.warnings = lv.label(self)
             self.warnings.align_to(self.icon, lv.ALIGN.OUT_RIGHT_MID, 8, 0)
 
@@ -3743,7 +3744,12 @@ class AppdrawerBackgroundSetting(AnimScreen):
             self.preview_container, lv.ALIGN.OUT_BOTTOM_MID, 0, 10
         )
         if "appdrawer_change_button" not in _cached_styles:
-            _cached_styles["appdrawer_change_button"] = StyleWrapper().border_width(0).radius(40)
+            _cached_styles["appdrawer_change_button"] = (
+                StyleWrapper()
+                .border_width(0)
+                .radius(40)
+                .bg_opa(lv.OPA.TRANSP)  # Transparent background to avoid blue edge
+            )
         self.change_button.add_style(_cached_styles["appdrawer_change_button"], 0)
 
         # Icon in the button - using landscape icon as shown in the image
@@ -3751,6 +3757,7 @@ class AppdrawerBackgroundSetting(AnimScreen):
         self.button_icon.set_src(
             "A:/res/change-wallper.png"
         )  # Landscape icon for wallpaper selection
+        self.button_icon.set_antialias(True)  # Enable anti-aliasing for smooth edges
         self.button_icon.align(lv.ALIGN.CENTER, 0, 0)
 
         # "Change" text below button
@@ -4227,6 +4234,7 @@ class WallperChange(AnimScreen):
                 remove_icon_img = lv.img(remove_icon)
                 remove_icon_img.set_src("A:/res/remove_icon.png")
                 remove_icon_img.set_size(40, 40)  # Display size 40x40 as specified
+                remove_icon_img.set_antialias(True)  # Enable anti-aliasing for smooth edges
                 remove_icon_img.center()  # Center in the 44px hot area
                 remove_icon_img.clear_flag(
                     lv.obj.FLAG.CLICKABLE
@@ -6380,6 +6388,7 @@ class HomeScreenSetting(AnimScreen):
             # Create image directly without holder to show natural shape
             icon_img = lv.img(self.preview_container)
             icon_img.set_src("A:/res/icon_example.png")
+            icon_img.set_antialias(True)  # Enable anti-aliasing for smooth edges
             # Let image use its natural size
             icon_img.set_size(lv.SIZE.CONTENT, lv.SIZE.CONTENT)
             # Use set_pos for absolute positioning (left-top corner)
@@ -6415,7 +6424,13 @@ class HomeScreenSetting(AnimScreen):
         button = lv.btn(self.container)
         button.set_size(64, 64)
         button.align_to(self.preview_container, lv.ALIGN.OUT_BOTTOM_MID, 0, 8)
-        button.add_style(StyleWrapper().border_width(0).radius(40), 0)
+        button.add_style(
+            StyleWrapper()
+            .border_width(0)
+            .radius(40)
+            .bg_opa(lv.OPA.TRANSP),  # Transparent background to avoid blue edge
+            0
+        )
         button.add_flag(lv.obj.FLAG.CLICKABLE)
         button.clear_flag(lv.obj.FLAG.EVENT_BUBBLE)
 
@@ -6423,7 +6438,7 @@ class HomeScreenSetting(AnimScreen):
         icon = lv.img(button)
         if icon_path:  # Only set icon when path is not empty
             icon.set_src(icon_path)
-
+        icon.set_antialias(True)  # Enable anti-aliasing for smooth edges
         icon.align(lv.ALIGN.CENTER, 0, 0)
 
         # Create label
