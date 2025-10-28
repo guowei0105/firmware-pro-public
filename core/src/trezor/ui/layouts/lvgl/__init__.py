@@ -1255,19 +1255,6 @@ def draw_simple_text(
 ) -> None:
     from trezor.lvglui.scrs.common import FullSizeWindow
 
-    # If this is "One moment..." text (in any language), don't do anything special
-    if (
-        title == "One moment..."
-        or "moment" in title.lower()
-        or "wait" in title.lower()
-        or len(title) < 10
-    ):
-        if __debug__:
-            print(f"[DRAW_TEXT] Intercepted '{title}' text - no state change needed")
-        # Don't change any state - the workflow should already have set the busy state
-        # Just return without doing anything to avoid state conflicts
-        return
-
     FullSizeWindow(
         title, description, icon_path=icon_path, auto_close_ms=auto_close_ms, anim_dir=0
     )
