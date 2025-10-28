@@ -4104,35 +4104,8 @@ class WallperChange(AnimScreen):
                 self.on_edit_button_clicked, lv.EVENT.CLICKED, None
             )
 
-            # Delete button - initially hidden, appears to the left of Done when in edit mode
-            self.delete_button = lv.btn(self.custom_header_container)
-            self.delete_button.set_size(lv.SIZE.CONTENT, 30)  # Auto width to fit text
-            self.delete_button.add_style(
-                StyleWrapper()
-                .bg_opa(lv.OPA.TRANSP)
-                .border_opa(lv.OPA.TRANSP)
-                .pad_left(8)
-                .pad_right(8),  # Add horizontal padding for better spacing
-                0
-            )
-            self.delete_button.align(lv.ALIGN.RIGHT_MID, -78, 0)  # Adjusted position for auto-sized button
-            self.delete_button.add_flag(lv.obj.FLAG.HIDDEN)  # Initially hidden
-
-            self.delete_button_label = lv.label(self.delete_button)
-            self.delete_button_label.set_text(_(i18n_keys.BUTTON__DELETE))
-            self.delete_button_label.add_style(
-                StyleWrapper().text_font(font_GeistSemiBold30), 0  # Match other buttons
-            )
-            self.delete_button_label.center()
-            self.delete_button_label.set_style_text_color(
-                lv.color_hex(0xFF3B30), 0  # Red color for delete action
-            )
-
-            self.delete_button.add_event_cb(
-                self.on_delete_button_clicked, lv.EVENT.CLICKED, None
-            )
-
             # Done button - initially hidden, replaces Edit button position when in edit mode
+            # Create Done first so Delete can position relative to it
             self.done_button = lv.btn(self.custom_header_container)
             self.done_button.set_size(lv.SIZE.CONTENT, 30)  # Auto width to fit text
             self.done_button.add_style(
@@ -4158,6 +4131,34 @@ class WallperChange(AnimScreen):
 
             self.done_button.add_event_cb(
                 self.on_done_button_clicked, lv.EVENT.CLICKED, None
+            )
+
+            # Delete button - initially hidden, appears to the left of Done when in edit mode
+            # Create as a separate container to ensure proper positioning
+            self.delete_button = lv.btn(self.custom_header_container)
+            self.delete_button.set_size(lv.SIZE.CONTENT, 30)  # Auto width to fit text
+            self.delete_button.add_style(
+                StyleWrapper()
+                .bg_opa(lv.OPA.TRANSP)
+                .border_opa(lv.OPA.TRANSP)
+                .pad_left(8)
+                .pad_right(8),
+                0
+            )
+            self.delete_button.add_flag(lv.obj.FLAG.HIDDEN)  # Initially hidden
+
+            self.delete_button_label = lv.label(self.delete_button)
+            self.delete_button_label.set_text(_(i18n_keys.BUTTON__DELETE))
+            self.delete_button_label.add_style(
+                StyleWrapper().text_font(font_GeistSemiBold30), 0  # Match other buttons
+            )
+            self.delete_button_label.center()
+            self.delete_button_label.set_style_text_color(
+                lv.color_hex(0xFF3B30), 0  # Red color for delete action
+            )
+
+            self.delete_button.add_event_cb(
+                self.on_delete_button_clicked, lv.EVENT.CLICKED, None
             )
 
         current_row += 1
@@ -4607,10 +4608,15 @@ class WallperChange(AnimScreen):
         # Hide Edit button and show Delete and Done buttons
         if hasattr(self, "edit_button"):
             self.edit_button.add_flag(lv.obj.FLAG.HIDDEN)
-        if hasattr(self, "delete_button"):
-            self.delete_button.clear_flag(lv.obj.FLAG.HIDDEN)
         if hasattr(self, "done_button"):
             self.done_button.clear_flag(lv.obj.FLAG.HIDDEN)
+        if hasattr(self, "delete_button"):
+            self.delete_button.clear_flag(lv.obj.FLAG.HIDDEN)
+            # Position Delete button: text-to-text distance = 24px
+            # Delete text to Delete container right edge: 8px (right padding)
+            # Done container left edge to Done text: 8px (left padding)
+            # Container gap = 24 - 8 - 8 = 8px
+            self.delete_button.align_to(self.done_button, lv.ALIGN.OUT_LEFT_MID, -8, 0)
 
         # Show selection checkboxes for custom wallpapers
         for i, wp in enumerate(self.custom_wps):
