@@ -515,7 +515,8 @@ void dma2d_copy_buffer(uint32_t* pSrc, uint32_t* pDst, uint16_t x, uint16_t y,
 
 // Use DMA2D to convert YCbCr format to RGB and copy
 void dma2d_copy_ycbcr_to_rgb(uint32_t* pSrc, uint32_t* pDst, uint16_t xsize,
-                             uint16_t ysize, uint32_t ChromaSampling) {
+                             uint16_t ysize, uint32_t ChromaSampling,
+                             uint16_t output_line_width) {
   uint32_t cssMode = DMA2D_CSS_420, inputLineOffset = 0;
 
 
@@ -543,10 +544,18 @@ void dma2d_copy_ycbcr_to_rgb(uint32_t* pSrc, uint32_t* pDst, uint16_t xsize,
     // printf("[DMA2D YCbCr] Using 4:2:2 subsampling, inputLineOffset: %lu\n", inputLineOffset);
   }
 
+  // Calculate output offset for proper line alignment
+  // If xsize < output_line_width, we need to skip the remaining pixels
+  // to move to the next line in the destination buffer
+  uint32_t outputLineOffset = 0;
+  if (output_line_width > xsize) {
+    outputLineOffset = output_line_width - xsize;
+  }
+
   /*##-1- Configure DMA2D mode, color mode and output offset #############*/
   hlcd_dma2d.Init.Mode = DMA2D_M2M_PFC;
   hlcd_dma2d.Init.ColorMode = DMA2D_OUTPUT_RGB565;
-  hlcd_dma2d.Init.OutputOffset = 0;
+  hlcd_dma2d.Init.OutputOffset = outputLineOffset;
   hlcd_dma2d.Init.AlphaInverted = DMA2D_REGULAR_ALPHA;
   hlcd_dma2d.Init.RedBlueSwap = DMA2D_RB_REGULAR;
 
@@ -1195,12 +1204,23 @@ __attribute__((used)) void lcd_cover_background_load_jpeg(const char* jpeg_path)
   if (height < lcd_params.vres) {
     top_padding = (lcd_params.vres - height) / 2;
   }
-  
+
+  // Adjust width to standard 480 pixels
+  // If width < 480: convert actual width, right side already filled with black (layer2 cleared)
+  // If width > 480: crop to 480 pixels
+  uint32_t adjusted_width = width;
+  if (width > lcd_params.hres) {
+    // Crop to screen width (480)
+    adjusted_width = lcd_params.hres;
+  }
+  // If width < 480, use actual width - black padding on right is already there
+
   uint32_t dest_address =
       (uint32_t)(layer2_buffer + top_padding * lcd_params.hres);
   dma2d_copy_ycbcr_to_rgb((uint32_t*)jpeg_output_address,
                           (uint32_t*)dest_address,
-                          width, height, subsampling);
+                          adjusted_width, height, subsampling,
+                          lcd_params.hres);  // Pass screen width for proper line stride
   
   // Immediately restore LVGL's JPEG decoder state to ensure no impact on subsequent operations
   jpeg_restore_state();
