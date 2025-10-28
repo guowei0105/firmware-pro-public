@@ -1016,6 +1016,7 @@ def get_homescreen() -> str | None:
 def set_homescreen(full_path: str) -> None:
     if len(full_path.encode("utf-8")) > HOMESCREEN_PATH_MAXSIZE:
         raise ValueError  # homescreen too large
+
     global _HOMESCREEN_VALUE
     common.set(_NAMESPACE, _HOMESCREEN, full_path.encode(), public=True)
     _HOMESCREEN_VALUE = full_path

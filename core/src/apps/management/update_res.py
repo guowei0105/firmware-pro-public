@@ -31,7 +31,9 @@ if TYPE_CHECKING:
 # FR_TOO_MANY_OPEN_FILES: int  # (18) Number of open files > FF_FS_LOCK
 # FR_INVALID_PARAMETER: int    # (19) Given parameter is invalid
 
-REQUEST_CHUNK_SIZE = const(16 * 1024)
+# CRITICAL: Chunk size must be <= wire buffer size (8KB) to avoid memory allocation
+# If chunk size > wire buffer, codec_v1.py will try to allocate new buffer, causing MemoryError in fragmented memory
+REQUEST_CHUNK_SIZE = const(8 * 1024)  # Was 16KB, reduced to 8KB to fit wire buffer
 
 BOOTLOADER_NAME = "bootloader.bin"
 

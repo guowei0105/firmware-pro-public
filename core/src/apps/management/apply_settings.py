@@ -66,22 +66,14 @@ async def apply_settings(ctx: wire.Context, msg: ApplySettings) -> Success:
         # storage.device.set_homescreen(f"A:/res/{msg.homescreen.decode()}")
 
     if msg.label is not None:
-        print(f"[apply_settings] Received label change request: '{msg.label}'")
-        print(f"[apply_settings] Label UTF-8 length: {len(msg.label.encode('utf-8'))}")
-        print(f"[apply_settings] Max allowed length: {storage.device.LABEL_MAXLENGTH}")
         
         if len(msg.label.encode("utf-8")) > storage.device.LABEL_MAXLENGTH:
-            print("[apply_settings] Label too long, raising DataError")
             raise wire.DataError("Label too long")
         
-        print("[apply_settings] Starting user confirmation for label change")
         try:
             await require_confirm_change_label(ctx, msg.label)
-            print("[apply_settings] User confirmation successful, setting label")
             storage.device.set_label(msg.label)
-            print(f"[apply_settings] Label successfully set to: '{msg.label}'")
         except Exception as e:
-            print(f"[apply_settings] Label change failed with exception: {e}")
             raise
 
     if msg.use_passphrase is not None:
@@ -142,7 +134,6 @@ async def apply_settings(ctx: wire.Context, msg: ApplySettings) -> Success:
             if (hasattr(main_screen, "title") and main_screen.title and 
                 storage.device.is_device_name_display_enabled()):
                 main_screen.title.set_text(updated_label)
-                print(f"[apply_settings] MainScreen title updated to: '{updated_label}'")
         
         # Update LockScreen
         from trezor.lvglui.scrs.lockscreen import LockScreen
@@ -152,10 +143,9 @@ async def apply_settings(ctx: wire.Context, msg: ApplySettings) -> Success:
             if (hasattr(lock_screen, "title") and lock_screen.title and 
                 storage.device.is_device_name_display_enabled()):
                 lock_screen.title.set_text(updated_label)
-                print(f"[apply_settings] LockScreen title updated to: '{updated_label}'")
                 
     except Exception as e:
-        print(f"[apply_settings] Failed to refresh screen displays: {e}")
+        pass
 
     return Success(message="Settings applied")
 
@@ -171,7 +161,6 @@ async def require_confirm_change_homescreen(ctx: wire.GenericContext) -> None:
 
 
 async def require_confirm_change_label(ctx: wire.GenericContext, label: str) -> None:
-    print(f"[require_confirm_change_label] Showing confirmation dialog for label: '{label}'")
     
     try:
         await confirm_action(
@@ -184,9 +173,7 @@ async def require_confirm_change_label(ctx: wire.GenericContext, label: str) -> 
             anim_dir=2,
             icon=None,
         )
-        print("[require_confirm_change_label] User confirmed label change")
     except Exception as e:
-        print(f"[require_confirm_change_label] User confirmation failed: {e}")
         raise
 
 

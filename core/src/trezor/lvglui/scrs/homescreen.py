@@ -78,7 +78,6 @@ def _hide_cover_background():
 
 
 def cancel_pending_animations() -> None:
-    """Force-stop homescreen LVGL timers/animations (e.g., before switching screens)."""
     global _animation_in_progress
 
     cleanup_timers()
@@ -88,12 +87,6 @@ def cancel_pending_animations() -> None:
 
 
 def show_appdrawer_immediate() -> bool:
-    """Show the AppDrawer right away (no animation).
-
-    Intended to be called just after MainScreen is constructed (e.g. post-unlock)
-    so users land directly on the app icon grid.
-    Returns True on success, False otherwise.
-    """
     try:
         # Ensure we have a MainScreen instance
         ms = None
@@ -250,8 +243,6 @@ class MainScreen(Screen):
             real_device_name = storage_device.get_label()  # User custom label
             real_ble_name = storage_device.get_ble_name() or uart.get_ble_name()
 
-            # Debug output
-
             # Initialize Screen with proper kwargs
             if show_device_names:
                 super().__init__(title=real_device_name, subtitle=real_ble_name)
@@ -330,7 +321,6 @@ class MainScreen(Screen):
                 # Refresh AppDrawer background to ensure wallpaper updates sync background
                 self.refresh_appdrawer_background()
             return
-        # Align title and subtitle if they exist
         if hasattr(self, "title") and self.title:
             self.title.align_to(self.content_area, lv.ALIGN.TOP_MID, 0, 76)
         if hasattr(self, "subtitle") and self.subtitle:
@@ -384,60 +374,42 @@ class MainScreen(Screen):
         MainScreen._instance = self
 
         save_app_obj(self)
-        print("[DEBUG] MainScreen.__init__ completed, gesture callback registered")
 
     def on_main_gesture(self, event_obj):
         global _animation_in_progress
         code = event_obj.code
-        print(f"[DEBUG] on_main_gesture called, code={code}")
         if code == lv.EVENT.GESTURE:
-            print(f"[DEBUG] GESTURE event detected, _animation_in_progress={_animation_in_progress}")
-            # If animation is in progress, ignore gesture
             if _animation_in_progress:
-                print("[DEBUG] Gesture blocked: animation in progress")
                 return
 
-            # Check if AppDrawer is visible
             if hasattr(self, "apps") and self.apps:
                 is_app_drawer_hidden = self.apps.has_flag(lv.obj.FLAG.HIDDEN)
-                print(f"[DEBUG] AppDrawer exists, is_hidden={is_app_drawer_hidden}")
-
                 if not is_app_drawer_hidden:
-                    print("[DEBUG] Gesture blocked: AppDrawer already visible")
                     return
 
-            # Only when AppDrawer is hidden (MainScreen visible), allow UP gesture
             indev = lv.indev_get_act()
             _dir = indev.get_gesture_dir()
-            print(f"[DEBUG] Gesture direction: {_dir}, lv.DIR.TOP={lv.DIR.TOP}")
 
 
             # Strict control: only allow UP gesture
             if _dir == lv.DIR.TOP:
-                print("[DEBUG] UP gesture detected! Calling show_appdrawer_simple()")
                 self.refresh_appdrawer_background()
                 self.show_appdrawer_simple()
-            else:
-                print(f"[DEBUG] Gesture ignored: direction {_dir} is not UP")
 
     def show_appdrawer_simple(self):
         global _animation_in_progress
-        print("[DEBUG] show_appdrawer_simple() called")
 
         # Prevent duplicate calls
         if _animation_in_progress:
-            print("[DEBUG] show_appdrawer_simple blocked: animation already in progress")
             return
 
         if hasattr(self, "apps") and self.apps:
             try:
-                print("[DEBUG] Starting appdrawer animation, setting _animation_in_progress=True")
                 _animation_in_progress = True
 
                 from trezorui import Display
 
                 display = Display()
-                print("[DEBUG] Display object created")
 
                 # Step 1: Load and display layer2 background
                 if hasattr(display, "cover_background_load_jpeg"):
@@ -563,7 +535,6 @@ class MainScreen(Screen):
 
 
             except Exception as e:
-                print(f"[DEBUG] Exception in show_appdrawer_simple: {e}")
                 import sys
                 sys.print_exception(e)
                 cancel_pending_animations()
@@ -577,7 +548,6 @@ class MainScreen(Screen):
                 # CRITICAL: Remove GESTURE_BUBBLE to prevent MainScreen from interfering
                 self.apps.clear_flag(lv.obj.FLAG.GESTURE_BUBBLE)
                 self.apps.visible = True
-                print("[DEBUG] AppDrawer shown via fallback (error path)")
 
     def _get_title_labels(self):
         labels = []
@@ -966,13 +936,12 @@ class MainScreen(Screen):
                 .text_align_center(),
                 0,
             )
-            # Add press effect: reduce label opacity to 70% when pressed
             label.add_style(
                 StyleWrapper().text_opa(lv.OPA._70), lv.PART.MAIN | lv.STATE.PRESSED
             )
             label.set_style_text_letter_space(-1, 0)
-            label.set_long_mode(lv.label.LONG.WRAP)  # Auto wrap to 2 lines instead of truncating with dots
-            label.set_style_max_height(52, 0)  # 26px * 2 = 52px for 2 lines
+            label.set_long_mode(lv.label.LONG.WRAP)  
+            label.set_style_max_height(52, 0)  
 
             label.set_pos(0, 144 + 8)
 
@@ -994,7 +963,6 @@ class MainScreen(Screen):
             try:
                 cache_set_size = getattr(getattr(lv, "img", None), "cache_set_size", None)
                 if cache_set_size:
-                    # Reserve a couple extra slots so other screens keep their bitmaps
                     cache_set_size(icon_count + 2)
             except Exception:
                 pass
@@ -1038,30 +1006,22 @@ class MainScreen(Screen):
             global _animation_in_progress
             code = event_obj.code
             is_hidden = self.has_flag(lv.obj.FLAG.HIDDEN)
-            target = event_obj.get_target()
-            print(f"[DEBUG] AppDrawer.on_gesture: target={target}, code={code}, hidden={is_hidden}")
 
             if _animation_in_progress:
-                print("[DEBUG] AppDrawer gesture blocked: animation in progress")
                 return
 
             if code == lv.EVENT.GESTURE:
                 if is_hidden:
-                    print("[DEBUG] AppDrawer gesture blocked: drawer is hidden")
                     return
 
                 indev = lv.indev_get_act()
                 _dir = indev.get_gesture_dir()
-                print(f"[DEBUG] AppDrawer gesture direction: {_dir} (BOTTOM={lv.DIR.BOTTOM}, TOP={lv.DIR.TOP}, LEFT={lv.DIR.LEFT}, RIGHT={lv.DIR.RIGHT})")
 
                 if _dir == lv.DIR.BOTTOM:
-                    print("[DEBUG] DOWN gesture: hiding to mainscreen")
                     self.hide_to_mainscreen()
                 elif _dir == lv.DIR.TOP:
-                    print("[DEBUG] UP gesture: ignored in appdrawer")
                     return
                 else:
-                    print(f"[DEBUG] LEFT/RIGHT gesture: handling page transition")
                     self.handle_page_gesture(_dir)
 
         def hide_to_mainscreen(self):
@@ -1225,17 +1185,13 @@ class MainScreen(Screen):
         def handle_page_gesture(self, _dir):
             if _dir not in [lv.DIR.RIGHT, lv.DIR.LEFT]:
                 return
-            # Optimization: if animation is in late stage, allow new gestures
             if self.page_animating:
-                # Cancel the in-flight animation and settle immediately to avoid jitter
                 for handle in self._page_anim_handles:
                     lv.anim_del(handle, None)
-                # Complete current animation immediately
                 if hasattr(self, "_page_anim_target"):
                     self._on_page_anim_ready(self.current_page, self._page_anim_target)
                 return
 
-            # Check if indicators exist before using them
             if not hasattr(self, "indicators") or not self.indicators:
                 return
 
@@ -1458,9 +1414,7 @@ class MainScreen(Screen):
                     StyleWrapper().bg_img_src(safe_homescreen).border_width(0),
                     0,
                 )
-            else:
-                # Clear image background to show black background
-                pass
+
 
         def on_pressed(self, text_key):
             label = self.text_label[text_key]
@@ -3926,9 +3880,7 @@ class WallperChange(AnimScreen):
         file_name_list = []
         if not utils.EMULATOR:
             try:
-                scan_count = 0
                 for size, _attrs, name in io.fatfs.listdir("1:/res/wallpapers"):
-                    scan_count += 1
                     if (
                         size > 0
                         and name.startswith("wp-")
@@ -3944,28 +3896,22 @@ class WallperChange(AnimScreen):
         if len(file_name_list) > 0 and storage_device.get_wp_cnts() == 0:
             storage_device.increase_wp_cnts()
 
-        def safe_extract_timestamp(name):
-            """Extract timestamp from custom wallpaper filename.
-
-            Handles names like:
-            - wp-<anything>-<timestamp>.jpg
-            - wp-<anything>-<timestamp>-blur.jpg
-            - zoom-wp-<anything>-<timestamp>.jpg (defensive)
-            Does not rely on a specific prefix length.
-            """
-            try:
-                base = name.rsplit(".", 1)[0]
-                if base.endswith("-blur"):
-                    base = base[: -len("-blur")]
-                ts_str = base.rsplit("-", 1)[-1]
-                return int(ts_str)
-            except Exception:
-                return 0
-
         if file_name_list:
-            # Sort by timestamp descending (newest first) and limit to 6 items
-            file_name_list.sort(key=safe_extract_timestamp, reverse=True)
-            file_name_list = file_name_list[:6]
+            # Sort by timestamp in filename descending (newest first)
+            # Filename format: wp-{hash}-{timestamp}.jpeg
+            def extract_timestamp(filename):
+                try:
+                    # Extract timestamp from "wp-xxx-123456789.jpeg"
+                    parts = filename.rsplit("-", 1)  # Split from right, get last part
+                    if len(parts) == 2:
+                        timestamp_str = parts[1].split(".")[0]  # Remove extension
+                        return int(timestamp_str)
+                except (ValueError, IndexError):
+                    pass
+                return 0  # Fallback for malformed filenames
+
+            file_name_list.sort(key=extract_timestamp, reverse=True)
+            file_name_list = file_name_list[:5]
 
         # Calculate grid layout
         internal_wp_nums = 7

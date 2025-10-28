@@ -86,6 +86,58 @@ bool local_interface_ready = false;
 /// USB_CHECK: int # interface id for check of USB data connection
 /// FINGERPRINT_STATE: int # interface id of the fingerprint state events
 
+// Forward declaration for JPEG decoder state management
+extern void jpeg_save_state(void);
+extern void jpeg_restore_state(void);
+extern int jpeg_get_decode_state(void);
+extern int jpeg_get_decode_error(void);
+
+/// def jpeg_save_decoder_state() -> None:
+///     """
+///     Save the current JPEG hardware decoder state.
+///     This should be called before operations that may conflict with JPEG decoding (e.g., uploading wallpapers).
+///     """
+STATIC mp_obj_t mod_trezorio_jpeg_save_decoder_state(void) {
+    jpeg_save_state();
+    return mp_const_none;
+}
+STATIC MP_DEFINE_CONST_FUN_OBJ_0(mod_trezorio_jpeg_save_decoder_state_obj, mod_trezorio_jpeg_save_decoder_state);
+
+/// def jpeg_restore_decoder_state() -> None:
+///     """
+///     Restore the previously saved JPEG hardware decoder state.
+///     This should be called after operations that may have conflicted with JPEG decoding.
+///     """
+STATIC mp_obj_t mod_trezorio_jpeg_restore_decoder_state(void) {
+    jpeg_restore_state();
+    return mp_const_none;
+}
+STATIC MP_DEFINE_CONST_FUN_OBJ_0(mod_trezorio_jpeg_restore_decoder_state_obj, mod_trezorio_jpeg_restore_decoder_state);
+
+/// def jpeg_decoder_is_busy() -> bool:
+///     """
+///     Check if JPEG hardware decoder is currently busy.
+///     Returns True if decoding is in progress, False if idle or completed.
+///     """
+STATIC mp_obj_t mod_trezorio_jpeg_decoder_is_busy(void) {
+    int state = jpeg_get_decode_state();
+    // state == 0 means decoding in progress (Jpeg_HWDecodingEnd == 0)
+    // state == 1 means decoding completed
+    return mp_obj_new_bool(state == 0);
+}
+STATIC MP_DEFINE_CONST_FUN_OBJ_0(mod_trezorio_jpeg_decoder_is_busy_obj, mod_trezorio_jpeg_decoder_is_busy);
+
+/// def jpeg_decoder_has_error() -> bool:
+///     """
+///     Check if JPEG hardware decoder encountered an error.
+///     Returns True if there was an error, False otherwise.
+///     """
+STATIC mp_obj_t mod_trezorio_jpeg_decoder_has_error(void) {
+    int error = jpeg_get_decode_error();
+    return mp_obj_new_bool(error != 0);
+}
+STATIC MP_DEFINE_CONST_FUN_OBJ_0(mod_trezorio_jpeg_decoder_has_error_obj, mod_trezorio_jpeg_decoder_has_error);
+
 STATIC const mp_rom_map_elem_t mp_module_trezorio_globals_table[] = {
     {MP_ROM_QSTR(MP_QSTR___name__), MP_ROM_QSTR(MP_QSTR_trezorio)},
 
@@ -127,6 +179,12 @@ STATIC const mp_rom_map_elem_t mp_module_trezorio_globals_table[] = {
 
     {MP_ROM_QSTR(MP_QSTR_SPI_FACE), MP_ROM_INT(SPI_IFACE)},
     {MP_ROM_QSTR(MP_QSTR_SPI_FIDO_FACE), MP_ROM_INT(SPI_FIDO_IFACE)},
+
+    // JPEG decoder state management functions
+    {MP_ROM_QSTR(MP_QSTR_jpeg_save_decoder_state), MP_ROM_PTR(&mod_trezorio_jpeg_save_decoder_state_obj)},
+    {MP_ROM_QSTR(MP_QSTR_jpeg_restore_decoder_state), MP_ROM_PTR(&mod_trezorio_jpeg_restore_decoder_state_obj)},
+    {MP_ROM_QSTR(MP_QSTR_jpeg_decoder_is_busy), MP_ROM_PTR(&mod_trezorio_jpeg_decoder_is_busy_obj)},
+    {MP_ROM_QSTR(MP_QSTR_jpeg_decoder_has_error), MP_ROM_PTR(&mod_trezorio_jpeg_decoder_has_error_obj)},
 };
 
 STATIC MP_DEFINE_CONST_DICT(mp_module_trezorio_globals,
