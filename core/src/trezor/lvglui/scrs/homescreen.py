@@ -6027,63 +6027,74 @@ class WallpaperScreen(AnimScreen):
             import gc as _gc
             for _i in range(3):
                 _gc.collect()
-            
+
         except Exception:
             pass
+
         if not hasattr(self, "_init"):
             self._init = True
         else:
-            # Fix: Avoid duplicate event callbacks and self-loading
-            self.refresh_text()
-            return
-        super().__init__(
-            prev_scr=prev_scr,
-            title=_(i18n_keys.TITLE__WALLPAPER),
-            nav_back=True,
-        )
-        
+            # Already initialized - refresh the container and recreate content
+            if hasattr(self, "container"):
+                self.container.delete()
+            if prev_scr is not None:
+                self.prev_scr = prev_scr
+
+        if not hasattr(self, "content_area"):
+            super().__init__(
+                prev_scr=prev_scr,
+                title=_(i18n_keys.TITLE__WALLPAPER),
+                nav_back=True,
+            )
+
+        # Always recreate container and buttons to avoid missing UI elements
         self.container = ContainerFlexCol(self.content_area, self.title, padding_row=2)
-        
+
         self.lock_screen = ListItemBtn(
             self.container, _(i18n_keys.ITEM__LOCK_SCREEN), use_transition=False
         )
-        
-        # Guard for low memory: skip creating the second item when memory is too low
-        _can_create_home_item = True
-        try:
-            import gc as _gc
 
-            if _gc.mem_free() < 24 * 1024:
-                _can_create_home_item = False
-                
-        except Exception:
-            pass
-        if _can_create_home_item:
-            self.home_screen = ListItemBtn(
-                self.container, _(i18n_keys.BUTTON__HOME_SCREEN), use_transition=False
-            )
-        self.content_area.add_event_cb(self.on_click_event, lv.EVENT.CLICKED, None)
-        
+        # Always create home_screen button - it's lightweight
+        self.home_screen = ListItemBtn(
+            self.container, _(i18n_keys.BUTTON__HOME_SCREEN), use_transition=False
+        )
+
+        # Only add event callback once on first initialization
+        if not hasattr(self, "_event_added"):
+            self.content_area.add_event_cb(self.on_click_event, lv.EVENT.CLICKED, None)
+            self._event_added = True
+
         # Fix: Remove duplicate load_screen call - already called in AnimScreen.__init__
         # self.load_screen(self)  # ← This causes double loading and freeze!
 
     def refresh_text(self):
-        self.lock_screen.label_left.set_text(_(i18n_keys.ITEM__LOCK_SCREEN))
-        self.home_screen.label_left.set_text(_(i18n_keys.BUTTON__HOME_SCREEN))
-        # Fix: Removed duplicate event callback addition
-        # Event callback is already added once in __init__, no need to add again
+        if hasattr(self, "lock_screen") and self.lock_screen:
+            self.lock_screen.label_left.set_text(_(i18n_keys.ITEM__LOCK_SCREEN))
+        if hasattr(self, "home_screen") and self.home_screen:
+            self.home_screen.label_left.set_text(_(i18n_keys.BUTTON__HOME_SCREEN))
+
+    def __del__(self):
+        """Clean up resources when screen is destroyed"""
+        try:
+            if hasattr(self, "container") and self.container:
+                self.container.delete()
+        except Exception:
+            pass
 
     def on_click_event(self, event_obj):
         target = event_obj.get_target()
-        if target == self.lock_screen:
+        if hasattr(self, "lock_screen") and target == self.lock_screen:
             try:
                 if hasattr(AppdrawerBackgroundSetting, "_instance"):
                     del AppdrawerBackgroundSetting._instance
                 AppdrawerBackgroundSetting(self)
             except Exception as e:
                 pass
-        elif target == self.home_screen:
-            HomeScreenSetting(self)
+        elif hasattr(self, "home_screen") and target == self.home_screen:
+            try:
+                HomeScreenSetting(self)
+            except Exception as e:
+                pass
         else:
             pass
 
