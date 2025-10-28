@@ -1,5 +1,4 @@
 # according to ISO_639-1 and ISO-3166 country codes
-# All 11 languages
 langs = [
     ("en", "English"),
     ("zh_cn", "简体中文"),

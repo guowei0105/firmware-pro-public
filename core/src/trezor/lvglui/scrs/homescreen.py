@@ -86,6 +86,9 @@ def cancel_pending_animations() -> None:
     _resume_lvgl_timers()
     _hide_cover_background()
 
+
+ 
+
 def _lvgl_safe_wallpaper_src(path, context: str = "") -> str:
 
     if not path:
@@ -3098,12 +3101,14 @@ class GeneralScreen(AnimScreen):
                 self.language.label_right.set_text(self.cur_language)
             self.refresh_text()
             return
+        
         super().__init__(
             prev_scr=prev_scr,
             title=_(i18n_keys.TITLE__GENERAL),
             nav_back=True,
             rti_path="A:/res/poweroff-white.png",
         )
+        
 
         self.container = ContainerFlexCol(self.content_area, self.title, padding_row=2)
         current_lang = storage_device.get_language()
@@ -3126,7 +3131,7 @@ class GeneralScreen(AnimScreen):
         self.display = ListItemBtn(self.container, _(i18n_keys.BUTTON__DISPLAY))
 
         self.content_area.add_event_cb(self.on_click_event, lv.EVENT.CLICKED, None)
-        self.load_screen(self)
+        # AnimScreen.__init__ already loads the screen; avoid double-loading here
 
     def refresh_text(self):
         self.title.set_text(_(i18n_keys.TITLE__GENERAL))
@@ -3148,7 +3153,18 @@ class GeneralScreen(AnimScreen):
         elif target == self.touch:
             TouchSetting(self)
         elif target == self.wallpaper:
+            # Aggressive cleanup before entering memory-heavy screen
+            try:
+                from .homescreen import cancel_pending_animations, force_memory_cleanup
+                cancel_pending_animations()
+                force_memory_cleanup()
+                import gc as _gc
+                for _i in range(3):
+                    _gc.collect()
+            except Exception:
+                pass
             WallpaperScreen(self)
+            
         elif target == self.rti_btn:
             PowerOff()
         else:
@@ -3445,7 +3461,7 @@ class AutolockSetting(AnimScreen):
         )
 
         self.container.add_event_cb(self.on_click, lv.EVENT.CLICKED, None)
-        self.load_screen(self)
+        # AnimScreen.__init__ already loads the screen; avoid double-loading here
         gc.collect()
 
     def get_str_from_ms(self, delay_ms: int) -> str:
@@ -3659,7 +3675,7 @@ class AppdrawerBackgroundSetting(AnimScreen):
         self.button_icon.add_flag(lv.obj.FLAG.CLICKABLE)
         self.button_icon.add_event_cb(_on_button_icon_clicked, lv.EVENT.CLICKED, None)
 
-        self.load_screen(self)
+        # AnimScreen.__init__ already loads the screen; avoid double-loading here
         # Schedule a one-shot full refresh to eliminate first-frame artifacts
         try:
             from trezor import loop as _loop
@@ -5988,33 +6004,60 @@ class WallpaperScreen(AnimScreen):
         return targets
 
     def __init__(self, prev_scr=None):
+        # Try to free as much as possible before constructing UI
+        try:
+            from .homescreen import cancel_pending_animations, force_memory_cleanup
+
+            cancel_pending_animations()
+            force_memory_cleanup()
+            import gc as _gc
+            for _i in range(3):
+                _gc.collect()
+            
+        except Exception:
+            pass
         if not hasattr(self, "_init"):
             self._init = True
         else:
+            # Fix: Avoid duplicate event callbacks and self-loading
             self.refresh_text()
-            if hasattr(self, 'content_area') and hasattr(self, 'on_click_event'):
-                self.content_area.add_event_cb(self.on_click_event, lv.EVENT.CLICKED, None)
-            if not self.is_visible():
-                self._load_scr(self, back=True)
             return
         super().__init__(
             prev_scr=prev_scr,
             title=_(i18n_keys.TITLE__WALLPAPER),
             nav_back=True,
         )
-
+        
         self.container = ContainerFlexCol(self.content_area, self.title, padding_row=2)
-        self.lock_screen = ListItemBtn(self.container, _(i18n_keys.ITEM__LOCK_SCREEN))
-        self.home_screen = ListItemBtn(self.container, _(i18n_keys.BUTTON__HOME_SCREEN))
+        
+        self.lock_screen = ListItemBtn(
+            self.container, _(i18n_keys.ITEM__LOCK_SCREEN), use_transition=False
+        )
+        
+        # Guard for low memory: skip creating the second item when memory is too low
+        _can_create_home_item = True
+        try:
+            import gc as _gc
+
+            if _gc.mem_free() < 24 * 1024:
+                _can_create_home_item = False
+                
+        except Exception:
+            pass
+        if _can_create_home_item:
+            self.home_screen = ListItemBtn(
+                self.container, _(i18n_keys.BUTTON__HOME_SCREEN), use_transition=False
+            )
         self.content_area.add_event_cb(self.on_click_event, lv.EVENT.CLICKED, None)
-        self.load_screen(self)
+        
+        # Fix: Remove duplicate load_screen call - already called in AnimScreen.__init__
+        # self.load_screen(self)  # ← This causes double loading and freeze!
 
     def refresh_text(self):
         self.lock_screen.label_left.set_text(_(i18n_keys.ITEM__LOCK_SCREEN))
         self.home_screen.label_left.set_text(_(i18n_keys.BUTTON__HOME_SCREEN))
-
-        if hasattr(self, 'content_area') and hasattr(self, 'on_click_event'):
-            self.content_area.add_event_cb(self.on_click_event, lv.EVENT.CLICKED, None)
+        # Fix: Removed duplicate event callback addition
+        # Event callback is already added once in __init__, no need to add again
 
     def on_click_event(self, event_obj):
         target = event_obj.get_target()
@@ -6032,11 +6075,9 @@ class WallpaperScreen(AnimScreen):
 
 
 class HomeScreenSetting(AnimScreen):
-    # Class variable: track all active instances for batch refresh
     _active_instances = []
 
     def collect_animation_targets(self) -> list:
-        # Disable animations for home screen preview
         return []
 
     def __init__(
@@ -6091,6 +6132,7 @@ class HomeScreenSetting(AnimScreen):
         super().__init__(
             prev_scr=prev_scr, nav_back=True, rti_path="A:/res/checkmark.png"
         )
+        
 
         # Animations disabled for home screen preview
 
@@ -6238,7 +6280,7 @@ class HomeScreenSetting(AnimScreen):
         # Realign labels
         self.change_label.align_to(self.change_button, lv.ALIGN.OUT_BOTTOM_MID, 0, 4)
         self.blur_label.align_to(self.blur_button, lv.ALIGN.OUT_BOTTOM_MID, 0, 4)
-        self.load_screen(self)
+        # AnimScreen.__init__ already loads the screen; avoid double-loading here
         gc.collect()
 
     def _create_button_with_label(self, icon_path, text, callback):
