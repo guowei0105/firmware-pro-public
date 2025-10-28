@@ -343,16 +343,29 @@ class NftManager(AnimScreen):
             ):
                 storage_device.set_homescreen(replacement_path)
 
-            try:
-                from .homescreen import _last_jpeg_loaded  # type: ignore
-            except Exception:
-                pass
-            else:
+            # Only invalidate JPEG cache if we actually changed the wallpaper
+            # This prevents unnecessary re-decoding when returning to AppDrawer
+            wallpaper_changed = False
+            if current_home and (
+                current_home == self.img_path or current_home.endswith("/" + deleted_name)
+            ):
+                wallpaper_changed = True
+            if current_lock and (
+                current_lock == self.img_path or current_lock.endswith("/" + deleted_name)
+            ):
+                wallpaper_changed = True
+
+            if wallpaper_changed:
                 try:
-                    import trezor.lvglui.scrs.homescreen as hs_mod
-                    hs_mod._last_jpeg_loaded = None
+                    from .homescreen import _last_jpeg_loaded  # type: ignore
                 except Exception:
                     pass
+                else:
+                    try:
+                        import trezor.lvglui.scrs.homescreen as hs_mod
+                        hs_mod._last_jpeg_loaded = None
+                    except Exception:
+                        pass
         except Exception:
             pass
 

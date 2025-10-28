@@ -766,9 +766,17 @@ class MainScreen(Screen):
             self.init_indicators()
             self.init_anim()
 
-            # Delay initialization of pre-rendering to avoid affecting startup performance
+            # Initialize pre-rendering immediately to avoid lag on first swipe
+            # Previously this was delayed to "avoid affecting startup performance",
+            # but initializing early eliminates first-swipe lag which is more noticeable
             if self.PRERENDER_ENABLED:
-                self._init_prerender_later = True
+                self._init_prerender_later = False
+                self._init_prerender()
+
+            # Pre-load Layer2 JPEG background to avoid lag on first swipe
+            # This loads the wallpaper into the hardware layer during initialization
+            # instead of blocking the main thread during the swipe animation
+            self._preload_layer2_background()
 
         # Removed styles property to fix system freeze
 
@@ -957,13 +965,46 @@ class MainScreen(Screen):
             return cont
 
         def _configure_image_cache(self):
+            """
+            Configure LVGL image cache and pre-load all app icons.
+            This forces icon decoding during initialization instead of
+            during the first swipe, eliminating animation lag.
+            """
             icon_count = len(self._icon_sources)
             if not icon_count:
                 return
             try:
+                # Set cache size to hold all icons plus extras
                 cache_set_size = getattr(getattr(lv, "img", None), "cache_set_size", None)
                 if cache_set_size:
                     cache_set_size(icon_count + 2)
+
+                # Pre-load all icon images into cache
+                # Create temporary image objects to trigger decoding
+                temp_images = []
+                for icon_path in self._icon_sources:
+                    try:
+                        img = lv.img(self)
+                        img.set_src(icon_path)
+                        img.add_flag(lv.obj.FLAG.HIDDEN)  # Keep hidden
+                        temp_images.append(img)
+                    except Exception:
+                        pass
+
+                # Force LVGL to process and cache the images
+                # by invalidating the objects (triggers render pipeline)
+                for img in temp_images:
+                    try:
+                        img.invalidate()
+                    except Exception:
+                        pass
+
+                # Clean up temporary images - they're now in cache
+                for img in temp_images:
+                    try:
+                        img.delete()
+                    except Exception:
+                        pass
             except Exception:
                 pass
 
@@ -1415,6 +1456,47 @@ class MainScreen(Screen):
                     0,
                 )
 
+        def _preload_layer2_background(self):
+            """
+            Pre-load the Layer2 JPEG background during initialization.
+            This eliminates the lag during the first swipe by loading the wallpaper
+            into the hardware layer ahead of time instead of blocking during animation.
+            """
+            try:
+                from trezorui import Display
+                from storage import device
+
+                display = Display()
+
+                if not hasattr(display, "cover_background_load_jpeg"):
+                    return
+
+                # Get lockscreen path (same logic as show_appdrawer_simple)
+                lockscreen_path = device.get_homescreen()
+
+                if not lockscreen_path:
+                    display_path = "res/wallpaper-1.jpg"
+                else:
+                    if lockscreen_path.startswith("A:/"):
+                        # Special handling for NFT files
+                        if "/res/nfts/" in lockscreen_path:
+                            display_path = "1:" + lockscreen_path[2:]
+                        else:
+                            display_path = lockscreen_path[3:]
+                    elif lockscreen_path.startswith("A:1:"):
+                        display_path = lockscreen_path[2:]
+                    else:
+                        display_path = lockscreen_path
+
+                # Check cache and load if needed
+                global _last_jpeg_loaded
+                if _last_jpeg_loaded != display_path:
+                    display.cover_background_load_jpeg(display_path)
+                    _last_jpeg_loaded = display_path
+            except Exception:
+                # Fail silently - wallpaper pre-loading is an optimization,
+                # not a critical feature. It will load on first swipe if this fails.
+                pass
 
         def on_pressed(self, text_key):
             label = self.text_label[text_key]
@@ -3807,6 +3889,11 @@ class AppdrawerBackgroundSetting(AnimScreen):
                 try:
                     storage_device.set_homescreen(current_wallpaper)
 
+                    # Clear Layer2 JPEG cache to force reload with new wallpaper
+                    # This prevents timing issues where Layer2 shows old wallpaper
+                    global _last_jpeg_loaded
+                    _last_jpeg_loaded = None
+
                     # Force refresh MainScreen background to apply new lockscreen
                     if hasattr(MainScreen, "_instance") and MainScreen._instance:
                         main_screen = MainScreen._instance
@@ -4703,6 +4790,20 @@ class WallperChange(AnimScreen):
                 or current_lockscreen.endswith("/" + blur_name)
             ):
                 storage_device.set_homescreen(replacement_path)
+
+            # Clear Layer2 JPEG cache if we changed wallpaper
+            # This prevents timing issues on next AppDrawer swipe
+            if (current_homescreen and (
+                deleted_path in current_homescreen
+                or current_homescreen.endswith("/" + base_name)
+                or current_homescreen.endswith("/" + blur_name)
+            )) or (current_lockscreen and (
+                deleted_path in current_lockscreen
+                or current_lockscreen.endswith("/" + base_name)
+                or current_lockscreen.endswith("/" + blur_name)
+            )):
+                global _last_jpeg_loaded
+                _last_jpeg_loaded = None
 
         except Exception as e:
             pass
@@ -6456,7 +6557,12 @@ class HomeScreenSetting(AnimScreen):
     def on_click_ext(self, target):
         if hasattr(self, "current_wallpaper_path") and self.current_wallpaper_path:
             storage_device.set_appdrawer_background(self.current_wallpaper_path)
-           
+
+            # Clear Layer2 JPEG cache to force reload with new wallpaper
+            # This prevents timing issues where Layer2 shows old wallpaper
+            global _last_jpeg_loaded
+            _last_jpeg_loaded = None
+
             if hasattr(MainScreen, "_instance") and MainScreen._instance:
                 main_screen = MainScreen._instance
                 if hasattr(main_screen, "apps") and main_screen.apps:
