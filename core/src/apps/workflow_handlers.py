@@ -12,7 +12,9 @@ workflow_handlers: dict[int, Handler] = {}
 
 
 def register(wire_type: int, handler: Handler[Msg]) -> None:
+    print(f"[HANDLER] Registering handler for msg_type={wire_type}: {handler}")
     workflow_handlers[wire_type] = handler
+    print(f"[HANDLER] workflow_handlers now has {len(workflow_handlers)} entries")
 
 
 def find_message_handler_module(msg_type: int) -> str:
@@ -387,11 +389,18 @@ def find_message_handler_module(msg_type: int) -> str:
 
 
 def find_registered_handler(iface: WireInterface, msg_type: int) -> Handler | None:
-    if msg_type in workflow_handlers:
-        return workflow_handlers[msg_type]
+    print(f"[HANDLER] find_registered_handler called: msg_type={msg_type}")
+    print(f"[HANDLER] workflow_handlers keys: {list(workflow_handlers.keys())}")
 
+    if msg_type in workflow_handlers:
+        handler = workflow_handlers[msg_type]
+        print(f"[HANDLER] Found in workflow_handlers: {handler}")
+        return handler
+
+    print(f"[HANDLER] Not in workflow_handlers, trying dynamic lookup")
     try:
         modname = find_message_handler_module(msg_type)
+        print(f"[HANDLER] Found module: {modname}")
         handler_name = modname[modname.rfind(".") + 1 :]
         module = __import__(modname, None, None, (handler_name,), 0)
         handler = getattr(module, handler_name)
@@ -404,7 +413,8 @@ def find_registered_handler(iface: WireInterface, msg_type: int) -> Handler | No
             return _wrap_with_version_check(handler)
 
         return handler
-    except ValueError:
+    except ValueError as e:
+        print(f"[HANDLER] ValueError: {e}, returning None")
         return None
 
 

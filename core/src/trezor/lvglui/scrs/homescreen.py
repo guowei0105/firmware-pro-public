@@ -199,32 +199,88 @@ APP_DRAWER_UP_PATH_CB = PATH_EASE_OUT
 APP_DRAWER_DOWN_PATH_CB = PATH_EASE_OUT
 
 
-def change_state(is_busy: bool = False):
+# Grace period for debouncing busy state (in milliseconds)
+_BUSY_GRACE_PERIOD_MS = 300
+
+
+def _do_change_state(is_busy: bool):
+    """Internal function to actually change the UI state."""
     try:
+        print(f"[DEBOUNCE] _do_change_state called: is_busy={is_busy}")
         if hasattr(MainScreen, "_instance") and MainScreen._instance:
             ms = MainScreen._instance
+            print(f"[DEBOUNCE] Using existing MainScreen instance: {ms}")
         else:
             ms = MainScreen()
+            print(f"[DEBOUNCE] Created new MainScreen instance: {ms}")
 
-        # Ensure homescreen is visible when entering busy state
         if is_busy:
             try:
                 if not ms.is_visible():
                     lv.scr_load(ms)
-            except Exception:
-                pass
-
-            # Keep AppDrawer hidden so the background is shown
+                    print("[DEBOUNCE] Loaded screen")
+            except Exception as e:
+                print(f"[DEBOUNCE] Screen load exception: {e}")
             try:
                 if hasattr(ms, "apps") and ms.apps:
                     ms.apps.add_flag(lv.obj.FLAG.HIDDEN)
                     ms.apps.visible = False
-            except Exception:
-                pass
+                    print("[DEBOUNCE] Hid apps")
+            except Exception as e:
+                print(f"[DEBOUNCE] Hide apps exception: {e}")
+
+        print(f"[DEBOUNCE] Calling MainScreen.change_state({is_busy})")
         ms.change_state(is_busy)
-    except Exception:
-        # Best-effort; ignore UI errors so wire handling never breaks
-        pass
+        print(f"[DEBOUNCE] MainScreen.change_state completed")
+    except Exception as e:
+        print(f"[DEBOUNCE] Exception in _do_change_state: {e}")
+
+
+def _check_and_restore_idle(timer):
+    """Check if grace period expired and restore idle state."""
+    try:
+        print("[DEBOUNCE] _check_and_restore_idle called")
+        deadline = storage.cache.get_int(storage.cache.APP_COMMON_BUSY_DEADLINE_MS, default=0)
+        current_time = utime.ticks_ms()
+        print(f"[DEBOUNCE] deadline={deadline}, current_time={current_time}, diff={utime.ticks_diff(current_time, deadline)}")
+
+        # Only restore if deadline is set and we've passed it
+        if deadline > 0 and utime.ticks_diff(current_time, deadline) >= 0:
+            print("[DEBOUNCE] Restoring to idle state")
+            storage.cache.delete(storage.cache.APP_COMMON_BUSY_DEADLINE_MS)
+            _do_change_state(False)
+        else:
+            print(f"[DEBOUNCE] NOT restoring: deadline={deadline}, passed={utime.ticks_diff(current_time, deadline)}")
+    except Exception as e:
+        print(f"[DEBOUNCE] Exception in _check_and_restore_idle: {e}")
+
+
+def change_state(is_busy: bool = False):
+    """Change homescreen busy state with debouncing.
+
+    When is_busy=True: immediately show busy state
+    When is_busy=False: delay restoration to avoid flashing during batch operations
+    """
+    try:
+        print(f"[DEBOUNCE] change_state called: is_busy={is_busy}")
+        if is_busy:
+            # Immediately set busy state and clear any pending restore
+            print("[DEBOUNCE] Setting busy, clearing deadline")
+            storage.cache.delete(storage.cache.APP_COMMON_BUSY_DEADLINE_MS)
+            _do_change_state(True)
+        else:
+            # Schedule delayed restore with grace period using LVGL timer
+            current = utime.ticks_ms()
+            deadline = utime.ticks_add(current, _BUSY_GRACE_PERIOD_MS)
+            print(f"[DEBOUNCE] Scheduling restore: current={current}, deadline={deadline}, grace={_BUSY_GRACE_PERIOD_MS}")
+            storage.cache.set_int(storage.cache.APP_COMMON_BUSY_DEADLINE_MS, deadline)
+
+            # Use LVGL timer for delayed callback
+            timer = lv.timer_create(lambda t: _check_and_restore_idle(t), _BUSY_GRACE_PERIOD_MS, None)
+            timer.set_repeat_count(1)  # Only run once
+            print(f"[DEBOUNCE] Timer created: {timer}")
+    except Exception as e:
+        print(f"[DEBOUNCE] Exception in change_state: {e}")
 
 
 class MainScreen(Screen):
@@ -439,11 +495,8 @@ class MainScreen(Screen):
                                 display_path = lockscreen_path
 
 
-                        # Check if JPEG needs to be reloaded
                         global _last_jpeg_loaded
                         if _last_jpeg_loaded != display_path:
-                            # Try to release memory before loading
-                            gc.collect()
                             display.cover_background_load_jpeg(display_path)
                             _last_jpeg_loaded = display_path
 
@@ -966,46 +1019,14 @@ class MainScreen(Screen):
             return cont
 
         def _configure_image_cache(self):
-            """
-            Configure LVGL image cache and pre-load all app icons.
-            This forces icon decoding during initialization instead of
-            during the first swipe, eliminating animation lag.
-            """
+            """Configure LVGL image cache."""
             icon_count = len(self._icon_sources)
             if not icon_count:
                 return
             try:
-                # Set cache size to hold all icons plus extras
                 cache_set_size = getattr(getattr(lv, "img", None), "cache_set_size", None)
                 if cache_set_size:
                     cache_set_size(icon_count + 2)
-
-                # Pre-load all icon images into cache
-                # Create temporary image objects to trigger decoding
-                temp_images = []
-                for icon_path in self._icon_sources:
-                    try:
-                        img = lv.img(self)
-                        img.set_src(icon_path)
-                        img.add_flag(lv.obj.FLAG.HIDDEN)  # Keep hidden
-                        temp_images.append(img)
-                    except Exception:
-                        pass
-
-                # Force LVGL to process and cache the images
-                # by invalidating the objects (triggers render pipeline)
-                for img in temp_images:
-                    try:
-                        img.invalidate()
-                    except Exception:
-                        pass
-
-                # Clean up temporary images - they're now in cache
-                for img in temp_images:
-                    try:
-                        img.delete()
-                    except Exception:
-                        pass
             except Exception:
                 pass
 
@@ -1110,11 +1131,8 @@ class MainScreen(Screen):
                                 display_path = lockscreen_path
 
 
-                        # Check if JPEG needs to be reloaded
                         global _last_jpeg_loaded
                         if _last_jpeg_loaded != display_path:
-                            # Try to release memory before loading
-                            gc.collect()
                             display.cover_background_load_jpeg(display_path)
                             _last_jpeg_loaded = display_path
 
@@ -3671,7 +3689,6 @@ class AppdrawerBackgroundSetting(AnimScreen):
         # Use selected wallpaper if provided, otherwise use current lock screen
         if self.selected_wallpaper:
             self.current_wallpaper_path = self.selected_wallpaper
-
             self.lockscreen_preview.set_src(self.selected_wallpaper)
         else:
             # Get current lock screen image from storage
@@ -3840,12 +3857,13 @@ class AppdrawerBackgroundSetting(AnimScreen):
             pass
 
     async def _first_frame_fix(self):
+        """Fix first-frame JPEG decoding artifacts by waiting for decode completion"""
         import utime
 
-        # Small delay to ensure layout and first decode are done
-        utime.sleep_ms(50)
+        # Wait for JPEG decoding to complete (async decode takes time)
+        utime.sleep_ms(100)
         try:
-            # Full screen refresh + targeted invalidates
+            # Full screen refresh + targeted invalidates to re-render with complete data
             self.refresh()
             if hasattr(self, "container") and self.container:
                 self.container.invalidate()
@@ -6343,11 +6361,9 @@ class HomeScreenSetting(AnimScreen):
 
 
             self.current_wallpaper_path = final_display_path
-
             self.homescreen_preview.set_src(final_display_path)
         else:
             self._load_blur_state()
-
             self.homescreen_preview.set_src(self.current_wallpaper_path)
 
         # Use zoom scaling instead of set_size to avoid jagged edges
@@ -6491,6 +6507,24 @@ class HomeScreenSetting(AnimScreen):
 
         # Initialize blur button state
         self._update_blur_button_state()
+
+    async def _first_frame_fix(self):
+        """Fix first-frame JPEG decoding artifacts by waiting for decode completion"""
+        import utime
+
+        # Wait for JPEG decoding to complete (async decode takes time)
+        utime.sleep_ms(100)
+        try:
+            # Full screen refresh + targeted invalidates to re-render with complete data
+            self.refresh()
+            if hasattr(self, "container") and self.container:
+                self.container.invalidate()
+            if hasattr(self, "preview_container") and self.preview_container:
+                self.preview_container.invalidate()
+            if hasattr(self, "homescreen_preview") and self.homescreen_preview:
+                self.homescreen_preview.invalidate()
+        except Exception:
+            pass
 
     def on_select_clicked(self, event_obj):
 
