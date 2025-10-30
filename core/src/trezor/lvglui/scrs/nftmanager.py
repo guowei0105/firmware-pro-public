@@ -71,6 +71,157 @@ def _get_main_screen_cls():
     return MainScreen
 
 
+class WallpaperPreviewBase(AnimScreen):
+    """Base class for wallpaper preview screens with common functionality."""
+
+    def _create_preview_container(self, top_offset=118):
+        """Create the preview container with standard settings."""
+        self.content_area.set_scrollbar_mode(lv.SCROLLBAR_MODE.OFF)
+        self.content_area.clear_flag(lv.obj.FLAG.SCROLLABLE)
+        self.content_area.set_style_pad_bottom(0, 0)
+
+        # Main container
+        self.container = lv.obj(self.content_area)
+        self.container.set_size(lv.pct(100), lv.pct(100))
+        self.container.align(lv.ALIGN.TOP_MID, 0, 0)
+        self.container.add_style(
+            StyleWrapper().bg_opa(lv.OPA.TRANSP).pad_all(0).border_width(0), 0
+        )
+        self.container.clear_flag(lv.obj.FLAG.CLICKABLE)
+        self.container.add_flag(lv.obj.FLAG.EVENT_BUBBLE)
+        self.container.set_scrollbar_mode(lv.SCROLLBAR_MODE.OFF)
+        self.container.clear_flag(lv.obj.FLAG.SCROLLABLE)
+
+        # Preview container
+        self.preview_container = lv.obj(self.container)
+        self.preview_container.set_size(344, 574)
+        self.preview_container.align(lv.ALIGN.TOP_MID, 0, top_offset)
+        self.preview_container.add_style(
+            _cached_style(
+                _K1,
+                lambda: StyleWrapper()
+                .bg_opa(lv.OPA.TRANSP)
+                .pad_all(0)
+                .border_width(0)
+                .radius(40)
+                .clip_corner(True),
+            ),
+            0,
+        )
+        self.preview_container.clear_flag(lv.obj.FLAG.CLICKABLE)
+        self.preview_container.add_flag(lv.obj.FLAG.EVENT_BUBBLE)
+        self.preview_container.set_scrollbar_mode(lv.SCROLLBAR_MODE.OFF)
+        self.preview_container.clear_flag(lv.obj.FLAG.SCROLLABLE)
+        self.preview_container.set_style_bg_color(lv.color_hex(0x000000), 0)
+        self.preview_container.set_style_bg_opa(lv.OPA.COVER, 0)
+
+    def _create_preview_image(self, image_path):
+        """Create and configure the preview image."""
+        self.preview_image = lv.img(self.preview_container)
+        self.preview_image.set_src(image_path)
+        self.preview_image.set_size(lv.SIZE.CONTENT, lv.SIZE.CONTENT)
+        self.preview_image.clear_flag(lv.obj.FLAG.SCROLLABLE)
+
+        base_width, base_height = 480, 800
+        zoom_x = int((344 / base_width) * 256)
+        zoom_y = int((574 / base_height) * 256)
+        zoom = min(zoom_x, zoom_y)
+
+        self.preview_image.set_zoom(zoom)
+        self.preview_image.set_antialias(True)
+        self.preview_image.align(lv.ALIGN.CENTER, 0, 0)
+        return self.preview_image
+
+    def _create_app_icons(self):
+        """Create the 4 app icons overlay."""
+        self.app_icons = []
+        scale_x = 343.0 / 480.0
+        scale_y = 572.0 / 800.0
+        offset_x = 0.5
+        offset_y = 1.0
+
+        desktop_positions = [
+            (64, 164),   # Left-Top
+            (272, 164),  # Right-Top
+            (64, 442),   # Left-Bottom
+            (272, 442),  # Right-Bottom
+        ]
+
+        for i in range(4):
+            screen_x, screen_y = desktop_positions[i]
+            x_pos = int(screen_x * scale_x + offset_x)
+            y_pos = int(screen_y * scale_y + offset_y)
+
+            icon_img = lv.img(self.preview_container)
+            icon_img.set_src(_P10)
+            icon_img.set_size(lv.SIZE.CONTENT, lv.SIZE.CONTENT)
+            icon_img.set_pos(x_pos, y_pos)
+            self.app_icons.append(icon_img)
+
+    def _create_button_with_label(self, icon_path, text, callback):
+        """Create a button with icon and label."""
+        button = lv.btn(self.container)
+        button.set_size(64, 64)
+        button.align_to(self.preview_container, lv.ALIGN.OUT_BOTTOM_MID, 0, 10)
+        button.add_style(StyleWrapper().border_width(0).radius(40), 0)
+        button.add_flag(lv.obj.FLAG.CLICKABLE)
+        button.clear_flag(lv.obj.FLAG.EVENT_BUBBLE)
+
+        icon = lv.img(button)
+        if icon_path:
+            icon.set_src(icon_path)
+        icon.align(lv.ALIGN.CENTER, 0, 0)
+
+        label = lv.label(self.container)
+        label.set_text(text)
+        label.add_style(
+            StyleWrapper()
+            .text_font(font_GeistRegular20)
+            .text_color(lv_colors.WHITE)
+            .text_align(lv.TEXT_ALIGN.CENTER),
+            0,
+        )
+        label.align_to(button, lv.ALIGN.OUT_BOTTOM_MID, 0, 4)
+        label.add_flag(lv.obj.FLAG.CLICKABLE)
+        label.add_event_cb(callback, lv.EVENT.CLICKED, None)
+        button.add_event_cb(callback, lv.EVENT.CLICKED, None)
+
+        return button, icon, label
+
+    def _check_blur_exists(self, blur_path):
+        """Check if blur version exists."""
+        try:
+            file_path = blur_path.replace("A:1:", "1:")
+            with trezor_io.fatfs.open(file_path, "r") as f:
+                return True
+        except Exception:
+            return False
+
+    def _update_blur_button_state(self):
+        """Update blur button state and appearance."""
+        if not hasattr(self, "blur_exists"):
+            return
+
+        if not self.blur_exists:
+            icon_path = _P12
+            self.blur_button.clear_flag(lv.obj.FLAG.CLICKABLE)
+            self.blur_button.set_style_bg_opa(lv.OPA.TRANSP, 0)
+            self.blur_button.set_style_border_width(0, 0)
+            self.blur_label.set_style_text_color(lv_colors.WHITE_2, 0)
+        else:
+            self.blur_button.add_flag(lv.obj.FLAG.CLICKABLE)
+            self.blur_button.set_style_bg_opa(lv.OPA.COVER, 0)
+            self.blur_button.set_style_border_width(1, 0)
+            self.blur_label.set_style_text_color(lv_colors.WHITE, 0)
+
+            if getattr(self, "is_blur_active", False):
+                icon_path = _P13
+            else:
+                icon_path = _P11
+
+        self.blur_button_icon.set_src(icon_path)
+
+
 class NftGallery(Screen):
     def __init__(self, prev_scr=None):
         if not hasattr(self, "_init"):
@@ -409,7 +560,7 @@ class NftManager(AnimScreen):
                     NftHomeScreenPreview(self, self.img_path, self.nft_config)
 
 
-class NftLockScreenPreview(AnimScreen):
+class NftLockScreenPreview(WallpaperPreviewBase):
     def __init__(self, prev_scr, nft_path, nft_config):
         super().__init__(
             prev_scr=prev_scr,
@@ -420,67 +571,9 @@ class NftLockScreenPreview(AnimScreen):
         self.nft_path = nft_path
         self.nft_config = nft_config
 
-        # Disable scrollbars on content_area (inherited from AnimScreen)
-        self.content_area.set_scrollbar_mode(lv.SCROLLBAR_MODE.OFF)
-        self.content_area.clear_flag(lv.obj.FLAG.SCROLLABLE)
-        # Remove bottom padding to prevent content overflow (800 - 24 = 776 vs container 800)
-        self.content_area.set_style_pad_bottom(0, 0)
-
-        # Main container for the screen
-        self.container = lv.obj(self.content_area)
-        self.container.set_size(lv.pct(100), lv.pct(100))
-        self.container.align(lv.ALIGN.TOP_MID, 0, 0)
-        self.container.add_style(
-            StyleWrapper().bg_opa(lv.OPA.TRANSP).pad_all(0).border_width(0), 0
-        )
-        self.container.clear_flag(lv.obj.FLAG.CLICKABLE)
-        self.container.add_flag(lv.obj.FLAG.EVENT_BUBBLE)
-        # Disable scrollbars on the main container
-        self.container.set_scrollbar_mode(lv.SCROLLBAR_MODE.OFF)
-        self.container.clear_flag(lv.obj.FLAG.SCROLLABLE)
-
-        # Lock screen preview container with image - NFT image 118px from top, 344x574 size
-        self.preview_container = lv.obj(self.container)
-        self.preview_container.set_size(344, 574)
-        self.preview_container.align(
-            lv.ALIGN.TOP_MID, 0, 118
-        )  # 118px from top as requested
-        # Use cached style to avoid memory issues during frequent scrolling
-        self.preview_container.add_style(
-            _cached_style(
-                _K1,
-                lambda: StyleWrapper()
-                .bg_opa(lv.OPA.TRANSP)
-                .pad_all(0)
-                .border_width(0)
-                .radius(40)
-                .clip_corner(True),
-            ),
-            0,
-        )
-        self.preview_container.clear_flag(lv.obj.FLAG.CLICKABLE)
-        self.preview_container.add_flag(lv.obj.FLAG.EVENT_BUBBLE)
-        self.preview_container.set_scrollbar_mode(lv.SCROLLBAR_MODE.OFF)
-        self.preview_container.clear_flag(lv.obj.FLAG.SCROLLABLE)
-
-        self.preview_container.set_style_bg_color(lv.color_hex(0x000000), 0)
-        self.preview_container.set_style_bg_opa(lv.OPA.COVER, 0)
-
-        self.lockscreen_preview = lv.img(self.preview_container)
-        self.lockscreen_preview.set_src(nft_path)
-        # Use image's natural size, then scale with zoom to fit container
-        self.lockscreen_preview.set_size(lv.SIZE.CONTENT, lv.SIZE.CONTENT)
-        # Disable scrollbars on the image itself
-        self.lockscreen_preview.clear_flag(lv.obj.FLAG.SCROLLABLE)
-
-        base_width, base_height = 480, 800
-        zoom_x = int((344 / base_width) * 256)  # Scale to fit width
-        zoom_y = int((574 / base_height) * 256)  # Scale to fit height
-        zoom = min(zoom_x, zoom_y)  # Use smaller zoom to ensure image fits completely
-
-        self.lockscreen_preview.set_zoom(zoom)
-        self.lockscreen_preview.set_antialias(True)  # Enable anti-aliasing for smooth scaling
-        self.lockscreen_preview.align(lv.ALIGN.CENTER, 0, 0)
+        # Use base class methods to create UI
+        self._create_preview_container(top_offset=118)
+        self.lockscreen_preview = self._create_preview_image(nft_path)
 
         # Device name and bluetooth name overlaid on the image
         device_name = storage_device.get_label() or "OneKey Pro"
@@ -489,8 +582,6 @@ class NftLockScreenPreview(AnimScreen):
         # Device name label (overlaid on image)
         self.device_name_label = lv.label(self.preview_container)
         self.device_name_label.set_text(device_name)
-
-        # Use cached style to avoid memory issues during frequent scrolling
         self.device_name_label.add_style(
             _cached_style(
                 _K2,
@@ -501,7 +592,6 @@ class NftLockScreenPreview(AnimScreen):
             ),
             0,
         )
-
         self.device_name_label.align_to(self.preview_container, lv.ALIGN.TOP_MID, 0, 49)
 
         # Bluetooth name label (overlaid on image)
@@ -510,8 +600,6 @@ class NftLockScreenPreview(AnimScreen):
             self.bluetooth_label.set_text("Pro " + ble_name[-4:])
         else:
             self.bluetooth_label.set_text("Pro")
-
-        # Use cached style to avoid memory issues during frequent scrolling
         self.bluetooth_label.add_style(
             _cached_style(
                 _K3,
@@ -522,7 +610,6 @@ class NftLockScreenPreview(AnimScreen):
             ),
             0,
         )
-
         self.bluetooth_label.align_to(
             self.device_name_label, lv.ALIGN.OUT_BOTTOM_MID, 0, 8
         )
@@ -602,7 +689,7 @@ class NftLockScreenPreview(AnimScreen):
                     return
 
 
-class NftHomeScreenPreview(AnimScreen):
+class NftHomeScreenPreview(WallpaperPreviewBase):
     def __init__(self, prev_scr, nft_path, nft_config):
         super().__init__(
             prev_scr=prev_scr,
@@ -614,108 +701,25 @@ class NftHomeScreenPreview(AnimScreen):
         self.nft_config = nft_config
         self.original_wallpaper_path = nft_path
         self.is_blur_active = False
+        self.current_wallpaper_path = nft_path
 
         # Check if blur file exists
         file_name = nft_path.split("/")[-1]
         file_name_without_ext = file_name.split(".")[0]
-        blur_path = nft_path.replace(file_name, f"{file_name_without_ext}-blur.jpg")
-        self.blur_exists = self._check_blur_exists(blur_path)
+        self.blur_path = nft_path.replace(file_name, f"{file_name_without_ext}-blur.jpg")
+        self.blur_exists = self._check_blur_exists(self.blur_path)
 
-        # Disable scrollbars on content_area (inherited from AnimScreen)
-        self.content_area.set_scrollbar_mode(lv.SCROLLBAR_MODE.OFF)
-        self.content_area.clear_flag(lv.obj.FLAG.SCROLLABLE)
-        # Remove bottom padding to prevent content overflow (800 - 24 = 776 vs container 800)
-        self.content_area.set_style_pad_bottom(0, 0)
+        # Use base class methods to create UI
+        self._create_preview_container(top_offset=118)
+        self.homescreen_preview = self._create_preview_image(nft_path)
+        self._create_app_icons()
 
-        # Main container
-        self.container = lv.obj(self.content_area)
-        self.container.set_size(lv.pct(100), lv.pct(100))
-        self.container.align(lv.ALIGN.TOP_MID, 0, 0)
-        self.container.add_style(
-            StyleWrapper().bg_opa(lv.OPA.TRANSP).pad_all(0).border_width(0), 0
-        )
-        self.container.clear_flag(lv.obj.FLAG.CLICKABLE)
-        self.container.add_flag(lv.obj.FLAG.EVENT_BUBBLE)
-        # Disable scrollbars on the main container
-        self.container.set_scrollbar_mode(lv.SCROLLBAR_MODE.OFF)
-        self.container.clear_flag(lv.obj.FLAG.SCROLLABLE)
-
-        # Home screen preview container - NFT image 118px from top, 344x574 size
-        self.preview_container = lv.obj(self.container)
-        self.preview_container.set_size(344, 574)
-        self.preview_container.align(
-            lv.ALIGN.TOP_MID, 0, 118
-        )  # 118px from top as requested
-        # Use cached style to avoid memory issues during frequent scrolling
-        self.preview_container.add_style(
-            _cached_style(
-                _K1,
-                lambda: StyleWrapper()
-                .bg_opa(lv.OPA.TRANSP)
-                .pad_all(0)
-                .border_width(0)
-                .radius(40)
-                .clip_corner(True),
-            ),
-            0,
-        )
-        self.preview_container.clear_flag(lv.obj.FLAG.CLICKABLE)
-        self.preview_container.add_flag(lv.obj.FLAG.EVENT_BUBBLE)
-        self.preview_container.set_scrollbar_mode(lv.SCROLLBAR_MODE.OFF)
-        self.preview_container.clear_flag(lv.obj.FLAG.SCROLLABLE)
-
-        self.preview_container.set_style_bg_color(lv.color_hex(0x000000), 0)
-        self.preview_container.set_style_bg_opa(lv.OPA.COVER, 0)
-
-        self.homescreen_preview = lv.img(self.preview_container)
-        self.current_wallpaper_path = nft_path
-        self.homescreen_preview.set_src(nft_path)
-        # Use image's natural size, then scale with zoom to fit container
-        self.homescreen_preview.set_size(lv.SIZE.CONTENT, lv.SIZE.CONTENT)
-        # Disable scrollbars on the image itself
-        self.homescreen_preview.clear_flag(lv.obj.FLAG.SCROLLABLE)
-        base_width, base_height = 480, 800
-        zoom_x = int((344 / base_width) * 256)  # Scale to fit width
-        zoom_y = int((574 / base_height) * 256)  # Scale to fit height
-        zoom = min(zoom_x, zoom_y)  # Use smaller zoom to ensure image fits completely
-
-        self.homescreen_preview.set_zoom(zoom)
-        self.homescreen_preview.set_antialias(True)  # Enable anti-aliasing for smooth scaling
-        self.homescreen_preview.align(lv.ALIGN.CENTER, 0, 0)
-
-        # Add 4 app icons matching AppDrawer desktop layout (2 rows x 2 cols)
-        self.app_icons = []
-        scale_x = 343.0 / 480.0  # ≈ 0.71458
-        scale_y = 572.0 / 800.0  # ≈ 0.715
-        offset_x = 0.5
-        offset_y = 1.0
-
-        # Desktop icon positions in absolute screen coordinates
-        desktop_positions = [
-            (64, 164),   # Left-Top
-            (272, 164),  # Right-Top
-            (64, 442),   # Left-Bottom
-            (272, 442),  # Right-Bottom
-        ]
-
-        for i in range(4):
-            screen_x, screen_y = desktop_positions[i]
-
-            # Map desktop screen coordinates to preview coordinates
-            x_pos = int(screen_x * scale_x + offset_x)
-            y_pos = int(screen_y * scale_y + offset_y)
-
-            # Create image directly without holder to show natural shape
-            icon_img = lv.img(self.preview_container)
-            icon_img.set_src(_P10)
-            # Let image use its natural size
-            icon_img.set_size(lv.SIZE.CONTENT, lv.SIZE.CONTENT)
-            # Use set_pos for absolute positioning (left-top corner)
-            icon_img.set_pos(x_pos, y_pos)
-            self.app_icons.append(icon_img)
-
-        # Create only Blur button for NFT HomeScreen preview (no Change button needed)
-        self._create_blur_button()
+        # Create Blur button
+        (
+            self.blur_button,
+            self.blur_button_icon,
+            self.blur_label,
+        ) = self._create_button_with_label(_P11, "Blur", self.on_blur_clicked)
 
         # Position blur button centered at bottom
         self.blur_button.align_to(
@@ -723,102 +727,12 @@ class NftHomeScreenPreview(AnimScreen):
         )
         self.blur_label.align_to(self.blur_button, lv.ALIGN.OUT_BOTTOM_MID, 0, 4)
 
-    def _create_button_with_label(self, icon_path, text, callback):
-
-        # Create button
-        button = lv.btn(self.container)
-        button.set_size(64, 64)
-        button.align_to(self.preview_container, lv.ALIGN.OUT_BOTTOM_MID, 0, 10)
-        button.add_style(StyleWrapper().border_width(0).radius(40), 0)
-        button.add_flag(lv.obj.FLAG.CLICKABLE)
-        button.clear_flag(lv.obj.FLAG.EVENT_BUBBLE)
-
-        # Create icon
-        icon = lv.img(button)
-        if icon_path:  # Only set icon if path is not empty
-            icon.set_src(icon_path)
-        icon.align(lv.ALIGN.CENTER, 0, 0)
-
-        # Create label - make it clickable to expand click area
-        label = lv.label(self.container)
-        label.set_text(text)
-        label.add_style(
-            StyleWrapper()
-            .text_font(font_GeistRegular20)
-            .text_color(lv_colors.WHITE)
-            .text_align(lv.TEXT_ALIGN.CENTER),
-            0,
-        )
-        label.align_to(button, lv.ALIGN.OUT_BOTTOM_MID, 0, 4)
-        # Make label clickable so text can also be clicked
-        label.add_flag(lv.obj.FLAG.CLICKABLE)
-        label.add_event_cb(callback, lv.EVENT.CLICKED, None)
-
-        # Add event callback to button
-        button.add_event_cb(callback, lv.EVENT.CLICKED, None)
-
-        return button, icon, label
-
-    def _create_blur_button(self):
-
-        # Create Blur button with proper icon
-        (
-            self.blur_button,
-            self.blur_button_icon,
-            self.blur_label,
-        ) = self._create_button_with_label(
-            _P11, "Blur", self.on_blur_clicked
-        )
-
         # Initialize blur button state
         self._update_blur_button_state()
 
-    def on_select_clicked(self, event_obj):
-
-        # Navigate to WallperChange for wallpaper selection - not needed for NFT preview
-        pass
-
     def on_blur_clicked(self, event_obj):
-
         if self.blur_exists:
             self._toggle_blur()
-
-    def _check_blur_exists(self, blur_path):
-        try:
-            # Remove A:1: prefix and check if file exists
-            file_path = blur_path.replace("A:1:", "1:")
-            with trezor_io.fatfs.open(file_path, "r") as f:
-                return True
-        except Exception as e:
-            return False
-
-    def _update_blur_button_state(self):
-
-        if not self.blur_exists:
-            # Disabled state - no blur version available (matching HomeScreenSetting)
-            icon_path = _P12
-            self.blur_button.clear_flag(lv.obj.FLAG.CLICKABLE)
-            # Make button look disabled
-            self.blur_button.set_style_bg_opa(lv.OPA.TRANSP, 0)
-            self.blur_button.set_style_border_width(0, 0)
-            # Set label text color to gray when disabled
-            self.blur_label.set_style_text_color(lv_colors.WHITE_2, 0)
-        else:
-            # Blur version available - clickable, restore styles
-            self.blur_button.add_flag(lv.obj.FLAG.CLICKABLE)
-            # Restore button styles
-            self.blur_button.set_style_bg_opa(lv.OPA.COVER, 0)
-            self.blur_button.set_style_border_width(1, 0)
-            # Restore label text color to white when enabled
-            self.blur_label.set_style_text_color(lv_colors.WHITE, 0)
-
-            if getattr(self, "is_blur_active", False):
-                icon_path = _P13
-            else:
-                icon_path = _P11
-
-        # Update the blur button icon
-        self.blur_button_icon.set_src(icon_path)
 
     def _toggle_blur(self):
         if not self.blur_exists:

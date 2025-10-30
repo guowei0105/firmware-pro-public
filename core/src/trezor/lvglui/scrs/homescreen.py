@@ -49,6 +49,7 @@ from .components.listitem import (
 from .deviceinfo import DeviceInfoManager
 from .nftmanager import (
     NftGallery,
+    WallpaperPreviewBase,
 )
 from .widgets.style import StyleWrapper
 
@@ -3951,7 +3952,7 @@ class WallperChange(AnimScreen):
         if file_name_list:
             # Edit button - initially visible, positioned at the right edge
             self.edit_button = lv.btn(self.custom_header_container)
-            self.edit_button.set_size(lv.SIZE.CONTENT, 30)  # Auto width to fit text in all languages
+            self.edit_button.set_size(lv.SIZE.CONTENT, 50)  # Increased height for better click area
             self.edit_button.add_style(
                 StyleWrapper()
                 .bg_opa(lv.OPA.TRANSP)
@@ -3979,7 +3980,7 @@ class WallperChange(AnimScreen):
             # Done button - initially hidden, replaces Edit button position when in edit mode
             # Create Done first so Delete can position relative to it
             self.done_button = lv.btn(self.custom_header_container)
-            self.done_button.set_size(lv.SIZE.CONTENT, 30)  # Auto width to fit text
+            self.done_button.set_size(lv.SIZE.CONTENT, 50)  # Increased height for better click area
             self.done_button.add_style(
                 StyleWrapper()
                 .bg_opa(lv.OPA.TRANSP)
@@ -4008,7 +4009,7 @@ class WallperChange(AnimScreen):
             # Delete button - initially hidden, appears to the left of Done when in edit mode
             # Create as a separate container to ensure proper positioning
             self.delete_button = lv.btn(self.custom_header_container)
-            self.delete_button.set_size(lv.SIZE.CONTENT, 30)  # Auto width to fit text
+            self.delete_button.set_size(lv.SIZE.CONTENT, 50)  # Increased height for better click area
             self.delete_button.add_style(
                 StyleWrapper()
                 .bg_opa(lv.OPA.TRANSP)
