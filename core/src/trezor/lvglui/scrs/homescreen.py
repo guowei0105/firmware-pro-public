@@ -1046,69 +1046,56 @@ class MainScreen(Screen):
 
 
                 if hasattr(display, "cover_background_animate_to_y"):
+                    # CRITICAL FIX: Keep AppDrawer visible during Layer2 slide down
+                    # Layer2 slides down from -800 to 0, AppDrawer stays visible behind it
+                    # Only hide AppDrawer and show MainScreen after Layer2 fully covers screen
 
-                    self.parent.hidden_others(False)
-                    if hasattr(self.parent, "prepare_title_fade_in"):
-                        self.parent.prepare_title_fade_in()
-                    if hasattr(self.parent, "up_arrow"):
-                        self.parent.up_arrow.clear_flag(lv.obj.FLAG.HIDDEN)
-                    if hasattr(self.parent, "bottom_tips"):
-                        self.parent.bottom_tips.clear_flag(lv.obj.FLAG.HIDDEN)
-                    # CRITICAL: Restore content_area visibility
-                    if hasattr(self.parent, "content_area") and self.parent.content_area:
-                        self.parent.content_area.clear_flag(lv.obj.FLAG.HIDDEN)
-                    if hasattr(self.parent, "dev_state"):
-                        self.parent.dev_state.show()
-
+                    # Layer2 starts from top and slides down
                     display.cover_background_move_to_y(-800)
                     if hasattr(display, "cover_background_set_visible"):
                         display.cover_background_set_visible(True)
 
-                    display.cover_background_animate_to_y(
-                        0, 200
-                    )  # Slide to screen center, fill screen (optimized response speed)
+                    display.cover_background_animate_to_y(0, 200)
 
-
-                    def prepare_mainscreen_after_coverage():
+                    # After 200ms, Layer2 reaches y=0 and fully covers screen
+                    # Now we can safely switch from AppDrawer to MainScreen behind Layer2
+                    def on_layer2_covers_screen():
+                        # Hide AppDrawer
                         self.add_flag(lv.obj.FLAG.HIDDEN)
                         self.visible = False
                         self.add_flag(lv.obj.FLAG.GESTURE_BUBBLE)
 
+                        # Show MainScreen elements
+                        self.parent.hidden_others(False)
+                        if hasattr(self.parent, "prepare_title_fade_in"):
+                            self.parent.prepare_title_fade_in()
+                        if hasattr(self.parent, "up_arrow"):
+                            self.parent.up_arrow.clear_flag(lv.obj.FLAG.HIDDEN)
+                        if hasattr(self.parent, "bottom_tips"):
+                            self.parent.bottom_tips.clear_flag(lv.obj.FLAG.HIDDEN)
+                        if hasattr(self.parent, "content_area") and self.parent.content_area:
+                            self.parent.content_area.clear_flag(lv.obj.FLAG.HIDDEN)
+                        if hasattr(self.parent, "dev_state"):
+                            self.parent.dev_state.show()
+
                         lv.refr_now(None)
                         gc.collect()
 
+                        if hasattr(display, "cover_background_hide"):
+                            display.cover_background_hide()
+                        if hasattr(self.parent, "start_title_fade_in"):
+                            self.parent.start_title_fade_in(duration=100)
 
-                    prepare_timer = lv.timer_create(
-                        lambda t: prepare_mainscreen_after_coverage(), 30, None
-                    )
-                    prepare_timer.set_repeat_count(1)
-                    # Track timer
-                    global _active_timers
-                    _active_timers.append(prepare_timer)
-
-                    def on_animation_complete():
                         global _animation_in_progress
-
-                        try:
-                            if hasattr(display, "cover_background_hide"):
-                                display.cover_background_hide()
-
-                            if hasattr(self.parent, "start_title_fade_in"):
-                                self.parent.start_title_fade_in(duration=100)
-                            _animation_in_progress = False
-
-                            # Clean timers and force memory cleanup
-                            cleanup_timers()
-                            force_memory_cleanup()
-
-                        except Exception as error:
-                            pass
+                        _animation_in_progress = False
+                        cleanup_timers()
+                        force_memory_cleanup()
 
                     completion_timer = lv.timer_create(
-                        lambda t: on_animation_complete(), 200, None
+                        lambda t: on_layer2_covers_screen(), 200, None
                     )
                     completion_timer.set_repeat_count(1)
-                    # Track timer
+                    global _active_timers
                     _active_timers.append(completion_timer)
                 else:
                     self.hide_to_mainscreen_fallback()
@@ -3807,40 +3794,27 @@ class AppdrawerBackgroundSetting(AnimScreen):
         if hasattr(self, "rti_btn") and target == self.rti_btn:
             current_wallpaper = getattr(self, "current_wallpaper_path", None)
             if current_wallpaper:
-                print("[LOCKSCREEN] Step 1: Setting homescreen to storage")
                 storage_device.set_homescreen(current_wallpaper)
-                print("[LOCKSCREEN] Step 1: Done")
 
-                print("[LOCKSCREEN] Step 2: Clearing Layer2 cache only")
+                # Clear Layer2 cache only, not LVGL image cache
+                # Clearing all image cache causes freeze with many cached wallpaper previews
                 global _last_jpeg_loaded
                 _last_jpeg_loaded = None
-                # DO NOT call _clr_img_cache() here - it clears ALL image cache
-                # and causes freeze when many wallpaper previews are cached
-                print("[LOCKSCREEN] Step 2: Done")
 
-                print("[LOCKSCREEN] Step 3: Updating MainScreen background")
+                # Update MainScreen background
                 if hasattr(MainScreen, "_instance") and MainScreen._instance:
                     ms = MainScreen._instance
-                    print("[LOCKSCREEN] Step 3a: Creating style")
                     ms.add_style(StyleWrapper().bg_img_src(_lvgl_safe_wallpaper_src(current_wallpaper, "AppdrawerBackgroundSetting.MainScreen")), 0)
-                    print("[LOCKSCREEN] Step 3b: Invalidating")
                     ms.invalidate()
-                    print("[LOCKSCREEN] Step 3c: Refreshing now")
                     lv.refr_now(None)
-                    print("[LOCKSCREEN] Step 3: Done")
 
-                print("[LOCKSCREEN] Step 4: Deleting LockScreen instance")
+                # Delete LockScreen instance to force recreation with new wallpaper
                 from .lockscreen import LockScreen
                 if hasattr(LockScreen, "_instance") and LockScreen._instance:
-                    print("[LOCKSCREEN] Step 4a: LockScreen instance exists, deleting")
                     del LockScreen._instance
-                    print("[LOCKSCREEN] Step 4a: Done")
-                print("[LOCKSCREEN] Step 4: Done")
 
-            print("[LOCKSCREEN] Step 5: Loading previous screen")
             if self.prev_scr is not None:
                 self.load_screen(self.prev_scr, destroy_self=True)
-            print("[LOCKSCREEN] Step 5: Done - All complete")
 
 class WallperChange(AnimScreen):
     def collect_animation_targets(self) -> list:
