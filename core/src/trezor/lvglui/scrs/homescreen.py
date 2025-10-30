@@ -3948,6 +3948,9 @@ class WallperChange(AnimScreen):
         )
         self.custom_header.align(lv.ALIGN.LEFT_MID, 0, 0)
 
+        # Move to next row after custom header to prevent overlap
+        current_row += 1
+
         # Edit/Delete/Done buttons on the right (only show if there are custom wallpapers)
         if file_name_list:
             # Edit button - initially visible, positioned at the right edge
@@ -4033,8 +4036,6 @@ class WallperChange(AnimScreen):
             self.delete_button.add_event_cb(
                 self.on_delete_button_clicked, lv.EVENT.CLICKED, None
             )
-
-        current_row += 1
 
         # Custom wallpapers
         self.wps = []
