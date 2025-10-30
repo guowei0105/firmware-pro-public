@@ -3804,51 +3804,43 @@ class AppdrawerBackgroundSetting(AnimScreen):
                 super().eventhandler(event_obj)
 
     def on_click_ext(self, target):
-
-
         if hasattr(self, "rti_btn") and target == self.rti_btn:
-            # Use the stored wallpaper path instead of get_src()
             current_wallpaper = getattr(self, "current_wallpaper_path", None)
             if current_wallpaper:
-                try:
-                    storage_device.set_homescreen(current_wallpaper)
-                    global _last_jpeg_loaded
-                    _last_jpeg_loaded = None
-                    _clr_img_cache()
-                    if hasattr(MainScreen, "_instance") and MainScreen._instance:
-                        ms = MainScreen._instance
-                        ms.add_style(StyleWrapper().bg_img_src(_lvgl_safe_wallpaper_src(current_wallpaper, "AppdrawerBackgroundSetting.MainScreen")), 0)
-                        ms.invalidate()
-                        try: lv.refr_now(None)
-                        except: pass
-                    # Force refresh LockScreen if it exists to apply new background
-                    try:
-                        from .lockscreen import LockScreen
+                print("[LOCKSCREEN] Step 1: Setting homescreen to storage")
+                storage_device.set_homescreen(current_wallpaper)
+                print("[LOCKSCREEN] Step 1: Done")
 
-                        if (
-                            hasattr(LockScreen, "_instance")
-                            and LockScreen._instance
-                        ):
-                            lock_screen = LockScreen._instance
-                            # Use original path - _lvgl_safe_wallpaper_src() will convert A:1: -> 1: if needed
-                            safe_lock_path = _lvgl_safe_wallpaper_src(
-                                current_wallpaper,
-                                "AppdrawerBackgroundSetting.LockScreen",
-                            )
-                            style = (
-                                StyleWrapper()
-                                .bg_img_src(safe_lock_path)
-                                .bg_img_opa(lv.OPA._40)
-                            )
-                            lock_screen.add_style(style, 0)
-                            lock_screen.invalidate()
-                    except Exception as lock_error:
-                        pass
+                print("[LOCKSCREEN] Step 2: Clearing Layer2 cache only")
+                global _last_jpeg_loaded
+                _last_jpeg_loaded = None
+                # DO NOT call _clr_img_cache() here - it clears ALL image cache
+                # and causes freeze when many wallpaper previews are cached
+                print("[LOCKSCREEN] Step 2: Done")
 
-                except Exception as e:
-                    pass
+                print("[LOCKSCREEN] Step 3: Updating MainScreen background")
+                if hasattr(MainScreen, "_instance") and MainScreen._instance:
+                    ms = MainScreen._instance
+                    print("[LOCKSCREEN] Step 3a: Creating style")
+                    ms.add_style(StyleWrapper().bg_img_src(_lvgl_safe_wallpaper_src(current_wallpaper, "AppdrawerBackgroundSetting.MainScreen")), 0)
+                    print("[LOCKSCREEN] Step 3b: Invalidating")
+                    ms.invalidate()
+                    print("[LOCKSCREEN] Step 3c: Refreshing now")
+                    lv.refr_now(None)
+                    print("[LOCKSCREEN] Step 3: Done")
+
+                print("[LOCKSCREEN] Step 4: Deleting LockScreen instance")
+                from .lockscreen import LockScreen
+                if hasattr(LockScreen, "_instance") and LockScreen._instance:
+                    print("[LOCKSCREEN] Step 4a: LockScreen instance exists, deleting")
+                    del LockScreen._instance
+                    print("[LOCKSCREEN] Step 4a: Done")
+                print("[LOCKSCREEN] Step 4: Done")
+
+            print("[LOCKSCREEN] Step 5: Loading previous screen")
             if self.prev_scr is not None:
                 self.load_screen(self.prev_scr, destroy_self=True)
+            print("[LOCKSCREEN] Step 5: Done - All complete")
 
 class WallperChange(AnimScreen):
     def collect_animation_targets(self) -> list:
