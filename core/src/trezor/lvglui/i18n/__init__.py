@@ -22,7 +22,7 @@ def i18n_refresh(lang: str | None = None):
         load_translations(lang)
     except Exception as e:
         if __debug__:
-            pass  # print removed to reduce qstr usage
+            print(e)
 
 
 i18n_refresh("en" if not device.is_initialized() else None)

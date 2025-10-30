@@ -53,36 +53,28 @@ from .nftmanager import (
 from .widgets.style import StyleWrapper
 
 _attach_to_pin_task_running = False
-
-# Animation state tracking
 _animation_in_progress = False
-_last_jpeg_loaded = None  # Cache the last loaded JPEG path
-_active_timers = []  # Track active timers
-_cached_styles = {}  # Cache style objects dictionary
-
-
-def _resume_lvgl_timers():
-    lv.timer_handler_resume()
+_last_jpeg_loaded = None
+_active_timers = []
+_cached_styles = {}
 
 
 def _hide_cover_background():
-        from trezorui import Display
-
-        display = Display()
-        if hasattr(display, "cover_background_hide"):
-            display.cover_background_hide()
-        if hasattr(display, "cover_background_set_visible"):
-            display.cover_background_set_visible(False)
-        if hasattr(display, "cover_background_move_to_y"):
-            display.cover_background_move_to_y(-800)
+    from trezorui import Display
+    d = Display()
+    if hasattr(d, "cover_background_hide"):
+        d.cover_background_hide()
+    if hasattr(d, "cover_background_set_visible"):
+        d.cover_background_set_visible(False)
+    if hasattr(d, "cover_background_move_to_y"):
+        d.cover_background_move_to_y(-800)
 
 
 def cancel_pending_animations() -> None:
     global _animation_in_progress
-
     cleanup_timers()
     _animation_in_progress = False
-    _resume_lvgl_timers()
+    lv.timer_handler_resume()
     _hide_cover_background()
 
 
@@ -151,32 +143,37 @@ def _lvgl_safe_wallpaper_src(path, context: str = "") -> str:
 
 def cleanup_timers():
     global _active_timers
-    for timer in _active_timers:
+    for t in _active_timers:
         try:
-            if timer:
-                timer.delete()
-        except:
-            pass
+            if t: t.delete()
+        except: pass
     _active_timers.clear()
 
 
 def force_memory_cleanup():
-    for i in range(5):  # Increased to 5 times
-        gc.collect()
+    for i in range(5): gc.collect()
     global _cached_styles
     if len(_cached_styles) > 2:
-        keys = list(_cached_styles.keys())
-        for key in keys[:-2]:
-            del _cached_styles[key]
+        for k in list(_cached_styles.keys())[:-2]: del _cached_styles[k]
+
+
+def _clr_img_cache():
+    try:
+        lv.img_cache_invalidate_src(None)
+        gc.collect()
+    except: pass
 
 
 
 def get_cached_style(image_src):
     global _cached_styles
     safe_src = _lvgl_safe_wallpaper_src(image_src, "get_cached_style")
-
-    # Check if we already have a cached style for this path
     if safe_src not in _cached_styles:
+        # Only clear cache if we have too many cached styles to prevent memory issues
+        # This prevents frequent cache clearing during scrolling
+        if len(_cached_styles) > 30:
+            _cached_styles.clear()
+            _clr_img_cache()
         _cached_styles[safe_src] = StyleWrapper().bg_img_src(safe_src).border_width(0)
     return _cached_styles[safe_src]
 
@@ -199,88 +196,32 @@ APP_DRAWER_UP_PATH_CB = PATH_EASE_OUT
 APP_DRAWER_DOWN_PATH_CB = PATH_EASE_OUT
 
 
-# Grace period for debouncing busy state (in milliseconds)
-_BUSY_GRACE_PERIOD_MS = 300
+_BUSY_GRACE_MS = 300
 
-
-def _do_change_state(is_busy: bool):
-    """Internal function to actually change the UI state."""
-    try:
-        print(f"[DEBOUNCE] _do_change_state called: is_busy={is_busy}")
-        if hasattr(MainScreen, "_instance") and MainScreen._instance:
-            ms = MainScreen._instance
-            print(f"[DEBOUNCE] Using existing MainScreen instance: {ms}")
-        else:
-            ms = MainScreen()
-            print(f"[DEBOUNCE] Created new MainScreen instance: {ms}")
-
-        if is_busy:
-            try:
-                if not ms.is_visible():
-                    lv.scr_load(ms)
-                    print("[DEBOUNCE] Loaded screen")
-            except Exception as e:
-                print(f"[DEBOUNCE] Screen load exception: {e}")
-            try:
-                if hasattr(ms, "apps") and ms.apps:
-                    ms.apps.add_flag(lv.obj.FLAG.HIDDEN)
-                    ms.apps.visible = False
-                    print("[DEBOUNCE] Hid apps")
-            except Exception as e:
-                print(f"[DEBOUNCE] Hide apps exception: {e}")
-
-        print(f"[DEBOUNCE] Calling MainScreen.change_state({is_busy})")
-        ms.change_state(is_busy)
-        print(f"[DEBOUNCE] MainScreen.change_state completed")
-    except Exception as e:
-        print(f"[DEBOUNCE] Exception in _do_change_state: {e}")
-
-
-def _check_and_restore_idle(timer):
-    """Check if grace period expired and restore idle state."""
-    try:
-        print("[DEBOUNCE] _check_and_restore_idle called")
-        deadline = storage.cache.get_int(storage.cache.APP_COMMON_BUSY_DEADLINE_MS, default=0)
-        current_time = utime.ticks_ms()
-        print(f"[DEBOUNCE] deadline={deadline}, current_time={current_time}, diff={utime.ticks_diff(current_time, deadline)}")
-
-        # Only restore if deadline is set and we've passed it
-        if deadline > 0 and utime.ticks_diff(current_time, deadline) >= 0:
-            print("[DEBOUNCE] Restoring to idle state")
-            storage.cache.delete(storage.cache.APP_COMMON_BUSY_DEADLINE_MS)
-            _do_change_state(False)
-        else:
-            print(f"[DEBOUNCE] NOT restoring: deadline={deadline}, passed={utime.ticks_diff(current_time, deadline)}")
-    except Exception as e:
-        print(f"[DEBOUNCE] Exception in _check_and_restore_idle: {e}")
-
+def _restore_idle(t):
+    d = storage.cache.get_int(storage.cache.APP_COMMON_BUSY_DEADLINE_MS, 0)
+    if d > 0 and utime.ticks_diff(utime.ticks_ms(), d) >= 0:
+        storage.cache.delete(storage.cache.APP_COMMON_BUSY_DEADLINE_MS)
+        ms = MainScreen._instance if hasattr(MainScreen, "_instance") and MainScreen._instance else MainScreen()
+        ms.change_state(False)
 
 def change_state(is_busy: bool = False):
-    """Change homescreen busy state with debouncing.
-
-    When is_busy=True: immediately show busy state
-    When is_busy=False: delay restoration to avoid flashing during batch operations
-    """
-    try:
-        print(f"[DEBOUNCE] change_state called: is_busy={is_busy}")
-        if is_busy:
-            # Immediately set busy state and clear any pending restore
-            print("[DEBOUNCE] Setting busy, clearing deadline")
-            storage.cache.delete(storage.cache.APP_COMMON_BUSY_DEADLINE_MS)
-            _do_change_state(True)
-        else:
-            # Schedule delayed restore with grace period using LVGL timer
-            current = utime.ticks_ms()
-            deadline = utime.ticks_add(current, _BUSY_GRACE_PERIOD_MS)
-            print(f"[DEBOUNCE] Scheduling restore: current={current}, deadline={deadline}, grace={_BUSY_GRACE_PERIOD_MS}")
-            storage.cache.set_int(storage.cache.APP_COMMON_BUSY_DEADLINE_MS, deadline)
-
-            # Use LVGL timer for delayed callback
-            timer = lv.timer_create(lambda t: _check_and_restore_idle(t), _BUSY_GRACE_PERIOD_MS, None)
-            timer.set_repeat_count(1)  # Only run once
-            print(f"[DEBOUNCE] Timer created: {timer}")
-    except Exception as e:
-        print(f"[DEBOUNCE] Exception in change_state: {e}")
+    from trezor import config
+    from trezor.lvglui.scrs import fingerprints
+    if (fingerprints.is_available() and not fingerprints.is_unlocked()) or (not fingerprints.is_available() and not config.is_unlocked()):
+        return
+    if is_busy:
+        storage.cache.delete(storage.cache.APP_COMMON_BUSY_DEADLINE_MS)
+        ms = MainScreen._instance if hasattr(MainScreen, "_instance") and MainScreen._instance else MainScreen()
+        if not ms.is_visible():
+            lv.scr_load(ms)
+        if hasattr(ms, "apps") and ms.apps:
+            ms.apps.add_flag(lv.obj.FLAG.HIDDEN)
+            ms.apps.visible = False
+        ms.change_state(True)
+    else:
+        storage.cache.set_int(storage.cache.APP_COMMON_BUSY_DEADLINE_MS, utime.ticks_add(utime.ticks_ms(), _BUSY_GRACE_MS))
+        lv.timer_create(_restore_idle, _BUSY_GRACE_MS, None).set_repeat_count(1)
 
 
 class MainScreen(Screen):
@@ -500,78 +441,44 @@ class MainScreen(Screen):
                             display.cover_background_load_jpeg(display_path)
                             _last_jpeg_loaded = display_path
 
-
-                # Step 2: Show layer2 (initial position at top of screen)
                 if hasattr(display, "cover_background_animate_to_y"):
-                    # Key modification: show Layer2 first then set position, avoid enabling unconfigured Layer
                     if hasattr(display, "cover_background_set_visible"):
                         display.cover_background_set_visible(True)
                     if hasattr(display, "cover_background_show"):
-                        display.cover_background_show()  # Show first, already properly configured
-                    display.cover_background_move_to_y(0)  # Then set position
-
-                    # Step 3: Immediately show AppDrawer and restore original background (covered by layer2)
+                        display.cover_background_show()
+                    display.cover_background_move_to_y(0)
                     def show_appdrawer_behind_layer2():
-                        # Hide MainScreen elements
                         self.hidden_others(True)
                         if hasattr(self, "up_arrow"):
                             self.up_arrow.add_flag(lv.obj.FLAG.HIDDEN)
                         if hasattr(self, "bottom_tips"):
                             self.bottom_tips.add_flag(lv.obj.FLAG.HIDDEN)
-
-                        # Show AppDrawer
+                        lv.refr_now(None)
                         self.apps.clear_flag(lv.obj.FLAG.HIDDEN)
-                        # CRITICAL: Remove GESTURE_BUBBLE to prevent MainScreen from interfering
                         self.apps.clear_flag(lv.obj.FLAG.GESTURE_BUBBLE)
                         self.apps.visible = True
+                        if hasattr(self.apps, 'current_page'):
+                            self.apps.show_page(self.apps.current_page)
 
 
-                    # Immediately show AppDrawer
                     show_appdrawer_behind_layer2()
-
-
-                    # Step 4: After delay, slide layer2 up and out of screen
                     def start_layer2_animation():
-                        # Disable LVGL auto refresh before animation to avoid conflicts with Layer animation
-                        try:
-                            lv.timer_handler_pause()
-                        except:
-                            pass  # Ignore if method doesn't exist
-
-                        display.cover_background_animate_to_y(
-                            -800, 200
-                        )  # 200ms animation (optimized response time)
-
-                        # Restore LVGL refresh after animation complete
-                        try:
-                            lv.timer_handler_resume()
-                        except:
-                            pass  # Ignore if method doesn't exist
-
-                        # Step 5: Hide layer2 after animation complete
+                        try: lv.timer_handler_pause()
+                        except: pass
+                        display.cover_background_animate_to_y(-800, 200)
+                        try: lv.timer_handler_resume()
+                        except: pass
                         def on_slide_complete():
                             global _animation_in_progress
-
                             if hasattr(display, "cover_background_hide"):
                                 display.cover_background_hide()
-
                             _animation_in_progress = False
-
-                            # Clean timers and force memory cleanup
                             cleanup_timers()
                             force_memory_cleanup()
-
-                            # Ensure LVGL refresh is restored
-                            try:
-                                lv.timer_handler_resume()
-                            except:
-                                pass  # Ignore if method doesn't exist or already restored
-
-                        # Hide layer2 after animation complete
+                            try: lv.timer_handler_resume()
+                            except: pass
                         completion_timer = lv.timer_create(
-                            lambda t: on_slide_complete(),
-                            200,
-                            None,  # 200ms animation (matches animation time)
+                            lambda t: on_slide_complete(), 200, None
                         )
                         completion_timer.set_repeat_count(1)
                         # Track timer
@@ -709,49 +616,31 @@ class MainScreen(Screen):
 
     def change_state(self, busy: bool):
         if busy:
-            # Disable click interactions and show processing hints
-            try:
-                self.clear_flag(lv.obj.FLAG.CLICKABLE)
-            except Exception:
-                pass
+            try: self.clear_flag(lv.obj.FLAG.CLICKABLE)
+            except: pass
             if hasattr(self, "up_arrow") and self.up_arrow:
-                try:
-                    self.up_arrow.add_flag(lv.obj.FLAG.HIDDEN)
-                except Exception:
-                    pass
+                try: self.up_arrow.add_flag(lv.obj.FLAG.HIDDEN)
+                except: pass
             if hasattr(self, "bottom_tips") and self.bottom_tips:
                 try:
-                    # Ensure tips are visible and show processing text
                     self.bottom_tips.clear_flag(lv.obj.FLAG.HIDDEN)
                     self.bottom_tips.set_text(_(i18n_keys.BUTTON__PROCESSING))
-                except Exception:
-                    pass
-
-            # Ensure title and subtitle are visible during busy state
+                except: pass
             if hasattr(self, "title") and self.title:
                 self.title.clear_flag(lv.obj.FLAG.HIDDEN)
             if hasattr(self, "subtitle") and self.subtitle:
                 self.subtitle.clear_flag(lv.obj.FLAG.HIDDEN)
         else:
-            # Restore normal interactions and hints
-            try:
-                self.add_flag(lv.obj.FLAG.CLICKABLE)
-            except Exception:
-                pass
+            try: self.add_flag(lv.obj.FLAG.CLICKABLE)
+            except: pass
             if hasattr(self, "up_arrow") and self.up_arrow:
-                try:
-                    self.up_arrow.clear_flag(lv.obj.FLAG.HIDDEN)
-                except Exception:
-                    pass
+                try: self.up_arrow.clear_flag(lv.obj.FLAG.HIDDEN)
+                except: pass
             if hasattr(self, "bottom_tips") and self.bottom_tips:
                 try:
-                    # Ensure tips are visible and restore default text
                     self.bottom_tips.clear_flag(lv.obj.FLAG.HIDDEN)
                     self.bottom_tips.set_text(_(i18n_keys.BUTTON__SWIPE_TO_SHOW_APPS))
-                except Exception:
-                    pass
-
-            # Keep title and subtitle visible in non-busy state too
+                except: pass
             if hasattr(self, "title") and self.title:
                 self.title.clear_flag(lv.obj.FLAG.HIDDEN)
             if hasattr(self, "subtitle") and self.subtitle:
@@ -3913,26 +3802,15 @@ class AppdrawerBackgroundSetting(AnimScreen):
             if current_wallpaper:
                 try:
                     storage_device.set_homescreen(current_wallpaper)
-
-                    # Clear Layer2 JPEG cache to force reload with new wallpaper
-                    # This prevents timing issues where Layer2 shows old wallpaper
                     global _last_jpeg_loaded
                     _last_jpeg_loaded = None
-
-                    # Force refresh MainScreen background to apply new lockscreen
+                    _clr_img_cache()
                     if hasattr(MainScreen, "_instance") and MainScreen._instance:
-                        main_screen = MainScreen._instance
-                        # Use original path - _lvgl_safe_wallpaper_src() will convert A:1: -> 1: if needed
-                        safe_unlock_path = _lvgl_safe_wallpaper_src(
-                            current_wallpaper, "AppdrawerBackgroundSetting.MainScreen"
-                        )
-                        # Refresh the background with new lockscreen
-                        main_screen.add_style(
-                            StyleWrapper().bg_img_src(safe_unlock_path),
-                            0,
-                        )
-                        # Force invalidate to ensure refresh
-                        main_screen.invalidate()
+                        ms = MainScreen._instance
+                        ms.add_style(StyleWrapper().bg_img_src(_lvgl_safe_wallpaper_src(current_wallpaper, "AppdrawerBackgroundSetting.MainScreen")), 0)
+                        ms.invalidate()
+                        try: lv.refr_now(None)
+                        except: pass
                     # Force refresh LockScreen if it exists to apply new background
                     try:
                         from .lockscreen import LockScreen
@@ -4037,8 +3915,8 @@ class WallperChange(AnimScreen):
         row_dsc = [60]  # Custom header
         if custom_rows > 0:
             row_dsc.extend([GRID_CELL_SIZE_ROWS] * custom_rows)  # Custom images
-            # When custom wallpapers exist, increase spacing to 32px for Collection section
-            row_dsc.append(92)  # Pro header with increased spacing (60 + 32 extra)
+            # Collection label: 32px top spacing + 60px label height + 16px bottom spacing = 108px total
+            row_dsc.append(108)  # Pro header (32px top + 60px height + 16px bottom)
         else:
             row_dsc.append(
                 178
@@ -4339,7 +4217,8 @@ class WallperChange(AnimScreen):
             StyleWrapper()
             .text_font(font_GeistSemiBold30)
             .text_color(lv_colors.WHITE)
-            .text_align(lv.TEXT_ALIGN.LEFT),
+            .text_align(lv.TEXT_ALIGN.LEFT)
+            .pad_top(32),  # 32px spacing from top of the grid cell
             0,
         )
         self.pro_header.set_grid_cell(

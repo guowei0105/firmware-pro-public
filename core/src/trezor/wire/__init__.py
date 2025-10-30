@@ -449,7 +449,14 @@ async def _handle_single_message(
     if res_msg is not None:
         # perform the write outside the big try-except block, so that usb write
         # problem bubbles up
-        await ctx.write(res_msg)
+        try:
+            await ctx.write(res_msg)
+        except codec_v1.WriteError:
+            # USB disconnected during response write
+            if __debug__:
+                pass  # USB disconnect during response write
+            # Return None to indicate write failure, session handler will handle cleanup
+            return None
     return None
 
 
@@ -485,8 +492,23 @@ async def handle_session(
                 except codec_v1.CodecError as exc:
                     if __debug__:
                         pass  # log call removed
-                    await ctx.write(failure(exc))
+                    try:
+                        await ctx.write(failure(exc))
+                    except codec_v1.WriteError:
+                        # USB disconnected during error response, exit session
+                        if __debug__:
+                            pass  # USB disconnect during write
+                        change_state()
+                        loop.clear()
+                        return
                     continue
+                except codec_v1.WriteError as exc:
+                    # USB disconnected during read, exit session
+                    if __debug__:
+                        pass  # USB disconnect during read
+                    change_state()
+                    loop.clear()
+                    return
 
             else:
                 # Process the message from previous run.

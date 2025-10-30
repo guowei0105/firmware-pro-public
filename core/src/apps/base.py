@@ -685,14 +685,18 @@ async def unlock_device(
     reload_settings_from_storage()
 
     gc.collect()
-    set_homescreen(prefer_appdrawer=True)
+    # Show appdrawer only for manual unlock (user touch/swipe)
+    # For message-triggered unlock, show normal homescreen to avoid flashing
+    is_manual_unlock = (ctx is wire.DUMMY_CONTEXT)
+
+    set_homescreen(prefer_appdrawer=is_manual_unlock)
+
     wire.find_handler = workflow_handlers.find_registered_handler
 
 
 def get_pinlocked_handler(
     iface: wire.WireInterface, msg_type: int
 ) -> wire.Handler[wire.Msg] | None:
-    print(f"[LOCK] get_pinlocked_handler: msg_type={msg_type}")
     orig_handler = workflow_handlers.find_registered_handler(iface, msg_type)
     if orig_handler is None:
         return None
@@ -703,14 +707,10 @@ def get_pinlocked_handler(
             return orig_handler
 
     if msg_type in ALLOW_WHILE_LOCKED:
-        print(f"[LOCK] msg_type={msg_type} in ALLOW_WHILE_LOCKED")
         return orig_handler
 
-    print(f"[LOCK] Creating unlock wrapper for msg_type={msg_type}")
     async def wrapper(ctx: wire.Context, msg: wire.Msg) -> protobuf.MessageType:
-        print(f"[LOCK] Calling unlock_device for msg_type={msg_type}")
         await unlock_device(ctx)
-        print(f"[LOCK] Unlocked, calling handler")
         return await orig_handler(ctx, msg)
 
     return wrapper
@@ -806,9 +806,7 @@ async def handle_UnLockDevice(
 
 
 def boot() -> None:
-    print(f"[BOOT] Registering handlers...")
     workflow_handlers.register(MessageType.Initialize, handle_Initialize)
-    print(f"[BOOT] Registered Initialize (msg_type={MessageType.Initialize})")
     workflow_handlers.register(MessageType.GetFeatures, handle_GetFeatures)
     workflow_handlers.register(MessageType.OnekeyGetFeatures, handle_OnekeyGetFeatures)
     workflow_handlers.register(MessageType.Cancel, handle_Cancel)
@@ -825,16 +823,11 @@ def boot() -> None:
         MessageType.GetPassphraseState, handle_GetPassphraseState
     )
     workflow_handlers.register(MessageType.UnLockDevice, handle_UnLockDevice)
-    print(f"[BOOT] All handlers registered")
 
     reload_settings_from_storage()
     from trezor.lvglui.scrs import fingerprints
 
-    print(f"fingerprints.is_unlocked(): {fingerprints.is_unlocked()}")
-    print(f"config.is_unlocked(): {config.is_unlocked()}")
     if config.is_unlocked() and fingerprints.is_unlocked():
-        print("fingerprints is unlocked and config is unlocked")
         wire.find_handler = workflow_handlers.find_registered_handler
     else:
-        print("fingerprints is locked or config is locked")
         wire.find_handler = get_pinlocked_handler
