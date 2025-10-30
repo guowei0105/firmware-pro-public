@@ -158,22 +158,32 @@ def force_memory_cleanup():
 
 
 def _clr_img_cache():
-    try:
-        lv.img_cache_invalidate_src(None)
-        gc.collect()
-    except: pass
-
+    lv.img_cache_invalidate_src(None)
+    gc.collect()
 
 
 def get_cached_style(image_src):
     global _cached_styles
     safe_src = _lvgl_safe_wallpaper_src(image_src, "get_cached_style")
     if safe_src not in _cached_styles:
-        # Only clear cache if we have too many cached styles to prevent memory issues
-        # This prevents frequent cache clearing during scrolling
-        if len(_cached_styles) > 30:
-            _cached_styles.clear()
-            _clr_img_cache()
+        # Optimize cache management: increased from 30 to 50 to reduce clearing frequency
+        # This helps preserve icon cache during wallpaper browsing
+        if len(_cached_styles) > 50:
+            # Smart eviction: prioritize removing wallpaper styles, keep icon styles
+            wallpaper_keys = [k for k in _cached_styles.keys()
+                              if 'wallpaper' in k or 'nft' in k]
+
+            if len(wallpaper_keys) > 20:
+                # Remove oldest half of wallpaper cache
+                keys_to_remove = wallpaper_keys[:len(wallpaper_keys)//2]
+            else:
+                # Fallback: remove oldest 10 items
+                keys_to_remove = list(_cached_styles.keys())[:10]
+
+            for key in keys_to_remove:
+                lv.img_cache_invalidate_src(key)
+                del _cached_styles[key]
+
         _cached_styles[safe_src] = StyleWrapper().bg_img_src(safe_src).border_width(0)
     return _cached_styles[safe_src]
 
@@ -1315,14 +1325,14 @@ class MainScreen(Screen):
             # Force a final refresh to ensure the page settles cleanly
             lv.refr_now(None)
 
-            # Delay memory cleanup to avoid affecting final rendering
+            # OPTIMIZATION: Delay GC longer (150ms instead of 50ms) to avoid
+            # interfering with rendering stabilization after animation
             def delayed_gc():
                 import gc
                 gc.collect()
 
-            # Schedule memory cleanup slightly after the animation ends
             def schedule_gc():
-                gc_timer = lv.timer_create(lambda t: delayed_gc(), 50, None)
+                gc_timer = lv.timer_create(lambda t: delayed_gc(), 150, None)
                 gc_timer.set_repeat_count(1)
 
             schedule_gc()
@@ -6493,32 +6503,28 @@ class HomeScreenSetting(AnimScreen):
             storage_device.set_appdrawer_background(self.current_wallpaper_path)
 
             # Clear Layer2 JPEG cache to force reload with new wallpaper
-            # This prevents timing issues where Layer2 shows old wallpaper
             global _last_jpeg_loaded
             _last_jpeg_loaded = None
 
             if hasattr(MainScreen, "_instance") and MainScreen._instance:
                 main_screen = MainScreen._instance
                 if hasattr(main_screen, "apps") and main_screen.apps:
-                    # Refresh AppDrawer background with new homescreen - use cached style
+                    # Refresh AppDrawer background with cached style
                     cached_style = get_cached_style(self.current_wallpaper_path)
                     if cached_style is not None:
                         main_screen.apps.add_style(cached_style, 0)
-                    # Force invalidate to ensure refresh
-                    main_screen.apps.invalidate()
+
+                    # CRITICAL FIX: Preload Layer2 background after cache clear
+                    # This prevents lag on first icon swipe
+                    main_screen.apps._preload_layer2_background()
+
+                    # Only invalidate when AppDrawer is hidden
+                    if main_screen.apps.has_flag(lv.obj.FLAG.HIDDEN):
+                        main_screen.apps.invalidate()
 
         # Return to previous screen
         if self.prev_scr is not None:
-            try:
-                self.load_screen(self.prev_scr, destroy_self=True)
-            except Exception as e:
-
-                try:
-                    # Create a new WallpaperScreen instance
-                    fallback_screen = WallpaperScreen()
-                    self.load_screen(fallback_screen, destroy_self=True)
-                except Exception as fallback_error:
-                    pass
+            self.load_screen(self.prev_scr, destroy_self=True)
 
     def _get_blur_wallpaper_path(self, original_path):
         if not original_path:
