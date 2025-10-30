@@ -801,12 +801,16 @@ class NftHomeScreenPreview(AnimScreen):
             # Make button look disabled
             self.blur_button.set_style_bg_opa(lv.OPA.TRANSP, 0)
             self.blur_button.set_style_border_width(0, 0)
+            # Set label text color to gray when disabled
+            self.blur_label.set_style_text_color(lv_colors.WHITE_2, 0)
         else:
             # Blur version available - clickable, restore styles
             self.blur_button.add_flag(lv.obj.FLAG.CLICKABLE)
             # Restore button styles
             self.blur_button.set_style_bg_opa(lv.OPA.COVER, 0)
             self.blur_button.set_style_border_width(1, 0)
+            # Restore label text color to white when enabled
+            self.blur_label.set_style_text_color(lv_colors.WHITE, 0)
 
             if getattr(self, "is_blur_active", False):
                 icon_path = _P13
