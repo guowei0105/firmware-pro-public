@@ -207,12 +207,13 @@ APP_DRAWER_UP_PATH_CB = PATH_EASE_OUT
 APP_DRAWER_DOWN_PATH_CB = PATH_EASE_OUT
 
 
-_BUSY_GRACE_MS = 300
+_BUSY_GRACE_MS = 800
 
 def _restore_idle(t):
     d = storage.cache.get_int(storage.cache.APP_COMMON_BUSY_DEADLINE_MS, 0)
     if d > 0 and utime.ticks_diff(utime.ticks_ms(), d) >= 0:
         storage.cache.delete(storage.cache.APP_COMMON_BUSY_DEADLINE_MS)
+        storage.cache.set_int(storage.cache.APP_COMMON_BUSY_STATE, 0)
         ms = MainScreen._instance if hasattr(MainScreen, "_instance") and MainScreen._instance else MainScreen()
         ms.change_state(False)
 
@@ -222,7 +223,9 @@ def change_state(is_busy: bool = False):
     if (fingerprints.is_available() and not fingerprints.is_unlocked()) or (not fingerprints.is_available() and not config.is_unlocked()):
         return
     if is_busy:
+        storage.cache.set_int(storage.cache.APP_COMMON_BUSY_STATE, 1)
         storage.cache.delete(storage.cache.APP_COMMON_BUSY_DEADLINE_MS)
+        storage.cache.set_int(storage.cache.APP_COMMON_BUSY_TIME, utime.ticks_ms())
         ms = MainScreen._instance if hasattr(MainScreen, "_instance") and MainScreen._instance else MainScreen()
         if not ms.is_visible():
             lv.scr_load(ms)
@@ -231,7 +234,9 @@ def change_state(is_busy: bool = False):
             ms.apps.visible = False
         ms.change_state(True)
     else:
-        storage.cache.set_int(storage.cache.APP_COMMON_BUSY_DEADLINE_MS, utime.ticks_add(utime.ticks_ms(), _BUSY_GRACE_MS))
+        now = utime.ticks_ms()
+        storage.cache.set_int(storage.cache.APP_COMMON_BUSY_TIME, now)
+        storage.cache.set_int(storage.cache.APP_COMMON_BUSY_DEADLINE_MS, utime.ticks_add(now, _BUSY_GRACE_MS))
         lv.timer_create(_restore_idle, _BUSY_GRACE_MS, None).set_repeat_count(1)
 
 
@@ -382,6 +387,19 @@ class MainScreen(Screen):
         MainScreen._instance = self
 
         save_app_obj(self)
+
+        busy_state = storage.cache.get_int(storage.cache.APP_COMMON_BUSY_STATE, 0) or 0
+        if busy_state:
+            try:
+                self.change_state(True)
+            except Exception:
+                pass
+            if hasattr(self, "apps") and self.apps:
+                try:
+                    self.apps.add_flag(lv.obj.FLAG.HIDDEN)
+                    self.apps.visible = False
+                except Exception:
+                    pass
 
     def on_main_gesture(self, event_obj):
         global _animation_in_progress

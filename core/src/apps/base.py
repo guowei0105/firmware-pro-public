@@ -486,6 +486,17 @@ def set_homescreen(show_app_guide: bool = False, prefer_appdrawer: bool = False)
         device_name = storage.device.get_label()
 
         if not device_is_unlocked():
+            try:
+                from trezor.lvglui.scrs.homescreen import MainScreen  # type: ignore
+
+                if hasattr(MainScreen, "_instance") and MainScreen._instance:
+                    try:
+                        MainScreen._instance.del_delayed(0)  # type: ignore[attr-defined]
+                    except Exception:
+                        pass
+                    MainScreen._instance = None  # type: ignore[attr-defined]
+            except Exception:
+                pass
             from trezor.lvglui.scrs.lockscreen import LockScreen
 
             # Bridge across module reloads
@@ -574,8 +585,6 @@ def get_state() -> str | None:
 
 
 def lock_device() -> None:
-    import gc
-
     if storage.device.is_initialized() and config.has_pin():
         from trezor.lvglui.scrs import fingerprints
 
@@ -589,7 +598,11 @@ def lock_device() -> None:
         wire.find_handler = get_pinlocked_handler
         set_homescreen()
         workflow.close_others()
-        gc.collect()
+        try:
+            storage.cache.delete(storage.cache.APP_COMMON_BUSY_DEADLINE_MS)
+            storage.cache.set_int(storage.cache.APP_COMMON_BUSY_STATE, 0)
+        except Exception:
+            pass
 
 
 def device_is_unlocked():

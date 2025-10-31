@@ -129,73 +129,14 @@ def set_up() -> None:
 
 
 def clear_screens() -> None:
-    """Delete non-core screens and deduplicate core screens.
-
-    - Non-core screens: delete and drop references.
-    - Core screens (LockScreen, MainScreen): keep only the most recent instance
-      to avoid multiple LVGL trees accumulating across module reloads.
-    """
-    core_names = ("LockScreen", "MainScreen")
-
-    # (diagnostic logging removed)
-
-    # Find the newest core screen instances (preserve the last occurrence for each).
-    newest_core: dict[str, object] = {}
-    for scr in reversed(SCREENS):
-        try:
-            name = scr.__class__.__name__
-        except BaseException:
-            continue
-        if name in core_names and name not in newest_core:
-            newest_core[name] = scr
-
-    new_list: list[object] = []
     for scr in SCREENS:
         try:
-            name = scr.__class__.__name__
-            if name in core_names:
-                # Keep only the newest instance of each core screen
-                if newest_core.get(name) is scr:
-                    new_list.append(scr)
-                else:
-                    # Older duplicate -> delete
-                    try:
-                        scr.del_delayed(500)
-                    except BaseException:
-                        pass
-                    try:
-                        # Clear singleton reference on the old class object if present
-                        del scr.__class__._instance  # type: ignore[attr-defined]
-                    except BaseException:
-                        pass
-                    try:
-                        del scr
-                    except BaseException:
-                        pass
-                continue
-
-            # Non-core screen: delete
-            try:
-                scr.del_delayed(500)
-            except BaseException:
-                pass
-            try:
-                del scr.__class__._instance  # type: ignore[attr-defined]
-            except BaseException:
-                pass
-            try:
-                del scr
-            except BaseException:
-                pass
+            scr.del_delayed(500)
+            del scr.__class__._instance
+            del scr
         except BaseException:
-            # On any unexpected error, skip to next.
             pass
-
-    # Rebuild SCREENS with only the kept newest core screens
     SCREENS.clear()
-    SCREENS.extend(new_list)
-
-    # (diagnostic logging removed)
 
 
 def try_remove_scr(screen):
