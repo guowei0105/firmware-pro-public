@@ -3516,6 +3516,34 @@ class AppdrawerBackgroundSetting(AnimScreen):
                 self.current_wallpaper_path = selected_wallpaper
                 if hasattr(self, "lockscreen_preview"):
                     self.lockscreen_preview.set_src(selected_wallpaper)
+            else:
+                # No new wallpaper provided, reload from storage and check if it still exists
+                from trezor import io
+                lockscreen_path = storage_device.get_homescreen()
+                if lockscreen_path:
+                    # Check if the wallpaper file still exists (may have been deleted)
+                    try:
+                        # Convert path for file system check
+                        if lockscreen_path.startswith("A:/res/wallpapers/"):
+                            file_path = lockscreen_path.replace("A:/res/wallpapers/", "1:/res/wallpapers/")
+                        elif lockscreen_path.startswith("A:/res/"):
+                            file_path = lockscreen_path[2:]
+                        elif lockscreen_path.startswith("A:1:/"):
+                            file_path = lockscreen_path[2:]
+                        else:
+                            file_path = lockscreen_path
+
+                        io.fatfs.stat(file_path)
+                        # File exists, use it
+                        self.current_wallpaper_path = lockscreen_path
+                        if hasattr(self, "lockscreen_preview"):
+                            self.lockscreen_preview.set_src(lockscreen_path)
+                    except:
+                        # File doesn't exist, use default black wallpaper (last built-in)
+                        self.current_wallpaper_path = "A:/res/wallpaper-7.jpg"
+                        if hasattr(self, "lockscreen_preview"):
+                            self.lockscreen_preview.set_src("A:/res/wallpaper-7.jpg")
+                        storage_device.set_homescreen("A:/res/wallpaper-7.jpg")
             self.refresh_text()
             return
 
@@ -3581,12 +3609,34 @@ class AppdrawerBackgroundSetting(AnimScreen):
             # Get current lock screen image from storage
             lockscreen_path = storage_device.get_homescreen()
             if lockscreen_path:
-                self.current_wallpaper_path = lockscreen_path
-                self.lockscreen_preview.set_src(lockscreen_path)
+                # Check if the wallpaper file still exists (may have been deleted)
+                try:
+                    from trezor import io
+                    # Convert path for file system check
+                    if lockscreen_path.startswith("A:/res/wallpapers/"):
+                        file_path = lockscreen_path.replace("A:/res/wallpapers/", "1:/res/wallpapers/")
+                    elif lockscreen_path.startswith("A:/res/"):
+                        file_path = lockscreen_path[2:]  # Remove "A:/" prefix
+                    elif lockscreen_path.startswith("A:1:/"):
+                        file_path = lockscreen_path[2:]  # Remove "A:" prefix
+                    else:
+                        file_path = lockscreen_path
+
+                    # Check if file exists
+                    io.fatfs.stat(file_path)
+                    # File exists, use it
+                    self.current_wallpaper_path = lockscreen_path
+                    self.lockscreen_preview.set_src(lockscreen_path)
+                except:
+                    # File doesn't exist, use default black wallpaper (last built-in)
+                    self.current_wallpaper_path = "A:/res/wallpaper-7.jpg"
+                    self.lockscreen_preview.set_src("A:/res/wallpaper-7.jpg")
+                    # Update storage to reflect the change
+                    storage_device.set_homescreen("A:/res/wallpaper-7.jpg")
             else:
-                # Use default wallpaper if no custom lockscreen is set
-                self.current_wallpaper_path = "A:/res/wallpaper-2.jpg"
-                self.lockscreen_preview.set_src("A:/res/wallpaper-2.jpg")
+                # Use default black wallpaper (last built-in) if no custom lockscreen is set
+                self.current_wallpaper_path = "A:/res/wallpaper-7.jpg"
+                self.lockscreen_preview.set_src("A:/res/wallpaper-7.jpg")
 
         self.lockscreen_preview.set_size(lv.SIZE.CONTENT, lv.SIZE.CONTENT)
         # Disable scrollbars on the image itself
@@ -3690,7 +3740,7 @@ class AppdrawerBackgroundSetting(AnimScreen):
             .text_align(lv.TEXT_ALIGN.CENTER),
             0,
         )
-        self.change_label.align(lv.ALIGN.BOTTOM_MID, 0, 0)
+        self.change_label.align_to(self.change_button, lv.ALIGN.OUT_BOTTOM_MID, 0, 4)
         # Make label clickable so text can also be clicked
         self.change_label.add_flag(lv.obj.FLAG.CLICKABLE)
         self.change_label.add_event_cb(self.on_select_clicked, lv.EVENT.CLICKED, None)
@@ -3883,6 +3933,9 @@ class WallperChange(AnimScreen):
             # Already initialized - refresh the container and recreate content
             if hasattr(self, "container"):
                 self.container.delete()
+            # Delete custom_header_container and its children (including buttons)
+            if hasattr(self, "custom_header_container"):
+                self.custom_header_container.delete()
             # Update prev_scr if provided
             if prev_scr is not None:
                 self.prev_scr = prev_scr
@@ -3933,12 +3986,13 @@ class WallperChange(AnimScreen):
         internal_wp_nums = 7
         custom_wp_nums = len(file_name_list)
 
-        # Calculate rows needed: Custom header + custom images (if any) + Pro header + pro images
+        # Calculate rows needed: custom images (if any) + Pro header + pro images
+        # Note: Custom header is now outside the grid (in content_area), so not included in row_dsc
         custom_rows = math.ceil(custom_wp_nums / 3) if custom_wp_nums > 0 else 0
         pro_rows = math.ceil(internal_wp_nums / 3)
 
-        # Build row description: Custom header + custom rows + Pro header + pro rows
-        row_dsc = [60]  # Custom header
+        # Build row description: custom rows + Pro header + pro rows (Custom header is outside grid)
+        row_dsc = []
         if custom_rows > 0:
             row_dsc.extend([GRID_CELL_SIZE_ROWS] * custom_rows)  # Custom images
             # Collection label: 32px top spacing + 60px label height + 16px bottom spacing = 108px total
@@ -3966,24 +4020,27 @@ class WallperChange(AnimScreen):
             row_dsc=row_dsc,
             col_dsc=col_dsc,
             pad_gap=12,
+            pad_hor=0,  # No horizontal padding - buttons reach screen edge
         )
-        self.container.align_to(self.nav_back, lv.ALIGN.OUT_BOTTOM_LEFT, -6, 20)
+        self.container.set_width(lv.pct(100))  # Full width to reach screen edges
+        # Position grid below the custom_header_container (136 + 60 = 196)
+        self.container.align(lv.ALIGN.TOP_MID, 0, 196)
 
         # Enable event bubbling for the container
         self.container.add_flag(lv.obj.FLAG.EVENT_BUBBLE)
 
         current_row = 0
 
-        # Custom section header container
-        self.custom_header_container = lv.obj(self.container)
+        # Custom section header container - placed in content_area to reach screen edges
+        self.custom_header_container = lv.obj(self.content_area)
         self.custom_header_container.set_size(lv.pct(100), 60)
         self.custom_header_container.clear_flag(lv.obj.FLAG.SCROLLABLE)
         self.custom_header_container.set_style_bg_opa(lv.OPA.TRANSP, 0)
         self.custom_header_container.set_style_border_opa(lv.OPA.TRANSP, 0)
-        self.custom_header_container.set_style_pad_all(0, 0)
-        self.custom_header_container.set_grid_cell(
-            lv.GRID_ALIGN.STRETCH, 0, 3, lv.GRID_ALIGN.START, current_row, 1
-        )
+        self.custom_header_container.set_style_pad_hor(0, 0)
+        self.custom_header_container.set_style_pad_ver(0, 0)
+        self.custom_header_container.set_style_clip_corner(False, 0)
+        self.custom_header_container.align(lv.ALIGN.TOP_MID, 0, 136)
 
         # Custom text on the left
         self.custom_header = lv.label(self.custom_header_container)
@@ -3997,94 +4054,44 @@ class WallperChange(AnimScreen):
         )
         self.custom_header.align(lv.ALIGN.LEFT_MID, 0, 0)
 
-        # Move to next row after custom header to prevent overlap
-        current_row += 1
+        # No need to increment current_row since custom_header_container is outside the grid now
 
-        # Edit/Delete/Done buttons on the right (only show if there are custom wallpapers)
         if file_name_list:
-            # Edit button - initially visible, positioned at the right edge
-            self.edit_button = lv.btn(self.custom_header_container)
-            self.edit_button.set_size(lv.SIZE.CONTENT, 50)  # Increased height for better click area
-            self.edit_button.add_style(
-                StyleWrapper()
-                .bg_opa(lv.OPA.TRANSP)
-                .border_opa(lv.OPA.TRANSP)
-                .pad_left(8)
-                .pad_right(8),  # Add horizontal padding for better spacing
-                0
-            )
-            self.edit_button.align(lv.ALIGN.RIGHT_MID, 4, 0)  # Slightly more to the right
+            btn_style = StyleWrapper().bg_opa(lv.OPA.TRANSP).border_opa(lv.OPA.TRANSP).pad_ver(5)
 
+            self.edit_button = lv.btn(self.custom_header_container)
+            self.edit_button.set_size(lv.SIZE.CONTENT, 60)
+            self.edit_button.add_style(btn_style.pad_left(12).pad_right(0), 0)
+            self.edit_button.align(lv.ALIGN.RIGHT_MID, 0, 0)
             self.edit_button_label = lv.label(self.edit_button)
             self.edit_button_label.set_text(_(i18n_keys.BUTTON__EDIT))
-            self.edit_button_label.add_style(
-                StyleWrapper().text_font(font_GeistSemiBold30), 0  # Match Custom title font size
-            )
+            self.edit_button_label.add_style(StyleWrapper().text_font(font_GeistSemiBold30), 0)
             self.edit_button_label.center()
-            self.edit_button_label.set_style_text_color(
-                lv.color_hex(0xD2D2D2), 0
-            )
+            self.edit_button_label.set_style_text_color(lv.color_hex(0xD2D2D2), 0)
+            self.edit_button.add_event_cb(self.on_edit_button_clicked, lv.EVENT.CLICKED, None)
 
-            self.edit_button.add_event_cb(
-                self.on_edit_button_clicked, lv.EVENT.CLICKED, None
-            )
-
-            # Done button - initially hidden, replaces Edit button position when in edit mode
-            # Create Done first so Delete can position relative to it
             self.done_button = lv.btn(self.custom_header_container)
-            self.done_button.set_size(lv.SIZE.CONTENT, 50)  # Increased height for better click area
-            self.done_button.add_style(
-                StyleWrapper()
-                .bg_opa(lv.OPA.TRANSP)
-                .border_opa(lv.OPA.TRANSP)
-                .pad_left(8)
-                .pad_right(8),  # Add horizontal padding for better spacing
-                0
-            )
-            self.done_button.align(lv.ALIGN.RIGHT_MID, 4, 0)  # Same position as Edit button
-            self.done_button.add_flag(lv.obj.FLAG.HIDDEN)  # Initially hidden
-
+            self.done_button.set_size(lv.SIZE.CONTENT, 60)
+            self.done_button.add_style(btn_style.pad_left(12).pad_right(0), 0)
+            self.done_button.align(lv.ALIGN.RIGHT_MID, 0, 0)
+            self.done_button.add_flag(lv.obj.FLAG.HIDDEN)
             self.done_button_label = lv.label(self.done_button)
             self.done_button_label.set_text(_(i18n_keys.BUTTON__DONE))
-            self.done_button_label.add_style(
-                StyleWrapper().text_font(font_GeistSemiBold30), 0  # Match Edit button font size
-            )
-            self.done_button_label.set_style_text_color(
-                lv.color_hex(0xD2D2D2), 0  # Match Edit button color
-            )
+            self.done_button_label.add_style(StyleWrapper().text_font(font_GeistSemiBold30), 0)
+            self.done_button_label.set_style_text_color(lv.color_hex(0xD2D2D2), 0)
             self.done_button_label.center()
+            self.done_button.add_event_cb(self.on_done_button_clicked, lv.EVENT.CLICKED, None)
 
-            self.done_button.add_event_cb(
-                self.on_done_button_clicked, lv.EVENT.CLICKED, None
-            )
-
-            # Delete button - initially hidden, appears to the left of Done when in edit mode
-            # Create as a separate container to ensure proper positioning
             self.delete_button = lv.btn(self.custom_header_container)
-            self.delete_button.set_size(lv.SIZE.CONTENT, 50)  # Increased height for better click area
-            self.delete_button.add_style(
-                StyleWrapper()
-                .bg_opa(lv.OPA.TRANSP)
-                .border_opa(lv.OPA.TRANSP)
-                .pad_left(8)
-                .pad_right(8),
-                0
-            )
-            self.delete_button.add_flag(lv.obj.FLAG.HIDDEN)  # Initially hidden
-
+            self.delete_button.set_size(lv.SIZE.CONTENT, 60)
+            self.delete_button.add_style(btn_style.pad_hor(8), 0)
+            self.delete_button.add_flag(lv.obj.FLAG.HIDDEN)
             self.delete_button_label = lv.label(self.delete_button)
             self.delete_button_label.set_text(_(i18n_keys.BUTTON__DELETE))
-            self.delete_button_label.add_style(
-                StyleWrapper().text_font(font_GeistSemiBold30), 0  # Match other buttons
-            )
+            self.delete_button_label.add_style(StyleWrapper().text_font(font_GeistSemiBold30), 0)
             self.delete_button_label.center()
-            self.delete_button_label.set_style_text_color(
-                lv.color_hex(0xFF3B30), 0  # Red color for delete action
-            )
-
-            self.delete_button.add_event_cb(
-                self.on_delete_button_clicked, lv.EVENT.CLICKED, None
-            )
+            self.delete_button_label.set_style_text_color(lv.color_hex(0xFF3B30), 0)
+            self.delete_button.add_event_cb(self.on_delete_button_clicked, lv.EVENT.CLICKED, None)
 
         # Custom wallpapers
         self.wps = []
@@ -4512,10 +4519,8 @@ class WallperChange(AnimScreen):
         # Move selected wallpapers to marked_for_deletion and delete immediately
         self.marked_for_deletion = self.selected_wallpapers.copy()
         self.delete_marked_files()
-        self.selected_wallpapers.clear()
-
-        # Exit edit mode after deletion
-        self._exit_edit_mode(commit=False)
+        # No need to call _exit_edit_mode or clear selected_wallpapers
+        # delete_marked_files() calls __init__ which recreates everything in non-edit mode
 
     def on_done_button_clicked(self, event_obj):
         if not self.edit_mode:
@@ -6184,7 +6189,15 @@ class HomeScreenSetting(AnimScreen):
                 # Update blur button state
                 if hasattr(self, "blur_button"):
                     self._update_blur_button_state()
-
+            else:
+                # No new wallpaper provided, reload from storage and check if it still exists
+                self._load_blur_state()
+                # Update the preview if it exists
+                if hasattr(self, "homescreen_preview"):
+                    self.homescreen_preview.set_src(self.current_wallpaper_path)
+                # Update blur button state
+                if hasattr(self, "blur_button"):
+                    self._update_blur_button_state()
 
             return
 
@@ -6390,7 +6403,7 @@ class HomeScreenSetting(AnimScreen):
             .text_align(lv.TEXT_ALIGN.CENTER),
             0,
         )
-        label.align(lv.ALIGN.BOTTOM_MID, 0, 0)
+        label.align_to(button, lv.ALIGN.OUT_BOTTOM_MID, 0, 4)
         # Make label clickable so text can also be clicked
         label.add_flag(lv.obj.FLAG.CLICKABLE)
         label.add_event_cb(callback, lv.EVENT.CLICKED, None)
@@ -6694,6 +6707,14 @@ class HomeScreenSetting(AnimScreen):
                 or "A:/res/wallpaper-2.jpg"
             )
 
+            # Check if the wallpaper file still exists (may have been deleted)
+            if not self._blur_wallpaper_exists(current_homescreen):
+                # Wallpaper was deleted, use default black wallpaper (last built-in wallpaper)
+                current_homescreen = "A:/res/wallpaper-7.jpg"
+                # Update storage to reflect the change
+                storage_device.set_appdrawer_background(current_homescreen)
+                storage_device.set_homescreen(current_homescreen)
+
             # Check if current homescreen is a blur version (contains '-blur')
             if "-blur." in current_homescreen:
                 # Currently showing blur version
@@ -6717,8 +6738,8 @@ class HomeScreenSetting(AnimScreen):
                 self.current_wallpaper_path = current_homescreen
 
         except Exception as e:
-            # Fallback to safe defaults
-            current_homescreen = "A:/res/wallpaper-2.jpg"
+            # Fallback to safe defaults (black wallpaper - last built-in)
+            current_homescreen = "A:/res/wallpaper-7.jpg"
             self.original_wallpaper_path = current_homescreen
             self.current_wallpaper_path = current_homescreen
             self.is_blur_active = False
