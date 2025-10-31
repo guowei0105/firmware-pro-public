@@ -883,47 +883,29 @@ def get_label() -> str:
     """
     global _LABEL_VALUE
     if _LABEL_VALUE is None:
-        print("[storage.device.get_label] _LABEL_VALUE is None, reading from storage")
-        
         label = common.get(_NAMESPACE, _LABEL, True)  # public
-        print(f"[storage.device.get_label] Read label from storage: {label}")
-        
+
         if label is None:
-            print("[storage.device.get_label] No label found, checking deprecated label")
             previous_label_len = common.get_val_len(_NAMESPACE, _LABEL_DEPRECATED, True)
             if (
                 previous_label_len is not None
                 and 0 < previous_label_len < PREVIOUS_LABEL_MAXLENGTH
             ):
                 label = common.get(_NAMESPACE, _LABEL_DEPRECATED, True)
-                print(f"[storage.device.get_label] Found deprecated label: {label}")
-        
+
         _LABEL_VALUE = label.decode() if label else utils.DEFAULT_LABEL
-        print(f"[storage.device.get_label] Final _LABEL_VALUE: '{_LABEL_VALUE}'")
-    else:
-        print(f"[storage.device.get_label] Using cached _LABEL_VALUE: '{_LABEL_VALUE}'")
-    
+
     return _LABEL_VALUE
 
 
 def set_label(label: str) -> None:
     global _LABEL_VALUE
-    print(f"[storage.device.set_label] Setting label to: '{label}'")
-    print(f"[storage.device.set_label] Current _LABEL_VALUE: {_LABEL_VALUE}")
-    print(f"[storage.device.set_label] Label UTF-8 length: {len(label.encode('utf-8'))}")
-    
+
     if len(label.encode("utf-8")) > LABEL_MAXLENGTH:
-        print(f"[storage.device.set_label] Label too long: {len(label.encode('utf-8'))} > {LABEL_MAXLENGTH}")
         raise ValueError  # label too long
-    
-    try:
-        common.set(_NAMESPACE, _LABEL, label.encode(), True)  # public
-        _LABEL_VALUE = label
-        print(f"[storage.device.set_label] Label successfully stored in flash memory")
-        print(f"[storage.device.set_label] New _LABEL_VALUE: {_LABEL_VALUE}")
-    except Exception as e:
-        print(f"[storage.device.set_label] Failed to store label: {e}")
-        raise
+
+    common.set(_NAMESPACE, _LABEL, label.encode(), True)  # public
+    _LABEL_VALUE = label
 
 
 def get_language() -> str:

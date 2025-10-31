@@ -652,31 +652,44 @@ class NftLockScreenPreview(WallpaperPreviewBase):
                                 main_screen.apps.refresh_background()
 
 
-                        # Force refresh LockScreen if it exists to apply new NFT background
+                        # CRITICAL: Clear caches BEFORE deleting LockScreen instance
+                        try:
+                            lv.img.cache_invalidate_src(lockscreen_path)
+                        except Exception:
+                            pass
+
+                        try:
+                            import trezor.lvglui.scrs.homescreen as hs_mod
+                            hs_mod._last_jpeg_loaded = None
+                        except Exception:
+                            pass
+
+                        # Delete LockScreen instance to force recreation with new wallpaper
+                        # This is the correct approach - don't try to update existing instance
                         try:
                             from .lockscreen import LockScreen
-
                             if (
                                 hasattr(LockScreen, "_instance")
                                 and LockScreen._instance
                             ):
-                                lock_screen = LockScreen._instance
-                                # For NFT lockscreens, try different background image settings
-                                style = (
-                                    StyleWrapper()
-                                    .bg_img_src(
-                                        _safe_wallpaper_src(
-                                            lockscreen_path,
-                                            _S2,
-                                        )
-                                    )
-                                    .bg_img_opa(lv.OPA._40)
-                                )
-                                lock_screen.add_style(style, 0)
-                                lock_screen.invalidate()
-                        except Exception as e:
-                            if __debug__:
-                                pass  # print removed to reduce qstr usage
+                                # CRITICAL: Remove from utils.SCREENS to prevent resurrection
+                                try:
+                                    old_instance = LockScreen._instance
+                                    if hasattr(utils, "SCREENS") and old_instance in utils.SCREENS:
+                                        utils.SCREENS.remove(old_instance)
+                                except Exception:
+                                    pass
+
+                                # Clear _init flag to force full re-initialization
+                                try:
+                                    if hasattr(LockScreen._instance, "_init"):
+                                        delattr(LockScreen._instance, "_init")
+                                except Exception:
+                                    pass
+
+                                del LockScreen._instance
+                        except Exception:
+                            pass
                     except Exception as e:
                         if __debug__:
                             pass  # print removed to reduce qstr usage
@@ -803,6 +816,19 @@ class NftHomeScreenPreview(WallpaperPreviewBase):
                             # Also refresh AppDrawer if it exists
                             if hasattr(main_screen, "apps") and main_screen.apps:
                                 main_screen.apps.refresh_background()
+
+                            # Clear image cache to ensure new wallpaper loads properly
+                            try:
+                                lv.img.cache_invalidate_src(wallpaper_path)
+                            except Exception:
+                                pass
+
+                            # Clear Python-side JPEG cache
+                            try:
+                                import trezor.lvglui.scrs.homescreen as hs_mod
+                                hs_mod._last_jpeg_loaded = None
+                            except Exception:
+                                pass
 
                     except Exception as e:
                         if __debug__:

@@ -125,7 +125,7 @@ async def upload_res(ctx: wire.Context, msg: ResourceUpload) -> Success:
     # Clear LVGL image cache to free up texture memory
     try:
         from trezor.lvglui.scrs.common import lv
-        lv.img_cache_invalidate_src(None)  # Clear all cached images
+        lv.img.cache_invalidate_src(None)  # Clear all cached images
     except Exception as e:
         pass
 

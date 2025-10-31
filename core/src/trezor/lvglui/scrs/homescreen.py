@@ -159,7 +159,7 @@ def force_memory_cleanup():
 
 
 def _clr_img_cache():
-    lv.img_cache_invalidate_src(None)
+    lv.img.cache_invalidate_src(None)
     gc.collect()
 
 
@@ -182,7 +182,7 @@ def get_cached_style(image_src):
                 keys_to_remove = list(_cached_styles.keys())[:10]
 
             for key in keys_to_remove:
-                lv.img_cache_invalidate_src(key)
+                lv.img.cache_invalidate_src(key)
                 del _cached_styles[key]
 
         _cached_styles[safe_src] = StyleWrapper().bg_img_src(safe_src).border_width(0)
@@ -3813,12 +3813,27 @@ class AppdrawerBackgroundSetting(AnimScreen):
         if hasattr(self, "rti_btn") and target == self.rti_btn:
             current_wallpaper = getattr(self, "current_wallpaper_path", None)
             if current_wallpaper:
+                # Save old wallpaper path BEFORE setting new one
+                old_wallpaper = storage_device.get_homescreen()
+
                 storage_device.set_homescreen(current_wallpaper)
 
                 # Clear Layer2 cache only, not LVGL image cache
                 # Clearing all image cache causes freeze with many cached wallpaper previews
                 global _last_jpeg_loaded
                 _last_jpeg_loaded = None
+
+                # CRITICAL: Clear LVGL image cache for BOTH old and new wallpapers
+                try:
+                    # Clear old wallpaper cache
+                    if old_wallpaper:
+                        lv.img.cache_invalidate_src(old_wallpaper)
+                    # Clear new wallpaper cache
+                    lv.img.cache_invalidate_src(current_wallpaper)
+                    # Clear all caches for good measure
+                    lv.img.cache_invalidate_src(None)
+                except Exception:
+                    pass
 
                 # Update MainScreen background
                 if hasattr(MainScreen, "_instance") and MainScreen._instance:
@@ -3830,6 +3845,22 @@ class AppdrawerBackgroundSetting(AnimScreen):
                 # Delete LockScreen instance to force recreation with new wallpaper
                 from .lockscreen import LockScreen
                 if hasattr(LockScreen, "_instance") and LockScreen._instance:
+                    # CRITICAL: Remove from utils.SCREENS to prevent resurrection
+                    try:
+                        old_instance = LockScreen._instance
+                        if hasattr(utils, "SCREENS") and old_instance in utils.SCREENS:
+                            utils.SCREENS.remove(old_instance)
+                    except Exception:
+                        pass
+
+                    # Clear _init flag to force full re-initialization
+                    try:
+                        if hasattr(LockScreen._instance, "_init"):
+                            delattr(LockScreen._instance, "_init")
+                    except Exception:
+                        pass
+
+                    # Delete the instance reference
                     del LockScreen._instance
 
             if self.prev_scr is not None:
