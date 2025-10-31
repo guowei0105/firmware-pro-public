@@ -3642,11 +3642,27 @@ class AppdrawerBackgroundSetting(AnimScreen):
         self.bluetooth_label.align_to(
             self.device_name_label, lv.ALIGN.OUT_BOTTOM_MID, 0, 8
         )
-        self.change_button = lv.btn(self.container)
-        self.change_button.set_size(64, 64)
-        self.change_button.align_to(
+
+        # Create container for larger click area (120px wide)
+        self.change_button_container = lv.obj(self.container)
+        self.change_button_container.set_size(120, 100)  # 120px wide, height for button + label
+        self.change_button_container.align_to(
             self.preview_container, lv.ALIGN.OUT_BOTTOM_MID, 0, 10
         )
+        self.change_button_container.add_style(
+            StyleWrapper()
+            .bg_opa(lv.OPA.TRANSP)  # Transparent background
+            .border_width(0)
+            .pad_all(0),
+            0
+        )
+        self.change_button_container.add_flag(lv.obj.FLAG.CLICKABLE)
+        self.change_button_container.clear_flag(lv.obj.FLAG.SCROLLABLE)
+
+        # Create button inside container
+        self.change_button = lv.btn(self.change_button_container)
+        self.change_button.set_size(64, 64)
+        self.change_button.align(lv.ALIGN.TOP_MID, 0, 0)
         if "appdrawer_change_button" not in _cached_styles:
             _cached_styles["appdrawer_change_button"] = (
                 StyleWrapper()
@@ -3664,8 +3680,8 @@ class AppdrawerBackgroundSetting(AnimScreen):
         self.button_icon.set_antialias(True)  # Enable anti-aliasing for smooth edges
         self.button_icon.align(lv.ALIGN.CENTER, 0, 0)
 
-        # "Change" text below button
-        self.change_label = lv.label(self.container)
+        # "Change" text below button (inside container)
+        self.change_label = lv.label(self.change_button_container)
         self.change_label.set_text(_(i18n_keys.BUTTON__CHANGE))
         self.change_label.add_style(
             StyleWrapper()
@@ -3674,13 +3690,14 @@ class AppdrawerBackgroundSetting(AnimScreen):
             .text_align(lv.TEXT_ALIGN.CENTER),
             0,
         )
-        self.change_label.align_to(self.change_button, lv.ALIGN.OUT_BOTTOM_MID, 0, 4)
+        self.change_label.align(lv.ALIGN.BOTTOM_MID, 0, 0)
         # Make label clickable so text can also be clicked
         self.change_label.add_flag(lv.obj.FLAG.CLICKABLE)
         self.change_label.add_event_cb(self.on_select_clicked, lv.EVENT.CLICKED, None)
 
         # Add event handlers
         self.change_button.add_event_cb(self.on_select_clicked, lv.EVENT.CLICKED, None)
+        self.change_button_container.add_event_cb(self.on_select_clicked, lv.EVENT.CLICKED, None)
         # Don't make the preview image clickable
 
         # Add event handler for button_icon: click to go to HomeScreenSetting
@@ -3702,7 +3719,8 @@ class AppdrawerBackgroundSetting(AnimScreen):
 
     def on_select_clicked(self, event_obj):
         target = event_obj.get_target()
-        if target == self.change_button:
+        # Check if any part of the Change button was clicked
+        if target in [self.change_button_container, self.change_button, self.change_label]:
             # Navigate to WallperChange for wallpaper selection
             WallperChange(self)
 
@@ -4419,7 +4437,8 @@ class WallperChange(AnimScreen):
 
     def on_select_clicked(self, event_obj):
         target = event_obj.get_target()
-        if target == self.change_button:
+        # Check if any part of the Change button was clicked
+        if target in [self.change_button_container, self.change_button, self.change_label]:
             # Navigate to WallperChange for wallpaper selection
             WallperChange(self)
 
@@ -6284,25 +6303,35 @@ class HomeScreenSetting(AnimScreen):
         except Exception:
             pass
         # Change button left-aligned, Blur button right-aligned
-        self.change_button.align_to(
+        self.change_button_container.align_to(
             self.preview_container, lv.ALIGN.OUT_BOTTOM_LEFT, 50, 10
         )
-        self.blur_button.align_to(
+        self.blur_button_container.align_to(
             self.preview_container, lv.ALIGN.OUT_BOTTOM_RIGHT, -50, 10
         )
-
-        # Realign labels
-        self.change_label.align_to(self.change_button, lv.ALIGN.OUT_BOTTOM_MID, 0, 4)
-        self.blur_label.align_to(self.blur_button, lv.ALIGN.OUT_BOTTOM_MID, 0, 4)
         # AnimScreen.__init__ already loads the screen; avoid double-loading here
         gc.collect()
 
     def _create_button_with_label(self, icon_path, text, callback):
 
-        # Create button
-        button = lv.btn(self.container)
+        # Create container for larger click area (120px wide)
+        button_container = lv.obj(self.container)
+        button_container.set_size(120, 100)  # 120px wide, height for button + label
+        button_container.align_to(self.preview_container, lv.ALIGN.OUT_BOTTOM_MID, 0, 8)
+        button_container.add_style(
+            StyleWrapper()
+            .bg_opa(lv.OPA.TRANSP)  # Transparent background
+            .border_width(0)
+            .pad_all(0),
+            0
+        )
+        button_container.add_flag(lv.obj.FLAG.CLICKABLE)
+        button_container.clear_flag(lv.obj.FLAG.SCROLLABLE)
+
+        # Create button inside container (keep original 64x64 size)
+        button = lv.btn(button_container)
         button.set_size(64, 64)
-        button.align_to(self.preview_container, lv.ALIGN.OUT_BOTTOM_MID, 0, 8)
+        button.align(lv.ALIGN.TOP_MID, 0, 0)
         button.add_style(
             StyleWrapper()
             .border_width(0)
@@ -6320,8 +6349,8 @@ class HomeScreenSetting(AnimScreen):
         icon.set_antialias(True)  # Enable anti-aliasing for smooth edges
         icon.align(lv.ALIGN.CENTER, 0, 0)
 
-        # Create label
-        label = lv.label(self.container)
+        # Create label inside container
+        label = lv.label(button_container)
         label.set_text(text)
         label.add_style(
             StyleWrapper()
@@ -6330,20 +6359,22 @@ class HomeScreenSetting(AnimScreen):
             .text_align(lv.TEXT_ALIGN.CENTER),
             0,
         )
-        label.align_to(button, lv.ALIGN.OUT_BOTTOM_MID, 0, 4)
+        label.align(lv.ALIGN.BOTTOM_MID, 0, 0)
         # Make label clickable so text can also be clicked
         label.add_flag(lv.obj.FLAG.CLICKABLE)
         label.add_event_cb(callback, lv.EVENT.CLICKED, None)
 
-        # Add event callback to button
+        # Add event callback to button and container
         button.add_event_cb(callback, lv.EVENT.CLICKED, None)
+        button_container.add_event_cb(callback, lv.EVENT.CLICKED, None)
 
-        return button, icon, label
+        return button_container, button, icon, label
 
     def _create_buttons(self):
 
         # Create Change button
         (
+            self.change_button_container,
             self.change_button,
             self.button_icon,
             self.change_label,
@@ -6355,6 +6386,7 @@ class HomeScreenSetting(AnimScreen):
 
         # Create Blur button
         (
+            self.blur_button_container,
             self.blur_button,
             self.blur_button_icon,
             self.blur_label,
