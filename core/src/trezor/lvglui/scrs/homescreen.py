@@ -926,7 +926,7 @@ class MainScreen(Screen):
             try:
                 cache_set_size = getattr(getattr(lv, "img", None), "cache_set_size", None)
                 if cache_set_size:
-                    cache_set_size(icon_count + 2)
+                    cache_set_size(max(icon_count + 2, 20))
             except Exception:
                 pass
 
@@ -4052,7 +4052,7 @@ class WallperChange(AnimScreen):
             .text_align(lv.TEXT_ALIGN.LEFT),
             0,
         )
-        self.custom_header.align(lv.ALIGN.LEFT_MID, 0, 0)
+        self.custom_header.align(lv.ALIGN.LEFT_MID, 12, 0)  # 12px from left edge, matching Edit button's pad_left
 
         # No need to increment current_row since custom_header_container is outside the grid now
 
@@ -4062,7 +4062,7 @@ class WallperChange(AnimScreen):
             self.edit_button = lv.btn(self.custom_header_container)
             self.edit_button.set_size(lv.SIZE.CONTENT, 60)
             self.edit_button.add_style(btn_style.pad_left(12).pad_right(0), 0)
-            self.edit_button.align(lv.ALIGN.RIGHT_MID, 0, 0)
+            self.edit_button.align(lv.ALIGN.RIGHT_MID, -12, 0)  # 12px from right edge
             self.edit_button_label = lv.label(self.edit_button)
             self.edit_button_label.set_text(_(i18n_keys.BUTTON__EDIT))
             self.edit_button_label.add_style(StyleWrapper().text_font(font_GeistSemiBold30), 0)
@@ -4073,7 +4073,7 @@ class WallperChange(AnimScreen):
             self.done_button = lv.btn(self.custom_header_container)
             self.done_button.set_size(lv.SIZE.CONTENT, 60)
             self.done_button.add_style(btn_style.pad_left(12).pad_right(0), 0)
-            self.done_button.align(lv.ALIGN.RIGHT_MID, 0, 0)
+            self.done_button.align(lv.ALIGN.RIGHT_MID, -12, 0)  # 12px from right edge
             self.done_button.add_flag(lv.obj.FLAG.HIDDEN)
             self.done_button_label = lv.label(self.done_button)
             self.done_button_label.set_text(_(i18n_keys.BUTTON__DONE))
