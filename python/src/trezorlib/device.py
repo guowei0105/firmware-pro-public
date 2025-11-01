@@ -58,6 +58,13 @@ def apply_settings(
     )
 
     out = client.call(settings)
+
+    # Changing passphrase requires the device UI to settle back from the busy state.
+    # Give firmware a short quiet window before re-polling features; otherwise the
+    # homescreen remains stuck showing "Processing".
+    if use_passphrase is not None:
+        time.sleep(1.0)
+
     client.refresh_features()
     return out
 

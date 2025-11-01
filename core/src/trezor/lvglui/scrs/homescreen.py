@@ -60,112 +60,91 @@ _active_timers = []
 _cached_styles = {}
 
 
-def _hide_cover_background():
-    from trezorui import Display
-    d = Display()
-    if hasattr(d, "cover_background_hide"):
-        d.cover_background_hide()
-    if hasattr(d, "cover_background_set_visible"):
-        d.cover_background_set_visible(False)
-    if hasattr(d, "cover_background_move_to_y"):
-        d.cover_background_move_to_y(-800)
+def _normalize_wallpaper_src(raw, *, allow_default: bool = True, default=None) -> str:
+    if isinstance(raw, bytes):
+        if hasattr(raw, "decode"):
+            raw = raw.decode("utf-8", "ignore")
+        else:
+            raw = ""
+    if not raw and allow_default:
+        raw = default if default is not None else utils.get_default_wallpaper()
+    return raw or ""
 
 
-def cancel_pending_animations() -> None:
-    global _animation_in_progress
-    cleanup_timers()
-    _animation_in_progress = False
-    lv.timer_handler_resume()
-    _hide_cover_background()
+def _wallpaper_display_path() -> str:
+    raw = _normalize_wallpaper_src(storage_device.get_homescreen())
+    if raw.startswith("A:/"):
+        if "/res/nfts/" in raw:
+            return "1:" + raw[2:]
+        return raw[3:]
+    if raw.startswith("A:1:"):
+        return raw[2:]
+    return raw
 
 
-def show_appdrawer_immediate() -> bool:
-    try:
-        # Ensure we have a MainScreen instance
-        ms = None
-        if hasattr(MainScreen, "_instance") and MainScreen._instance:
-            ms = MainScreen._instance
-
-        if ms is None:
-            # Best-effort: try to find an existing MainScreen in utils.SCREENS
-            import trezor.utils as _utils
-            for _scr in reversed(_utils.SCREENS):
-                if _scr.__class__.__name__ == "MainScreen":
-                    ms = _scr
-                    MainScreen._instance = _scr  # type: ignore[attr-defined]
-                    break
-
-        if ms is None:
-            return False
-
-        # Cancel any animations and hide temporary cover layers
-        cancel_pending_animations()
-
-        # Refresh the background for AppDrawer
-        if hasattr(ms, "refresh_appdrawer_background"):
-            ms.refresh_appdrawer_background()
-
-        # Hide main screen elements
-        ms.hidden_others(True)
-        if hasattr(ms, "up_arrow") and ms.up_arrow:
-            ms.up_arrow.add_flag(lv.obj.FLAG.HIDDEN)
-        if hasattr(ms, "bottom_tips") and ms.bottom_tips:
-            ms.bottom_tips.add_flag(lv.obj.FLAG.HIDDEN)
-
-        # Show AppDrawer content immediately
-        if not hasattr(ms, "apps") or not ms.apps:
-            return False
-
-        ms.apps.clear_flag(lv.obj.FLAG.HIDDEN)
-        ms.apps.clear_flag(lv.obj.FLAG.GESTURE_BUBBLE)
-        ms.apps.visible = True
-
-        # Ensure the screen is active and refresh once
-        if lv.scr_act() != ms:
-            lv.scr_load(ms)
-        lv.refr_now(None)
-
-        return True
-    except Exception:
+def _ensure_layer2_background(display) -> bool:
+    loader = getattr(display, "cover_background_load_jpeg", None)
+    if not loader:
         return False
+    path = _wallpaper_display_path()
+    global _last_jpeg_loaded
+    if _last_jpeg_loaded == path:
+        return True
+    loader(path)
+    _last_jpeg_loaded = path
+    return True
 
 
- 
-def _lvgl_safe_wallpaper_src(path, context: str = "") -> str:
+def _set_layer2_visibility(display, visible: bool, position: int | None = None) -> None:
+    setter = getattr(display, "cover_background_set_visible", None)
+    mover = getattr(display, "cover_background_move_to_y", None)
+    shower = getattr(display, "cover_background_show", None)
+    hider = getattr(display, "cover_background_hide", None)
+    if visible:
+        if setter:
+            setter(True)
+        if shower:
+            shower()
+        if mover and position is not None:
+            mover(position)
+    else:
+        if setter:
+            setter(False)
+        if hider:
+            hider()
 
-    if not path:
-        return utils.get_default_wallpaper()
-    if isinstance(path, bytes):
-        try:
-            path = path.decode()
-        except Exception:
-            return utils.get_default_wallpaper()
-    return path
 
 def cleanup_timers():
     global _active_timers
     for t in _active_timers:
-        try:
-            if t: t.delete()
-        except: pass
+        if t and hasattr(t, "delete"):
+            t.delete()
     _active_timers.clear()
 
 
-def force_memory_cleanup():
-    for i in range(5): gc.collect()
-    global _cached_styles
-    if len(_cached_styles) > 2:
-        for k in list(_cached_styles.keys())[:-2]: del _cached_styles[k]
+def _schedule_once(delay_ms: int, callback):
+    timer = lv.timer_create(lambda _t: callback(), delay_ms, None)
+    timer.set_repeat_count(1)
+    _active_timers.append(timer)
+    return timer
 
 
-def _clr_img_cache():
-    lv.img.cache_invalidate_src(None)
-    gc.collect()
+def _with_lvgl_timer_pause(func, *args, **kwargs):
+    pause_handler = getattr(lv, "timer_handler_pause", None)
+    resume_handler = getattr(lv, "timer_handler_resume", None)
+    if pause_handler:
+        pause_handler()
+    result = func(*args, **kwargs)
+    if resume_handler:
+        resume_handler()
+    return result
 
 
 def get_cached_style(image_src):
     global _cached_styles
-    safe_src = _lvgl_safe_wallpaper_src(image_src, "get_cached_style")
+    safe_src = _normalize_wallpaper_src(image_src)
+    if not safe_src:
+        safe_src = utils.get_default_wallpaper()
     if safe_src not in _cached_styles:
         # Optimize cache management: increased from 30 to 50 to reduce clearing frequency
         # This helps preserve icon cache during wallpaper browsing
@@ -244,8 +223,7 @@ class MainScreen(Screen):
     def __init__(self, device_name=None, ble_name=None, dev_state=None):
         import storage.device as storage_device
 
-        lockscreen = storage_device.get_homescreen()
-        safe_lockscreen = _lvgl_safe_wallpaper_src(lockscreen, "MainScreen.init")
+        lockscreen = _normalize_wallpaper_src(storage_device.get_homescreen())
         if not hasattr(self, "_init"):
             self._init = True
 
@@ -267,10 +245,7 @@ class MainScreen(Screen):
                 super().__init__()
 
             # Set background for first-time initialization
-            self.add_style(
-                StyleWrapper().bg_img_src(safe_lockscreen),
-                0,
-            )
+            self.add_style(StyleWrapper().bg_img_src(lockscreen), 0)
         else:
             # Check if device name display setting has changed
             show_device_names = storage_device.is_device_name_display_enabled()
@@ -311,12 +286,8 @@ class MainScreen(Screen):
                     self.subtitle.add_flag(lv.obj.FLAG.HIDDEN)
                     self.subtitle.set_text("")
 
-            lockscreen = storage_device.get_homescreen()
-            safe_lockscreen = _lvgl_safe_wallpaper_src(lockscreen, "MainScreen.update")
-            self.add_style(
-                StyleWrapper().bg_img_src(safe_lockscreen),
-                0,
-            )
+            lockscreen = _normalize_wallpaper_src(storage_device.get_homescreen())
+            self.add_style(StyleWrapper().bg_img_src(lockscreen), 0)
             if hasattr(self, "dev_state"):
                 from apps.base import get_state
 
@@ -351,14 +322,8 @@ class MainScreen(Screen):
             else:
                 self.dev_state.align_to(self.content_area, lv.ALIGN.TOP_MID, 0, 124)
             self.dev_state.show(dev_state)
-        self.add_style(
-            StyleWrapper().bg_img_src(
-                _lvgl_safe_wallpaper_src(
-                    storage_device.get_homescreen(), "MainScreen.post_init"
-                )
-            ),
-            0,
-        )
+        post_lock = _normalize_wallpaper_src(storage_device.get_homescreen())
+        self.add_style(StyleWrapper().bg_img_src(post_lock), 0)
         self.clear_flag(lv.obj.FLAG.SCROLLABLE)
         self.bottom_tips = lv.label(self.content_area)
         self.bottom_tips.set_long_mode(lv.label.LONG.WRAP)
@@ -390,16 +355,10 @@ class MainScreen(Screen):
 
         busy_state = storage.cache.get_int(storage.cache.APP_COMMON_BUSY_STATE, 0) or 0
         if busy_state:
-            try:
-                self.change_state(True)
-            except Exception:
-                pass
+            self.change_state(True)
             if hasattr(self, "apps") and self.apps:
-                try:
-                    self.apps.add_flag(lv.obj.FLAG.HIDDEN)
-                    self.apps.visible = False
-                except Exception:
-                    pass
+                self.apps.add_flag(lv.obj.FLAG.HIDDEN)
+                self.apps.visible = False
 
     def on_main_gesture(self, event_obj):
         global _animation_in_progress
@@ -418,125 +377,87 @@ class MainScreen(Screen):
 
 
             # Strict control: only allow UP gesture
+            # 仅允许向上滑动触发应用抽屉
             if _dir == lv.DIR.TOP:
                 self.refresh_appdrawer_background()
                 self.show_appdrawer_simple()
 
+    # 主屏向上滑动时开启应用抽屉动画
     def show_appdrawer_simple(self):
         global _animation_in_progress
 
-        # Prevent duplicate calls
-        if _animation_in_progress:
+        if _animation_in_progress or not (hasattr(self, "apps") and self.apps):
             return
 
-        if hasattr(self, "apps") and self.apps:
-            try:
-                _animation_in_progress = True
+        from trezorui import Display
 
-                from trezorui import Display
+        display = Display()
+        # 利用硬件层背景实现向上滑出的过渡动画
+        background_ready = _ensure_layer2_background(display)
+        can_animate = (
+            background_ready
+            and hasattr(display, "cover_background_animate_to_y")
+            and hasattr(display, "cover_background_move_to_y")
+        )
 
-                display = Display()
+        if can_animate:
+            _set_layer2_visibility(display, True, position=0)
 
-                # Step 1: Load and display layer2 background
-                if hasattr(display, "cover_background_load_jpeg"):
+        self._show_appdrawer_contents()
 
-                        from storage import device
+        if not can_animate:
+            return
 
-                        lockscreen_path = device.get_homescreen()
+        _animation_in_progress = True
 
-                        if not lockscreen_path:
-                            display_path = "res/wallpaper-1.jpg"
-                        else:
-                            if lockscreen_path.startswith("A:/"):
-                                # Special handling for NFT files
-                                if "/res/nfts/" in lockscreen_path:
-                                    display_path = (
-                                        "1:" + lockscreen_path[2:]
-                                    )  # A:/res/nfts/... -> 1:/res/nfts/...
-                                else:
-                                    display_path = lockscreen_path[
-                                        3:
-                                    ]  # A:/res/wallpapers/... -> res/wallpapers/...
-                            elif lockscreen_path.startswith("A:1:"):
-                                display_path = lockscreen_path[
-                                    2:
-                                ]  # A:1:/res/wallpapers/xxx -> 1:/res/wallpapers/xxx
-                            else:
-                                display_path = lockscreen_path
+        def start_layer2_animation():
+            global _animation_in_progress
+            # 启动 Layer2 向上的滑动动画，同时处理异常兜底
+            _with_lvgl_timer_pause(display.cover_background_animate_to_y, -800, 200)
 
+            def on_slide_complete():
+                global _animation_in_progress
+                # Layer2 收起后关闭覆盖层并清理资源
+                _set_layer2_visibility(display, False)
+                _animation_in_progress = False
+                cleanup_timers()
 
-                        global _last_jpeg_loaded
-                        if _last_jpeg_loaded != display_path:
-                            display.cover_background_load_jpeg(display_path)
-                            _last_jpeg_loaded = display_path
+            _schedule_once(200, on_slide_complete)
 
-                if hasattr(display, "cover_background_animate_to_y"):
-                    if hasattr(display, "cover_background_set_visible"):
-                        display.cover_background_set_visible(True)
-                    if hasattr(display, "cover_background_show"):
-                        display.cover_background_show()
-                    display.cover_background_move_to_y(0)
-                    def show_appdrawer_behind_layer2():
-                        self.hidden_others(True)
-                        if hasattr(self, "up_arrow"):
-                            self.up_arrow.add_flag(lv.obj.FLAG.HIDDEN)
-                        if hasattr(self, "bottom_tips"):
-                            self.bottom_tips.add_flag(lv.obj.FLAG.HIDDEN)
-                        lv.refr_now(None)
-                        self.apps.clear_flag(lv.obj.FLAG.HIDDEN)
-                        self.apps.clear_flag(lv.obj.FLAG.GESTURE_BUBBLE)
-                        self.apps.visible = True
-                        if hasattr(self.apps, 'current_page'):
-                            self.apps.show_page(self.apps.current_page)
+        # Layer2 启动前增加短暂延迟，确保 LVGL 刷新完成
+        _schedule_once(20, start_layer2_animation)
 
+    def _toggle_main_content(self, visible: bool) -> None:
+        self.hidden_others(not visible)
+        toggle_targets = ("up_arrow", "bottom_tips", "content_area")
+        for attr in toggle_targets:
+            obj = getattr(self, attr, None)
+            if not obj:
+                continue
+            if visible:
+                obj.clear_flag(lv.obj.FLAG.HIDDEN)
+            else:
+                obj.add_flag(lv.obj.FLAG.HIDDEN)
+        dev_state = getattr(self, "dev_state", None)
+        if dev_state:
+            if visible and hasattr(dev_state, "show"):
+                dev_state.show()
+            elif not visible and hasattr(dev_state, "hidden"):
+                dev_state.hidden()
 
-                    show_appdrawer_behind_layer2()
-                    def start_layer2_animation():
-                        try: lv.timer_handler_pause()
-                        except: pass
-                        display.cover_background_animate_to_y(-800, 200)
-                        try: lv.timer_handler_resume()
-                        except: pass
-                        def on_slide_complete():
-                            global _animation_in_progress
-                            if hasattr(display, "cover_background_hide"):
-                                display.cover_background_hide()
-                            _animation_in_progress = False
-                            cleanup_timers()
-                            force_memory_cleanup()
-                            try: lv.timer_handler_resume()
-                            except: pass
-                        completion_timer = lv.timer_create(
-                            lambda t: on_slide_complete(), 200, None
-                        )
-                        completion_timer.set_repeat_count(1)
-                        # Track timer
-                        global _active_timers
-                        _active_timers.append(completion_timer)
+    # 展示应用抽屉内容并隐藏主屏提示
+    def _show_appdrawer_contents(self):
+        self._toggle_main_content(False)
+        lv.refr_now(None)
+        self.apps.clear_flag(lv.obj.FLAG.HIDDEN)
+        self.apps.clear_flag(lv.obj.FLAG.GESTURE_BUBBLE)
+        self.apps.visible = True
+        if hasattr(self.apps, "current_page"):
+            self.apps.show_page(self.apps.current_page)
 
-                    # Start layer2 upward slide animation after 20ms delay (optimized response time)
-                    animation_timer = lv.timer_create(
-                        lambda t: start_layer2_animation(), 20, None
-                    )
-                    animation_timer.set_repeat_count(1)
-                    # Track timer
-                    _active_timers.append(animation_timer)
-
-
-            except Exception as e:
-                import sys
-                sys.print_exception(e)
-                cancel_pending_animations()
-                # Show AppDrawer in simple way on error
-                self.hidden_others(True)
-                if hasattr(self, "up_arrow"):
-                    self.up_arrow.add_flag(lv.obj.FLAG.HIDDEN)
-                if hasattr(self, "bottom_tips"):
-                    self.bottom_tips.add_flag(lv.obj.FLAG.HIDDEN)
-                self.apps.clear_flag(lv.obj.FLAG.HIDDEN)
-                # CRITICAL: Remove GESTURE_BUBBLE to prevent MainScreen from interfering
-                self.apps.clear_flag(lv.obj.FLAG.GESTURE_BUBBLE)
-                self.apps.visible = True
+    # Layer2 动画结束后恢复主屏显示
+    def restore_main_content(self):
+        self._toggle_main_content(True)
 
     def _get_title_labels(self):
         labels = []
@@ -602,11 +523,8 @@ class MainScreen(Screen):
             def _ready_cb(_anim):
                 target_label.set_style_text_opa(lv.OPA.COVER, 0)
                 target_label.invalidate()
-                if hasattr(self, "_title_fade_anims"):
-                    try:
-                        self._title_fade_anims.remove(_anim)
-                    except ValueError:
-                        pass
+                if hasattr(self, "_title_fade_anims") and _anim in self._title_fade_anims:
+                    self._title_fade_anims.remove(_anim)
                 if not getattr(self, "_title_fade_anims", []):
                     self._title_fade_prepared = False
 
@@ -645,31 +563,25 @@ class MainScreen(Screen):
 
     def change_state(self, busy: bool):
         if busy:
-            try: self.clear_flag(lv.obj.FLAG.CLICKABLE)
-            except: pass
+            if hasattr(self, "clear_flag"):
+                self.clear_flag(lv.obj.FLAG.CLICKABLE)
             if hasattr(self, "up_arrow") and self.up_arrow:
-                try: self.up_arrow.add_flag(lv.obj.FLAG.HIDDEN)
-                except: pass
+                self.up_arrow.add_flag(lv.obj.FLAG.HIDDEN)
             if hasattr(self, "bottom_tips") and self.bottom_tips:
-                try:
-                    self.bottom_tips.clear_flag(lv.obj.FLAG.HIDDEN)
-                    self.bottom_tips.set_text(_(i18n_keys.BUTTON__PROCESSING))
-                except: pass
+                self.bottom_tips.clear_flag(lv.obj.FLAG.HIDDEN)
+                self.bottom_tips.set_text(_(i18n_keys.BUTTON__PROCESSING))
             if hasattr(self, "title") and self.title:
                 self.title.clear_flag(lv.obj.FLAG.HIDDEN)
             if hasattr(self, "subtitle") and self.subtitle:
                 self.subtitle.clear_flag(lv.obj.FLAG.HIDDEN)
         else:
-            try: self.add_flag(lv.obj.FLAG.CLICKABLE)
-            except: pass
+            if hasattr(self, "add_flag"):
+                self.add_flag(lv.obj.FLAG.CLICKABLE)
             if hasattr(self, "up_arrow") and self.up_arrow:
-                try: self.up_arrow.clear_flag(lv.obj.FLAG.HIDDEN)
-                except: pass
+                self.up_arrow.clear_flag(lv.obj.FLAG.HIDDEN)
             if hasattr(self, "bottom_tips") and self.bottom_tips:
-                try:
-                    self.bottom_tips.clear_flag(lv.obj.FLAG.HIDDEN)
-                    self.bottom_tips.set_text(_(i18n_keys.BUTTON__SWIPE_TO_SHOW_APPS))
-                except: pass
+                self.bottom_tips.clear_flag(lv.obj.FLAG.HIDDEN)
+                self.bottom_tips.set_text(_(i18n_keys.BUTTON__SWIPE_TO_SHOW_APPS))
             if hasattr(self, "title") and self.title:
                 self.title.clear_flag(lv.obj.FLAG.HIDDEN)
             if hasattr(self, "subtitle") and self.subtitle:
@@ -763,15 +675,9 @@ class MainScreen(Screen):
                 .border_width(0),
                 0,
             )
-            homescreen = storage_device.get_appdrawer_background()
-            safe_homescreen = _lvgl_safe_wallpaper_src(
-                homescreen, "AppDrawer.init"
-            ) if homescreen else None
+            homescreen = _normalize_wallpaper_src(storage_device.get_appdrawer_background(), allow_default=False)
             if homescreen:
-                self.add_style(
-                    StyleWrapper().bg_img_src(safe_homescreen).border_width(0),
-                    0,
-                )
+                self.add_style(StyleWrapper().bg_img_src(homescreen).border_width(0), 0)
             # If homescreen is empty, keep the existing black background
 
             self.add_event_cb(self.on_click, lv.EVENT.CLICKED, None)
@@ -998,132 +904,69 @@ class MainScreen(Screen):
                 indev = lv.indev_get_act()
                 _dir = indev.get_gesture_dir()
 
-                if _dir == lv.DIR.BOTTOM:
-                    self.hide_to_mainscreen()
-                elif _dir == lv.DIR.TOP:
-                    return
-                else:
-                    self.handle_page_gesture(_dir)
+            if _dir == lv.DIR.BOTTOM:
+                self.hide_to_mainscreen()
+            elif _dir == lv.DIR.TOP:
+                return
+            else:
+                self.handle_page_gesture(_dir)
 
+        # 从应用抽屉向下滑动回到主屏
         def hide_to_mainscreen(self):
             global _animation_in_progress
 
-            # Prevent duplicate calls
             if _animation_in_progress:
                 return
 
+            from trezorui import Display
+
+            display = Display()
+            # Layer2 下滑前检查硬件动画接口与壁纸资源是否可用
+            animate_cb = getattr(display, "cover_background_animate_to_y", None)
+            move_cb = getattr(display, "cover_background_move_to_y", None)
+            can_animate = bool(animate_cb and move_cb and _ensure_layer2_background(display))
+            if not can_animate:
+                self.hide_to_mainscreen_fallback()
+                return
+
+            _animation_in_progress = True
+
+            # Keep AppDrawer visible while layer2 slides down over it.
+            move_cb(-800)
+            if hasattr(display, "cover_background_set_visible"):
+                display.cover_background_set_visible(True)
+
+            def on_layer2_covers_screen():
+                global _animation_in_progress
+                # Layer2 完全覆盖后再切换到主屏，避免闪烁
+                self.add_flag(lv.obj.FLAG.HIDDEN)
+                self.visible = False
+                self.add_flag(lv.obj.FLAG.GESTURE_BUBBLE)
+
+                if hasattr(self.parent, "prepare_title_fade_in"):
+                    self.parent.prepare_title_fade_in()
+                self.parent.restore_main_content()
+
+                lv.refr_now(None)
+
+                if hasattr(display, "cover_background_hide"):
+                    display.cover_background_hide()
+                if hasattr(self.parent, "start_title_fade_in"):
+                    self.parent.start_title_fade_in(duration=100)
+
+                _animation_in_progress = False
+                cleanup_timers()
 
             try:
-                _animation_in_progress = True
-
-                from trezorui import Display
-
-                display = Display()
-
-                from storage import device
-
-                if hasattr(display, "cover_background_load_jpeg"):
-                    try:
-                        from storage import device
-
-                        lockscreen_path = device.get_homescreen()
-
-                        if not lockscreen_path:
-                            display_path = "res/wallpaper-1.jpg"
-                        else:
-                            if lockscreen_path.startswith("A:/"):
-                                # Special handling for NFT files
-                                if "/res/nfts/" in lockscreen_path:
-                                    display_path = (
-                                        "1:" + lockscreen_path[2:]
-                                    )  # A:/res/nfts/... -> 1:/res/nfts/...
-                                else:
-                                    display_path = lockscreen_path[
-                                        3:
-                                    ]  # A:/res/wallpapers/... -> res/wallpapers/...
-                            elif lockscreen_path.startswith("A:1:"):
-                                display_path = lockscreen_path[
-                                    2:
-                                ]  # A:1:/res/wallpapers/xxx -> 1:/res/wallpapers/xxx
-                            else:
-                                display_path = lockscreen_path
-
-
-                        global _last_jpeg_loaded
-                        if _last_jpeg_loaded != display_path:
-                            display.cover_background_load_jpeg(display_path)
-                            _last_jpeg_loaded = display_path
-
-                    except Exception as jpeg_error:
-                        # Use pure black background as fallback
-                        if hasattr(display, "cover_background_set_image"):
-                            width, height = 480, 800
-                            black_image = bytearray(width * height * 2)
-                            for i in range(len(black_image)):
-                                black_image[i] = 0x00
-                            display.cover_background_set_image(bytes(black_image))
-
-
-                if hasattr(display, "cover_background_animate_to_y"):
-                    # CRITICAL FIX: Keep AppDrawer visible during Layer2 slide down
-                    # Layer2 slides down from -800 to 0, AppDrawer stays visible behind it
-                    # Only hide AppDrawer and show MainScreen after Layer2 fully covers screen
-
-                    # Layer2 starts from top and slides down
-                    display.cover_background_move_to_y(-800)
-                    if hasattr(display, "cover_background_set_visible"):
-                        display.cover_background_set_visible(True)
-
-                    display.cover_background_animate_to_y(0, 200)
-
-                    # After 200ms, Layer2 reaches y=0 and fully covers screen
-                    # Now we can safely switch from AppDrawer to MainScreen behind Layer2
-                    def on_layer2_covers_screen():
-                        # Hide AppDrawer
-                        self.add_flag(lv.obj.FLAG.HIDDEN)
-                        self.visible = False
-                        self.add_flag(lv.obj.FLAG.GESTURE_BUBBLE)
-
-                        # Show MainScreen elements
-                        self.parent.hidden_others(False)
-                        if hasattr(self.parent, "prepare_title_fade_in"):
-                            self.parent.prepare_title_fade_in()
-                        if hasattr(self.parent, "up_arrow"):
-                            self.parent.up_arrow.clear_flag(lv.obj.FLAG.HIDDEN)
-                        if hasattr(self.parent, "bottom_tips"):
-                            self.parent.bottom_tips.clear_flag(lv.obj.FLAG.HIDDEN)
-                        if hasattr(self.parent, "content_area") and self.parent.content_area:
-                            self.parent.content_area.clear_flag(lv.obj.FLAG.HIDDEN)
-                        if hasattr(self.parent, "dev_state"):
-                            self.parent.dev_state.show()
-
-                        lv.refr_now(None)
-                        gc.collect()
-
-                        if hasattr(display, "cover_background_hide"):
-                            display.cover_background_hide()
-                        if hasattr(self.parent, "start_title_fade_in"):
-                            self.parent.start_title_fade_in(duration=100)
-
-                        global _animation_in_progress
-                        _animation_in_progress = False
-                        cleanup_timers()
-                        force_memory_cleanup()
-
-                    completion_timer = lv.timer_create(
-                        lambda t: on_layer2_covers_screen(), 200, None
-                    )
-                    completion_timer.set_repeat_count(1)
-                    global _active_timers
-                    _active_timers.append(completion_timer)
-                else:
-                    self.hide_to_mainscreen_fallback()
-
-            except Exception as e:
+                _with_lvgl_timer_pause(animate_cb, 0, 200)
+            except Exception:
                 self.hide_to_mainscreen_fallback()
-                cancel_pending_animations()
-                _animation_in_progress = False
+                return
 
+            # 等待 Layer2 完全落下后再恢复主屏
+            _schedule_once(200, on_layer2_covers_screen)
+
+        # 硬件动画不可用时的主屏回退流程
         def hide_to_mainscreen_fallback(self):
             global _animation_in_progress
             self.add_flag(lv.obj.FLAG.HIDDEN)
@@ -1133,21 +976,14 @@ class MainScreen(Screen):
             # Ensure animation flag is properly reset
             _animation_in_progress = False
             cleanup_timers()
-            _resume_lvgl_timers()
-            _hide_cover_background()
 
-            self.parent.hidden_others(False)
-            if hasattr(self.parent, "up_arrow"):
-                self.parent.up_arrow.clear_flag(lv.obj.FLAG.HIDDEN)
-            if hasattr(self.parent, "bottom_tips"):
-                self.parent.bottom_tips.clear_flag(lv.obj.FLAG.HIDDEN)
-            # CRITICAL: Restore content_area visibility
-            if hasattr(self.parent, "content_area") and self.parent.content_area:
-                self.parent.content_area.clear_flag(lv.obj.FLAG.HIDDEN)
-            if hasattr(self.parent, "dev_state"):
-                self.parent.dev_state.show()
+            # 没有 Layer2 动画能力时直接恢复主屏可见性
+            if hasattr(self.parent, "restore_main_content"):
+                self.parent.restore_main_content()
 
+        # 左右滑动切换应用页
         def handle_page_gesture(self, _dir):
+            # 处理左右滑动手势，驱动应用页切换动画
             if _dir not in [lv.DIR.RIGHT, lv.DIR.LEFT]:
                 return
             if self.page_animating:
@@ -1175,6 +1011,7 @@ class MainScreen(Screen):
             self.animate_page_transition(target_page, _dir)
 
         def show_page(self, index: int):
+            # 显示指定页并隐藏其它页，保证当前页位置正确
             if index < 0 or index >= self.PAGE_SIZE:
                 return
 
@@ -1203,6 +1040,7 @@ class MainScreen(Screen):
             if self.PRERENDER_ENABLED and self._prerender_manager:
                 self._prerender_manager.schedule_prerender(index)
 
+        # 隐藏指定页面，保证切换时不闪烁
         def hidden_page(self, index: int):
             if index < 0 or index >= self.PAGE_SIZE:
                 return
@@ -1210,7 +1048,9 @@ class MainScreen(Screen):
             page_cont.set_x(0)
             page_cont.add_flag(lv.obj.FLAG.HIDDEN)
 
+        # 页面滑动动画逻辑，负责控制左右切换
         def animate_page_transition(self, target_index: int, direction: int):
+            # 根据目标页与方向创建滑动动画，完成页面切换
             if target_index < 0 or target_index >= self.PAGE_SIZE:
                 return
 
@@ -1252,6 +1092,7 @@ class MainScreen(Screen):
             anim_time = self.PAGE_SLIDE_TIME
 
             def animate_x(target_obj, start_x, end_x, easing_cb):
+                # 封装滑动动画，独立处理进出场对象的坐标更新
                 anim = lv.anim_t()
                 anim.init()
                 anim.set_var(target_obj)
@@ -1296,22 +1137,20 @@ class MainScreen(Screen):
 
             # Optimize animation refresh logic
             def animation_refresh():
+                # 定时调用 task_handler 维持动画流畅度
                 if self.page_animating:
                     try:
                         lv.task_handler()
                     except:
                         lv.refr_now(None)
+                    _schedule_once(16, animation_refresh)
 
-            refresh_interval = 16  # roughly 60 FPS to reduce timer pressure
-            refresh_repeat = max(1, (anim_time + refresh_interval - 1) // refresh_interval)
-            refresh_timer = lv.timer_create(
-                lambda t: animation_refresh(),
-                refresh_interval,
-                None,
-            )
-            refresh_timer.set_repeat_count(refresh_repeat)
+            # roughly 60FPS 刷新一次
+            _schedule_once(16, animation_refresh)
 
+        # 页面动画结束后重置布局与状态
         def _on_page_anim_ready(self, old_index: int, target_index: int):
+            # 动画完成时归位位置、恢复布局并触发最后刷新
             # Reset both pages to their resting positions and visibility.
             old_cont = self.page_conts[old_index]
             new_cont = self.page_conts[target_index]
@@ -1368,17 +1207,9 @@ class MainScreen(Screen):
             return
 
         def refresh_background(self):
-            homescreen = storage_device.get_appdrawer_background()
-            safe_homescreen = (
-                _lvgl_safe_wallpaper_src(homescreen, "AppDrawer.refresh")
-                if homescreen
-                else None
-            )
+            homescreen = _normalize_wallpaper_src(storage_device.get_appdrawer_background(), allow_default=False)
             if homescreen:
-                self.add_style(
-                    StyleWrapper().bg_img_src(safe_homescreen).border_width(0),
-                    0,
-                )
+                self.add_style(StyleWrapper().bg_img_src(homescreen).border_width(0), 0)
 
         def _preload_layer2_background(self):
             """
@@ -1388,35 +1219,15 @@ class MainScreen(Screen):
             """
             try:
                 from trezorui import Display
-                from storage import device
-
                 display = Display()
-
-                if not hasattr(display, "cover_background_load_jpeg"):
+                loader = getattr(display, "cover_background_load_jpeg", None)
+                if not loader:
                     return
-
-                # Get lockscreen path (same logic as show_appdrawer_simple)
-                lockscreen_path = device.get_homescreen()
-
-                if not lockscreen_path:
-                    display_path = "res/wallpaper-1.jpg"
-                else:
-                    if lockscreen_path.startswith("A:/"):
-                        # Special handling for NFT files
-                        if "/res/nfts/" in lockscreen_path:
-                            display_path = "1:" + lockscreen_path[2:]
-                        else:
-                            display_path = lockscreen_path[3:]
-                    elif lockscreen_path.startswith("A:1:"):
-                        display_path = lockscreen_path[2:]
-                    else:
-                        display_path = lockscreen_path
-
-                # Check cache and load if needed
+                path = _wallpaper_display_path()
                 global _last_jpeg_loaded
-                if _last_jpeg_loaded != display_path:
-                    display.cover_background_load_jpeg(display_path)
-                    _last_jpeg_loaded = display_path
+                if _last_jpeg_loaded != path:
+                    loader(path)
+                    _last_jpeg_loaded = path
             except Exception:
                 # Fail silently - wallpaper pre-loading is an optimization,
                 # not a critical feature. It will load on first swipe if this fails.
@@ -3181,16 +2992,6 @@ class GeneralScreen(AnimScreen):
         elif target == self.touch:
             TouchSetting(self)
         elif target == self.wallpaper:
-            # Aggressive cleanup before entering memory-heavy screen
-            try:
-                from .homescreen import cancel_pending_animations, force_memory_cleanup
-                cancel_pending_animations()
-                force_memory_cleanup()
-                import gc as _gc
-                for _i in range(3):
-                    _gc.collect()
-            except Exception:
-                pass
             WallpaperScreen(self)
             
         elif target == self.rti_btn:
@@ -3906,7 +3707,8 @@ class AppdrawerBackgroundSetting(AnimScreen):
                 # Update MainScreen background
                 if hasattr(MainScreen, "_instance") and MainScreen._instance:
                     ms = MainScreen._instance
-                    ms.add_style(StyleWrapper().bg_img_src(_lvgl_safe_wallpaper_src(current_wallpaper, "AppdrawerBackgroundSetting.MainScreen")), 0)
+                    sanitized = _normalize_wallpaper_src(current_wallpaper)
+                    ms.add_style(StyleWrapper().bg_img_src(sanitized), 0)
                     ms.invalidate()
                     lv.refr_now(None)
 
@@ -6081,19 +5883,6 @@ class WallpaperScreen(AnimScreen):
         return targets
 
     def __init__(self, prev_scr=None):
-        # Try to free as much as possible before constructing UI
-        try:
-            from .homescreen import cancel_pending_animations, force_memory_cleanup
-
-            cancel_pending_animations()
-            force_memory_cleanup()
-            import gc as _gc
-            for _i in range(3):
-                _gc.collect()
-
-        except Exception:
-            pass
-
         if not hasattr(self, "_init"):
             self._init = True
         else:
