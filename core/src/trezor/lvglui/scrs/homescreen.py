@@ -51,11 +51,7 @@ from .nftmanager import (
     NftGallery,
     WallpaperPreviewBase,
 )
-from .preview_utils import (
-    create_preview_container,
-    create_preview_image,
-    create_top_mask,
-)
+from .preview_utils import create_preview_container, create_preview_image, create_top_mask
 from .widgets.style import StyleWrapper
 
 _attach_to_pin_task_running = False
@@ -128,7 +124,13 @@ def cleanup_timers():
 
 
 def _schedule_once(delay_ms: int, callback):
-    timer = lv.timer_create(lambda _t: callback(), delay_ms, None)
+    print("[BusyState] schedule_once delay:", delay_ms, "callback:", callback)
+
+    def _wrapped(_t):
+        print("[BusyState] timer fired for callback:", callback)
+        callback()
+
+    timer = lv.timer_create(_wrapped, delay_ms, None)
     timer.set_repeat_count(1)
     _active_timers.append(timer)
     return timer
@@ -194,19 +196,29 @@ APP_DRAWER_DOWN_PATH_CB = PATH_EASE_OUT
 _BUSY_GRACE_MS = 800
 
 def _restore_idle(t):
+    print("[BusyState] _restore_idle triggered, timer:", t)
     d = storage.cache.get_int(storage.cache.APP_COMMON_BUSY_DEADLINE_MS, 0)
+    now = utime.ticks_ms()
+    print("[BusyState] stored deadline:", d, "now:", now)
     if d > 0 and utime.ticks_diff(utime.ticks_ms(), d) >= 0:
+        print("[BusyState] idle deadline reached, clearing busy flags")
         storage.cache.delete(storage.cache.APP_COMMON_BUSY_DEADLINE_MS)
         storage.cache.set_int(storage.cache.APP_COMMON_BUSY_STATE, 0)
         ms = MainScreen._instance if hasattr(MainScreen, "_instance") and MainScreen._instance else MainScreen()
         ms.change_state(False)
+    else:
+        print("[BusyState] idle deadline not reached yet; no state change")
 
 def change_state(is_busy: bool = False):
+    print("[BusyState] change_state called, is_busy:", is_busy)
     from trezor import config
     from trezor.lvglui.scrs import fingerprints
-    if (fingerprints.is_available() and not fingerprints.is_unlocked()) or (not fingerprints.is_available() and not config.is_unlocked()):
+    is_locked = (fingerprints.is_available() and not fingerprints.is_unlocked()) or (not fingerprints.is_available() and not config.is_unlocked())
+    if is_locked:
+        print("[BusyState] device locked, ignoring change_state")
         return
     if is_busy:
+        print("[BusyState] entering busy state")
         storage.cache.set_int(storage.cache.APP_COMMON_BUSY_STATE, 1)
         storage.cache.delete(storage.cache.APP_COMMON_BUSY_DEADLINE_MS)
         storage.cache.set_int(storage.cache.APP_COMMON_BUSY_TIME, utime.ticks_ms())
@@ -218,10 +230,11 @@ def change_state(is_busy: bool = False):
             ms.apps.visible = False
         ms.change_state(True)
     else:
+        print("[BusyState] leaving busy state, scheduling idle restore")
         now = utime.ticks_ms()
         storage.cache.set_int(storage.cache.APP_COMMON_BUSY_TIME, now)
         storage.cache.set_int(storage.cache.APP_COMMON_BUSY_DEADLINE_MS, utime.ticks_add(now, _BUSY_GRACE_MS))
-        lv.timer_create(_restore_idle, _BUSY_GRACE_MS, None).set_repeat_count(1)
+        _schedule_once(_BUSY_GRACE_MS, lambda: _restore_idle(None))
 
 
 class MainScreen(Screen):
@@ -649,7 +662,6 @@ class MainScreen(Screen):
             self._configure_image_cache()
             self.init_indicators()
             self.init_anim()
-            self._warmup_icon_cache()
 
             # Pre-load Layer2 JPEG background to avoid lag on first swipe
             # This loads the wallpaper into the hardware layer during initialization
@@ -848,36 +860,6 @@ class MainScreen(Screen):
             except Exception:
                 pass
 
-        def _warmup_icon_cache(self):
-            """Decode icons once so first swipe does not block on PNG parsing."""
-            if not self._icon_sources:
-                return
-            try:
-                parent = lv.layer_top()
-                preloader = lv.img(parent)
-            except Exception:
-                return
-
-            try:
-                preloader.remove_style_all()
-                preloader.add_flag(lv.obj.FLAG.IGNORE_LAYOUT)
-                preloader.set_style_opa(lv.OPA.TRANSP, 0)
-                for src in self._icon_sources:
-                    try:
-                        preloader.set_src(src)
-                        w = preloader.get_width()
-                        h = preloader.get_height()
-                        preloader.set_pos(-w or -1, -h or -1)
-                        preloader.invalidate()
-                        lv.refr_now(None)
-                    except Exception:
-                        continue
-            finally:
-                try:
-                    preloader.del_()
-                except Exception:
-                    pass
-
         def init_indicators(self):
             self.container = ContainerFlexRow(self, None, padding_col=0)
             self.container.align(lv.ALIGN.BOTTOM_MID, 0, -32)
@@ -917,22 +899,29 @@ class MainScreen(Screen):
             global _animation_in_progress
             code = event_obj.code
             is_hidden = self.has_flag(lv.obj.FLAG.HIDDEN)
+            print("[AppDrawer] on_gesture code:", code, "hidden:", is_hidden, "anim:", _animation_in_progress)
 
             if _animation_in_progress:
+                print("[AppDrawer] on_gesture ignored: animation in progress")
                 return
 
             if code == lv.EVENT.GESTURE:
                 if is_hidden:
+                    print("[AppDrawer] on_gesture ignored: drawer hidden")
                     return
 
                 indev = lv.indev_get_act()
                 _dir = indev.get_gesture_dir()
+                print("[AppDrawer] on_gesture dir:", _dir)
 
             if _dir == lv.DIR.BOTTOM:
+                print("[AppDrawer] swipe down -> hide_to_mainscreen")
                 self.hide_to_mainscreen()
             elif _dir == lv.DIR.TOP:
+                print("[AppDrawer] swipe up ignored")
                 return
             else:
+                print("[AppDrawer] horizontal swipe -> handle_page_gesture")
                 self.handle_page_gesture(_dir)
 
         # 从应用抽屉向下滑动回到主屏
@@ -1038,6 +1027,7 @@ class MainScreen(Screen):
             # 显示指定页并隐藏其它页，保证当前页位置正确
             if index < 0 or index >= self.PAGE_SIZE:
                 return
+            print("[AppDrawer] show_page ->", index)
 
             for idx, page_cont in enumerate(self.page_conts):
                 if idx == index:
@@ -1057,6 +1047,7 @@ class MainScreen(Screen):
         def hidden_page(self, index: int):
             if index < 0 or index >= self.PAGE_SIZE:
                 return
+            print("[AppDrawer] hidden_page ->", index)
             page_cont = self.page_conts[index]
             page_cont.set_x(0)
             page_cont.add_flag(lv.obj.FLAG.HIDDEN)
@@ -1066,16 +1057,19 @@ class MainScreen(Screen):
             # 根据目标页与方向创建滑动动画，完成页面切换
             if target_index < 0 or target_index >= self.PAGE_SIZE:
                 return
+            print("[AppDrawer] animate_page_transition", self.current_page, "->", target_index, "dir:", direction)
 
             old_index = self.current_page
             old_cont = self.page_conts[old_index]
             new_cont = self.page_conts[target_index]
 
             if not old_cont or not new_cont:
+                print("[AppDrawer] animate_page_transition aborted: missing page")
                 return
 
             self.page_animating = True
             self._page_anim_target = target_index
+            print("[AppDrawer] page_animating=True, target:", target_index)
 
             # Cancel any running animations on these containers to prevent jitter/bounce
             try:
@@ -1160,6 +1154,7 @@ class MainScreen(Screen):
 
         # 页面动画结束后重置布局与状态
         def _on_page_anim_ready(self, old_index: int, target_index: int):
+            print("[AppDrawer] _on_page_anim_ready", old_index, "->", target_index)
             # 动画完成时归位位置、恢复布局并触发最后刷新
             # Reset both pages to their resting positions and visibility.
             old_cont = self.page_conts[old_index]
@@ -1193,18 +1188,22 @@ class MainScreen(Screen):
             schedule_gc()
 
         def show_anim_start_cb(self, _anim):
+            print("[AppDrawer] show_anim_start_cb")
             self.parent.hidden_others()
             self.hidden_page(self.current_page)
             self.parent.clear_state(lv.STATE.USER_1)
 
         def show_anim_del_cb(self, _anim):
+            print("[AppDrawer] show_anim_del_cb")
             self.show_page(self.current_page)
             self.visible = True
 
         def dismiss_anim_start_cb(self, _anim):
+            print("[AppDrawer] dismiss_anim_start_cb")
             self.hidden_page(self.current_page)
 
         def dismiss_anim_del_cb(self, _anim):
+            print("[AppDrawer] dismiss_anim_del_cb")
             self.parent.hidden_others(False)
             self.add_flag(lv.obj.FLAG.HIDDEN)
             self.visible = False
@@ -3395,7 +3394,6 @@ class AppdrawerBackgroundSetting(AnimScreen):
         self.container.set_scrollbar_mode(lv.SCROLLBAR_MODE.OFF)
         self.container.clear_flag(lv.obj.FLAG.SCROLLABLE)
 
-        # Lock screen preview container with image
         if "appdrawer_preview_container" not in _cached_styles:
             _cached_styles["appdrawer_preview_container"] = (
                 StyleWrapper()
@@ -3405,23 +3403,22 @@ class AppdrawerBackgroundSetting(AnimScreen):
                 .border_width(0)
             )
         container_style = _cached_styles["appdrawer_preview_container"]
+
+        # Lock screen preview container with image
         self.preview_container = create_preview_container(
             self.container,
             width=344,
             height=572,
-            top_offset=120,
+            top_offset=125,
             style=container_style,
-            bg_color=lv.color_hex(0x000000),
-            bg_opa=lv.OPA.COVER,
         )
 
         # Lock screen preview image
         self.lockscreen_preview = create_preview_image(
             self.preview_container,
-            src=None,
             target_size=(344, 572),
         )
-        self._lock_preview_mask = create_top_mask(self.preview_container, height=2)
+        self.preview_mask = create_top_mask(self.preview_container, height=5)
 
         # Use selected wallpaper if provided, otherwise use current lock screen
         if self.selected_wallpaper:
@@ -6037,23 +6034,20 @@ class HomeScreenSetting(AnimScreen):
             self.container,
             width=344,
             height=572,
-            top_offset=120,
+            top_offset=125,
             style=StyleWrapper()
             .bg_color(lv_colors.BLACK)
             .bg_opa(lv.OPA.COVER)
             .pad_all(0)
             .border_width(0),
-            bg_color=lv.color_hex(0x000000),
-            bg_opa=lv.OPA.COVER,
         )
 
         # Home screen preview image
         self.homescreen_preview = create_preview_image(
             self.preview_container,
-            src=None,
             target_size=(344, 572),
         )
-        self._home_preview_mask = create_top_mask(self.preview_container, height=2)
+        self.preview_mask = create_top_mask(self.preview_container, height=5)
         # Initialize blur cache first
         self._blur_cache = {}
 
@@ -6316,11 +6310,11 @@ class HomeScreenSetting(AnimScreen):
                 )  # Does not respond to clicks
 
                 # Create image inside button (exactly same way as button icons)
-                self.homescreen_preview = lv.img(self.preview_button)
-                self.homescreen_preview.set_size(344, 572)
-                self.homescreen_preview.align(lv.ALIGN.CENTER, 0, 0)
+                self.homescreen_preview = create_preview_image(
+                    self.preview_button,
+                    target_size=(344, 572),
+                )
 
-                # Use same set_src calling method as button icons
                 self.homescreen_preview.set_src(target_path)
         except Exception as e:
             pass

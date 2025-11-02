@@ -122,7 +122,7 @@ class WallpaperPreviewBase(AnimScreen):
             src=image_path,
             target_size=(self.preview_container.get_width(), self.preview_container.get_height()),
         )
-        self.preview_mask = create_top_mask(self.preview_container, height=2)
+        self.preview_mask = create_top_mask(self.preview_container, height=5)
         return self.preview_image
 
     def _create_app_icons(self):
