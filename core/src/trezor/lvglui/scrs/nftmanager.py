@@ -20,6 +20,11 @@ from .components.button import NormalButton
 from .components.container import ContainerGrid
 from .components.listitem import ImgGridItem
 from .widgets.style import StyleWrapper
+from .preview_utils import (
+    create_preview_container,
+    create_preview_image,
+    create_top_mask,
+)
 
 if TYPE_CHECKING:
     from .homescreen import MainScreen
@@ -93,43 +98,31 @@ class WallpaperPreviewBase(AnimScreen):
         self.container.clear_flag(lv.obj.FLAG.SCROLLABLE)
 
         # Preview container
-        self.preview_container = lv.obj(self.container)
-        self.preview_container.set_size(344, 574)
-        self.preview_container.align(lv.ALIGN.TOP_MID, 0, top_offset)
-        self.preview_container.add_style(
-            _cached_style(
-                _K1,
-                lambda: StyleWrapper()
-                .bg_opa(lv.OPA.TRANSP)
-                .pad_all(0)
-                .border_width(0)
-                .radius(40)
-                .clip_corner(True),
-            ),
-            0,
+        style = _cached_style(
+            _K1,
+            lambda: StyleWrapper()
+            .bg_opa(lv.OPA.TRANSP)
+            .pad_all(0)
+            .border_width(0),
         )
-        self.preview_container.clear_flag(lv.obj.FLAG.CLICKABLE)
-        self.preview_container.add_flag(lv.obj.FLAG.EVENT_BUBBLE)
-        self.preview_container.set_scrollbar_mode(lv.SCROLLBAR_MODE.OFF)
-        self.preview_container.clear_flag(lv.obj.FLAG.SCROLLABLE)
-        self.preview_container.set_style_bg_color(lv.color_hex(0x000000), 0)
-        self.preview_container.set_style_bg_opa(lv.OPA.COVER, 0)
+        self.preview_container = create_preview_container(
+            self.container,
+            width=344,
+            height=574,
+            top_offset=top_offset,
+            style=style,
+            bg_color=lv.color_hex(0x000000),
+            bg_opa=lv.OPA.COVER,
+        )
 
     def _create_preview_image(self, image_path):
         """Create and configure the preview image."""
-        self.preview_image = lv.img(self.preview_container)
-        self.preview_image.set_src(image_path)
-        self.preview_image.set_size(lv.SIZE.CONTENT, lv.SIZE.CONTENT)
-        self.preview_image.clear_flag(lv.obj.FLAG.SCROLLABLE)
-
-        base_width, base_height = 480, 800
-        zoom_x = int((344 / base_width) * 256)
-        zoom_y = int((574 / base_height) * 256)
-        zoom = min(zoom_x, zoom_y)
-
-        self.preview_image.set_zoom(zoom)
-        self.preview_image.set_antialias(True)
-        self.preview_image.align(lv.ALIGN.CENTER, 0, 0)
+        self.preview_image = create_preview_image(
+            self.preview_container,
+            src=image_path,
+            target_size=(self.preview_container.get_width(), self.preview_container.get_height()),
+        )
+        self.preview_mask = create_top_mask(self.preview_container, height=2)
         return self.preview_image
 
     def _create_app_icons(self):

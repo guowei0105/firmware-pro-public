@@ -51,6 +51,11 @@ from .nftmanager import (
     NftGallery,
     WallpaperPreviewBase,
 )
+from .preview_utils import (
+    create_preview_container,
+    create_preview_image,
+    create_top_mask,
+)
 from .widgets.style import StyleWrapper
 
 _attach_to_pin_task_running = False
@@ -627,7 +632,6 @@ class MainScreen(Screen):
     class AppDrawer(lv.obj):
         PAGE_SIZE = 2
         PAGE_SLIDE_TIME = 300  # Shortened animation time for quick response
-        PRERENDER_ENABLED = True  # Enable pre-render optimization for smoother paging
 
         def __init__(self, parent):
             super().__init__(parent)
@@ -638,10 +642,6 @@ class MainScreen(Screen):
             self._page_anim_refs = []
             self._page_anim_handles = []
 
-            # Initialize pre-render manager
-            self._prerender_manager = None
-            self._init_prerender_later = False
-
             # Remove style and lazy loading related code to fix system freeze
 
             self.init_ui()
@@ -649,13 +649,7 @@ class MainScreen(Screen):
             self._configure_image_cache()
             self.init_indicators()
             self.init_anim()
-
-            # Initialize pre-rendering immediately to avoid lag on first swipe
-            # Previously this was delayed to "avoid affecting startup performance",
-            # but initializing early eliminates first-swipe lag which is more noticeable
-            if self.PRERENDER_ENABLED:
-                self._init_prerender_later = False
-                self._init_prerender()
+            self._warmup_icon_cache()
 
             # Pre-load Layer2 JPEG background to avoid lag on first swipe
             # This loads the wallpaper into the hardware layer during initialization
@@ -854,6 +848,36 @@ class MainScreen(Screen):
             except Exception:
                 pass
 
+        def _warmup_icon_cache(self):
+            """Decode icons once so first swipe does not block on PNG parsing."""
+            if not self._icon_sources:
+                return
+            try:
+                parent = lv.layer_top()
+                preloader = lv.img(parent)
+            except Exception:
+                return
+
+            try:
+                preloader.remove_style_all()
+                preloader.add_flag(lv.obj.FLAG.IGNORE_LAYOUT)
+                preloader.set_style_opa(lv.OPA.TRANSP, 0)
+                for src in self._icon_sources:
+                    try:
+                        preloader.set_src(src)
+                        w = preloader.get_width()
+                        h = preloader.get_height()
+                        preloader.set_pos(-w or -1, -h or -1)
+                        preloader.invalidate()
+                        lv.refr_now(None)
+                    except Exception:
+                        continue
+            finally:
+                try:
+                    preloader.del_()
+                except Exception:
+                    pass
+
         def init_indicators(self):
             self.container = ContainerFlexRow(self, None, padding_col=0)
             self.container.align(lv.ALIGN.BOTTOM_MID, 0, -32)
@@ -1015,13 +1039,6 @@ class MainScreen(Screen):
             if index < 0 or index >= self.PAGE_SIZE:
                 return
 
-            # Delay initialization of pre-rendering (first time displaying page)
-            if self._init_prerender_later:
-                self._init_prerender_later = False
-                self._init_prerender()
-
-            # Remove lazy loading logic
-
             for idx, page_cont in enumerate(self.page_conts):
                 if idx == index:
                     page_cont.clear_flag(lv.obj.FLAG.HIDDEN)
@@ -1035,10 +1052,6 @@ class MainScreen(Screen):
                     indicator.set_active(idx == index)
 
             self.current_page = index
-
-            # Schedule pre-rendering of adjacent pages
-            if self.PRERENDER_ENABLED and self._prerender_manager:
-                self._prerender_manager.schedule_prerender(index)
 
         # 隐藏指定页面，保证切换时不闪烁
         def hidden_page(self, index: int):
@@ -1071,9 +1084,6 @@ class MainScreen(Screen):
             except Exception:
                 pass
 
-            # Try to use cached page content
-            if self.PRERENDER_ENABLED and self._prerender_manager:
-                cached_page = self._prerender_manager.get_cached_page(target_index)
             lv.refr_now(None)
 
             # Ensure the incoming page starts off-screen in the intended direction.
@@ -1279,14 +1289,6 @@ class MainScreen(Screen):
         def refresh_text(self):
             for text_key, label in self.text_label.items():
                 label.set_text(_(text_key))
-
-        def _init_prerender(self):
-            try:
-                from .appdrawer_prerender import PreRenderManager
-
-                self._prerender_manager = PreRenderManager(self)
-            except Exception as e:
-                self._prerender_manager = None
 
 
 class PasskeysManager(AnimScreen):
@@ -3394,11 +3396,6 @@ class AppdrawerBackgroundSetting(AnimScreen):
         self.container.clear_flag(lv.obj.FLAG.SCROLLABLE)
 
         # Lock screen preview container with image
-        self.preview_container = lv.obj(self.container)
-        self.preview_container.set_size(344, 572)  # Slightly shorter to avoid top seam
-        self.preview_container.align(lv.ALIGN.TOP_MID, 0, 120)  # Below navigation bar (116px + 4px spacing)
-
-        # Use cached style to avoid memory issues during frequent scrolling
         if "appdrawer_preview_container" not in _cached_styles:
             _cached_styles["appdrawer_preview_container"] = (
                 StyleWrapper()
@@ -3407,18 +3404,24 @@ class AppdrawerBackgroundSetting(AnimScreen):
                 .pad_all(0)
                 .border_width(0)
             )
-        self.preview_container.add_style(_cached_styles["appdrawer_preview_container"], 0)
-        # Don't capture click events - let them pass through to buttons
-        self.preview_container.clear_flag(lv.obj.FLAG.CLICKABLE)
-        self.preview_container.add_flag(lv.obj.FLAG.EVENT_BUBBLE)
-        # Enable overflow clipping to prevent image bleeding outside container
-        self.preview_container.set_style_clip_corner(True, 0)
-        # Prevent LVGL from drawing scrollbars around the static preview
-        self.preview_container.set_scrollbar_mode(lv.SCROLLBAR_MODE.OFF)
-        self.preview_container.clear_flag(lv.obj.FLAG.SCROLLABLE)
+        container_style = _cached_styles["appdrawer_preview_container"]
+        self.preview_container = create_preview_container(
+            self.container,
+            width=344,
+            height=572,
+            top_offset=120,
+            style=container_style,
+            bg_color=lv.color_hex(0x000000),
+            bg_opa=lv.OPA.COVER,
+        )
 
         # Lock screen preview image
-        self.lockscreen_preview = lv.img(self.preview_container)
+        self.lockscreen_preview = create_preview_image(
+            self.preview_container,
+            src=None,
+            target_size=(344, 572),
+        )
+        self._lock_preview_mask = create_top_mask(self.preview_container, height=2)
 
         # Use selected wallpaper if provided, otherwise use current lock screen
         if self.selected_wallpaper:
@@ -3456,18 +3459,6 @@ class AppdrawerBackgroundSetting(AnimScreen):
                 # Use default black wallpaper (last built-in) if no custom lockscreen is set
                 self.current_wallpaper_path = "A:/res/wallpaper-7.jpg"
                 self.lockscreen_preview.set_src("A:/res/wallpaper-7.jpg")
-
-        self.lockscreen_preview.set_size(lv.SIZE.CONTENT, lv.SIZE.CONTENT)
-        # Disable scrollbars on the image itself
-        self.lockscreen_preview.clear_flag(lv.obj.FLAG.SCROLLABLE)
-        base_width, base_height = 480, 800
-        # Use cover strategy: fill container then clip rounded corners
-        zoom_x = math.ceil((344 / base_width) * 256)
-        zoom_y = math.ceil((572 / base_height) * 256)
-        zoom = max(int(zoom_x), int(zoom_y))
-        self.lockscreen_preview.set_zoom(zoom)
-        self.lockscreen_preview.set_antialias(True)  # Enable anti-aliasing for smooth scaling
-        self.lockscreen_preview.align(lv.ALIGN.CENTER, 0, 0)
 
         # Device name and bluetooth name overlaid on the image
         device_name = storage_device.get_label() or "OneKey Pro"
@@ -6042,28 +6033,27 @@ class HomeScreenSetting(AnimScreen):
         self.container.clear_flag(lv.obj.FLAG.SCROLLABLE)
 
         # Home screen preview container with image (same size as LockScreenSetting)
-        self.preview_container = lv.obj(self.container)
-        self.preview_container.set_size(344, 572)  # Slightly shorter to avoid top seam
-        self.preview_container.align(lv.ALIGN.TOP_MID, 0, 120)  # Below navigation bar (116px + 4px spacing)
-        self.preview_container.add_style(
-            StyleWrapper()
+        self.preview_container = create_preview_container(
+            self.container,
+            width=344,
+            height=572,
+            top_offset=120,
+            style=StyleWrapper()
             .bg_color(lv_colors.BLACK)
             .bg_opa(lv.OPA.COVER)
             .pad_all(0)
             .border_width(0),
-            0,
+            bg_color=lv.color_hex(0x000000),
+            bg_opa=lv.OPA.COVER,
         )
-        # Don't capture click events - let them pass through to buttons
-        self.preview_container.clear_flag(lv.obj.FLAG.CLICKABLE)
-        self.preview_container.add_flag(lv.obj.FLAG.EVENT_BUBBLE)
-        # Enable overflow clipping to prevent image bleeding outside container
-        self.preview_container.set_style_clip_corner(True, 0)
-        # Disable scrollbars on the preview container
-        self.preview_container.set_scrollbar_mode(lv.SCROLLBAR_MODE.OFF)
-        self.preview_container.clear_flag(lv.obj.FLAG.SCROLLABLE)
 
         # Home screen preview image
-        self.homescreen_preview = lv.img(self.preview_container)
+        self.homescreen_preview = create_preview_image(
+            self.preview_container,
+            src=None,
+            target_size=(344, 572),
+        )
+        self._home_preview_mask = create_top_mask(self.preview_container, height=2)
         # Initialize blur cache first
         self._blur_cache = {}
 
@@ -6093,18 +6083,6 @@ class HomeScreenSetting(AnimScreen):
             self._load_blur_state()
             self.homescreen_preview.set_src(self.current_wallpaper_path)
 
-        # Use zoom scaling instead of set_size to avoid jagged edges
-        self.homescreen_preview.set_size(lv.SIZE.CONTENT, lv.SIZE.CONTENT)
-        self.homescreen_preview.clear_flag(lv.obj.FLAG.SCROLLABLE)
-
-        # Calculate zoom using cover strategy to avoid 1px gaps after integer rounding
-        base_width, base_height = 480, 800
-        zoom_x = math.ceil((344 / base_width) * 256)
-        zoom_y = math.ceil((572 / base_height) * 256)
-        zoom = max(int(zoom_x), int(zoom_y))
-        self.homescreen_preview.set_zoom(zoom)
-        self.homescreen_preview.set_antialias(True)  # Enable anti-aliasing for smooth scaling
-        self.homescreen_preview.align(lv.ALIGN.CENTER, 0, 0)
         try:
             self.homescreen_preview.invalidate()
             self.preview_container.invalidate()
