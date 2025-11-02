@@ -50,9 +50,9 @@ SUPPORTED_MAX_RESOURCE_SIZE = {
 }
 # FILE_PATH_COMPONENTS = (("wallpapers", "wp"), ("nfts", "nft"))
 NFT_METADATA_ALLOWED_KEYS = ("header", "subheader", "network", "owner")
-# CRITICAL: Chunk size must be <= wire buffer size (8KB) to avoid memory allocation
-# If chunk size > wire buffer, codec_v1.py will try to allocate new buffer, causing MemoryError in fragmented memory
-REQUEST_CHUNK_SIZE = const(8 * 1024)  # Was 16KB, reduced to 8KB to fit wire buffer
+# Each chunk is requested at 16KB to maximise throughput while staying within the
+# updated wire buffer limits.
+REQUEST_CHUNK_SIZE = const(16 * 1024)
 
 MAX_WP_COUNTER = const(5)
 MAX_NFT_COUNTER = const(24)
