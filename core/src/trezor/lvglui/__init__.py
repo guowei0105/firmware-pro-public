@@ -26,6 +26,12 @@ def init_lvgl() -> None:
     import lvgldrv as lcd  # type: ignore[Import "lvgldrv" could not be resolved]
 
     lv.init()
+    try:
+        cache_set_size = getattr(getattr(lv, "img", None), "cache_set_size", None)
+        if cache_set_size:
+            cache_set_size(1)
+    except Exception:
+        pass
     if not utils.EMULATOR:
         import stjpeg  # type: ignore[Import "stjpeg" could not be resolved]
 

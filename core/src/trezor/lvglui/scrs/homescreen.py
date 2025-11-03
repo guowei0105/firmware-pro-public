@@ -59,6 +59,18 @@ _animation_in_progress = False
 _last_jpeg_loaded = None
 _active_timers = []
 _cached_styles = {}
+_busy_restore_timer = None
+
+
+def _clear_preview_cache() -> None:
+    try:
+        lv.img.cache_invalidate_src(None)
+    except Exception:
+        pass
+    try:
+        gc.collect()
+    except Exception:
+        pass
 
 
 def _normalize_wallpaper_src(raw, *, allow_default: bool = True, default=None) -> str:
@@ -124,16 +136,36 @@ def cleanup_timers():
 
 
 def _schedule_once(delay_ms: int, callback):
-    print("[BusyState] schedule_once delay:", delay_ms, "callback:", callback)
-
-    def _wrapped(_t):
-        print("[BusyState] timer fired for callback:", callback)
-        callback()
-
-    timer = lv.timer_create(_wrapped, delay_ms, None)
+    timer = lv.timer_create(lambda _t: callback(), delay_ms, None)
     timer.set_repeat_count(1)
     _active_timers.append(timer)
     return timer
+
+
+def _cancel_busy_restore_timer():
+    global _busy_restore_timer
+    if _busy_restore_timer:
+        try:
+            _busy_restore_timer.delete()
+        except Exception:
+            pass
+        _busy_restore_timer = None
+        print("[BusyState] cancelled pending restore timer")
+
+
+def _schedule_busy_restore(delay_ms: int):
+    global _busy_restore_timer
+
+    def _callback(timer):
+        global _busy_restore_timer
+        _busy_restore_timer = None
+        _restore_idle(timer)
+
+    _cancel_busy_restore_timer()
+    timer = lv.timer_create(_callback, delay_ms, None)
+    timer.set_repeat_count(1)
+    _busy_restore_timer = timer
+    print("[BusyState] new restore timer scheduled in", delay_ms, "ms")
 
 
 def _with_lvgl_timer_pause(func, *args, **kwargs):
@@ -196,30 +228,33 @@ APP_DRAWER_DOWN_PATH_CB = PATH_EASE_OUT
 _BUSY_GRACE_MS = 800
 
 def _restore_idle(t):
-    print("[BusyState] _restore_idle triggered, timer:", t)
+    global _busy_restore_timer
+    _busy_restore_timer = None
+    print("[BusyState] _restore_idle called, timer:", t)
     d = storage.cache.get_int(storage.cache.APP_COMMON_BUSY_DEADLINE_MS, 0)
-    now = utime.ticks_ms()
-    print("[BusyState] stored deadline:", d, "now:", now)
+    print("[BusyState] deadline:", d)
     if d > 0 and utime.ticks_diff(utime.ticks_ms(), d) >= 0:
-        print("[BusyState] idle deadline reached, clearing busy flags")
+        print("[BusyState] deadline reached, clearing busy state")
         storage.cache.delete(storage.cache.APP_COMMON_BUSY_DEADLINE_MS)
         storage.cache.set_int(storage.cache.APP_COMMON_BUSY_STATE, 0)
         ms = MainScreen._instance if hasattr(MainScreen, "_instance") and MainScreen._instance else MainScreen()
         ms.change_state(False)
     else:
-        print("[BusyState] idle deadline not reached yet; no state change")
+        print("[BusyState] deadline not reached yet")
 
 def change_state(is_busy: bool = False):
-    print("[BusyState] change_state called, is_busy:", is_busy)
     from trezor import config
     from trezor.lvglui.scrs import fingerprints
-    is_locked = (fingerprints.is_available() and not fingerprints.is_unlocked()) or (not fingerprints.is_available() and not config.is_unlocked())
-    if is_locked:
-        print("[BusyState] device locked, ignoring change_state")
+    print("[BusyState] change_state start, is_busy:", is_busy)
+    print("[BusyState] current busy state:", storage.cache.get_int(storage.cache.APP_COMMON_BUSY_STATE, 0))
+    print("[BusyState] deadline before action:", storage.cache.get_int(storage.cache.APP_COMMON_BUSY_DEADLINE_MS, 0))
+    print("[BusyState] busy time before action:", storage.cache.get_int(storage.cache.APP_COMMON_BUSY_TIME, 0))
+    if (fingerprints.is_available() and not fingerprints.is_unlocked()) or (not fingerprints.is_available() and not config.is_unlocked()):
         return
     if is_busy:
-        print("[BusyState] entering busy state")
+        _cancel_busy_restore_timer()
         storage.cache.set_int(storage.cache.APP_COMMON_BUSY_STATE, 1)
+        print("[BusyState] entered busy state, time:", storage.cache.get_int(storage.cache.APP_COMMON_BUSY_TIME, 0))
         storage.cache.delete(storage.cache.APP_COMMON_BUSY_DEADLINE_MS)
         storage.cache.set_int(storage.cache.APP_COMMON_BUSY_TIME, utime.ticks_ms())
         ms = MainScreen._instance if hasattr(MainScreen, "_instance") and MainScreen._instance else MainScreen()
@@ -230,11 +265,36 @@ def change_state(is_busy: bool = False):
             ms.apps.visible = False
         ms.change_state(True)
     else:
-        print("[BusyState] leaving busy state, scheduling idle restore")
         now = utime.ticks_ms()
         storage.cache.set_int(storage.cache.APP_COMMON_BUSY_TIME, now)
         storage.cache.set_int(storage.cache.APP_COMMON_BUSY_DEADLINE_MS, utime.ticks_add(now, _BUSY_GRACE_MS))
-        _schedule_once(_BUSY_GRACE_MS, lambda: _restore_idle(None))
+        print("[BusyState] scheduling restore, deadline:", storage.cache.get_int(storage.cache.APP_COMMON_BUSY_DEADLINE_MS, 0))
+        _schedule_busy_restore(_BUSY_GRACE_MS)
+
+
+def force_idle_cleanup():
+    """Force the UI into idle state and release caches to avoid memory pressure between sessions."""
+    _cancel_busy_restore_timer()
+    storage.cache.set_int(storage.cache.APP_COMMON_BUSY_STATE, 0)
+    storage.cache.delete(storage.cache.APP_COMMON_BUSY_DEADLINE_MS)
+    try:
+        lv.img.cache_invalidate_src(None)
+    except Exception:
+        pass
+    try:
+        _clear_preview_cache()
+    except Exception:
+        pass
+    try:
+        gc.collect()
+    except Exception:
+        pass
+    ms = MainScreen._instance if hasattr(MainScreen, "_instance") and MainScreen._instance else None
+    if ms:
+        try:
+            ms.change_state(False)
+        except Exception:
+            pass
 
 
 class MainScreen(Screen):
@@ -899,29 +959,22 @@ class MainScreen(Screen):
             global _animation_in_progress
             code = event_obj.code
             is_hidden = self.has_flag(lv.obj.FLAG.HIDDEN)
-            print("[AppDrawer] on_gesture code:", code, "hidden:", is_hidden, "anim:", _animation_in_progress)
 
             if _animation_in_progress:
-                print("[AppDrawer] on_gesture ignored: animation in progress")
                 return
 
             if code == lv.EVENT.GESTURE:
                 if is_hidden:
-                    print("[AppDrawer] on_gesture ignored: drawer hidden")
                     return
 
                 indev = lv.indev_get_act()
                 _dir = indev.get_gesture_dir()
-                print("[AppDrawer] on_gesture dir:", _dir)
 
             if _dir == lv.DIR.BOTTOM:
-                print("[AppDrawer] swipe down -> hide_to_mainscreen")
                 self.hide_to_mainscreen()
             elif _dir == lv.DIR.TOP:
-                print("[AppDrawer] swipe up ignored")
                 return
             else:
-                print("[AppDrawer] horizontal swipe -> handle_page_gesture")
                 self.handle_page_gesture(_dir)
 
         # 从应用抽屉向下滑动回到主屏
@@ -1027,7 +1080,6 @@ class MainScreen(Screen):
             # 显示指定页并隐藏其它页，保证当前页位置正确
             if index < 0 or index >= self.PAGE_SIZE:
                 return
-            print("[AppDrawer] show_page ->", index)
 
             for idx, page_cont in enumerate(self.page_conts):
                 if idx == index:
@@ -1047,7 +1099,6 @@ class MainScreen(Screen):
         def hidden_page(self, index: int):
             if index < 0 or index >= self.PAGE_SIZE:
                 return
-            print("[AppDrawer] hidden_page ->", index)
             page_cont = self.page_conts[index]
             page_cont.set_x(0)
             page_cont.add_flag(lv.obj.FLAG.HIDDEN)
@@ -1057,19 +1108,16 @@ class MainScreen(Screen):
             # 根据目标页与方向创建滑动动画，完成页面切换
             if target_index < 0 or target_index >= self.PAGE_SIZE:
                 return
-            print("[AppDrawer] animate_page_transition", self.current_page, "->", target_index, "dir:", direction)
 
             old_index = self.current_page
             old_cont = self.page_conts[old_index]
             new_cont = self.page_conts[target_index]
 
             if not old_cont or not new_cont:
-                print("[AppDrawer] animate_page_transition aborted: missing page")
                 return
 
             self.page_animating = True
             self._page_anim_target = target_index
-            print("[AppDrawer] page_animating=True, target:", target_index)
 
             # Cancel any running animations on these containers to prevent jitter/bounce
             try:
@@ -1154,7 +1202,6 @@ class MainScreen(Screen):
 
         # 页面动画结束后重置布局与状态
         def _on_page_anim_ready(self, old_index: int, target_index: int):
-            print("[AppDrawer] _on_page_anim_ready", old_index, "->", target_index)
             # 动画完成时归位位置、恢复布局并触发最后刷新
             # Reset both pages to their resting positions and visibility.
             old_cont = self.page_conts[old_index]
@@ -1188,22 +1235,18 @@ class MainScreen(Screen):
             schedule_gc()
 
         def show_anim_start_cb(self, _anim):
-            print("[AppDrawer] show_anim_start_cb")
             self.parent.hidden_others()
             self.hidden_page(self.current_page)
             self.parent.clear_state(lv.STATE.USER_1)
 
         def show_anim_del_cb(self, _anim):
-            print("[AppDrawer] show_anim_del_cb")
             self.show_page(self.current_page)
             self.visible = True
 
         def dismiss_anim_start_cb(self, _anim):
-            print("[AppDrawer] dismiss_anim_start_cb")
             self.hidden_page(self.current_page)
 
         def dismiss_anim_del_cb(self, _anim):
-            print("[AppDrawer] dismiss_anim_del_cb")
             self.parent.hidden_others(False)
             self.add_flag(lv.obj.FLAG.HIDDEN)
             self.visible = False
@@ -3119,8 +3162,9 @@ class DisplayScreen(AnimScreen):
         self.content_area.clear_flag(lv.obj.FLAG.SCROLL_ELASTIC)
         self.content_area.set_scrollbar_mode(lv.SCROLLBAR_MODE.OFF)
 
-        # Enable horizontal scrolling for gesture detection
-        self.content_area.set_scroll_dir(lv.DIR.ALL)
+        # Keep vertical scrolling so gestures bubble up to nav-back handler
+        self.content_area.set_scroll_dir(lv.DIR.VER)
+        self.content_area.add_flag(lv.obj.FLAG.GESTURE_BUBBLE)
 
         self.container.add_event_cb(self.on_click, lv.EVENT.CLICKED, None)
         self.auto_container.add_event_cb(self.on_click, lv.EVENT.CLICKED, None)
@@ -3649,6 +3693,7 @@ class AppdrawerBackgroundSetting(AnimScreen):
             if isinstance(target, lv.imgbtn):
                 if hasattr(self, "nav_back") and target == self.nav_back.nav_btn:
                     if self.prev_scr is not None:
+                        _clear_preview_cache()
                         self.load_screen(self.prev_scr, destroy_self=True)
                     return
                 elif hasattr(self, "rti_btn") and target == self.rti_btn:
@@ -3658,6 +3703,7 @@ class AppdrawerBackgroundSetting(AnimScreen):
             # Check if target is the navigation container (back button area)
             if hasattr(self, "nav_back") and target == self.nav_back:
                 if self.prev_scr is not None:
+                    _clear_preview_cache()
                     self.load_screen(self.prev_scr, destroy_self=True)
                 return
 
@@ -5920,6 +5966,10 @@ class WallpaperScreen(AnimScreen):
                 self.container.delete()
         except Exception:
             pass
+        try:
+            _clear_preview_cache()
+        except Exception:
+            pass
 
     def on_click_event(self, event_obj):
         target = event_obj.get_target()
@@ -6253,8 +6303,8 @@ class HomeScreenSetting(AnimScreen):
             # Handle navigation buttons
             if isinstance(target, lv.imgbtn):
                 if hasattr(self, "nav_back") and target == self.nav_back.nav_btn:
-
                     if self.prev_scr is not None:
+                        _clear_preview_cache()
                         try:
                             self.load_screen(self.prev_scr, destroy_self=True)
                         except Exception as e:
@@ -6279,7 +6329,11 @@ class HomeScreenSetting(AnimScreen):
         try:
             if self in HomeScreenSetting._active_instances:
                 HomeScreenSetting._active_instances.remove(self)
-        except:
+        except Exception:
+            pass
+        try:
+            _clear_preview_cache()
+        except Exception:
             pass
 
     def _rebuild_image_object(self):
@@ -6347,6 +6401,7 @@ class HomeScreenSetting(AnimScreen):
 
         # Return to previous screen
         if self.prev_scr is not None:
+            _clear_preview_cache()
             self.load_screen(self.prev_scr, destroy_self=True)
 
     def _get_blur_wallpaper_path(self, original_path):

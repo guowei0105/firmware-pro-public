@@ -50,9 +50,9 @@ SUPPORTED_MAX_RESOURCE_SIZE = {
 }
 # FILE_PATH_COMPONENTS = (("wallpapers", "wp"), ("nfts", "nft"))
 NFT_METADATA_ALLOWED_KEYS = ("header", "subheader", "network", "owner")
-# Each chunk is requested at 16KB to maximise throughput while staying within the
-# updated wire buffer limits.
-REQUEST_CHUNK_SIZE = const(16 * 1024)
+# Chunk size back to 8KB to stay within wire buffer limits and avoid DataError responses.
+REQUEST_CHUNK_SIZE = const(8 * 1024)
+MIN_CHUNK_SIZE = const(2 * 1024)
 
 MAX_WP_COUNTER = const(5)
 MAX_NFT_COUNTER = const(24)
@@ -62,6 +62,7 @@ PATTERN = re.compile(r"^(nft|wp)-[0-9a-f]+-\d+$")
 
 
 async def upload_res(ctx: wire.Context, msg: ResourceUpload) -> Success:
+    print("[upload_res] start", "ext:", msg.extension, "size:", msg.data_length, "zoom:", msg.zoom_data_length, "blur:", msg.blur_data_length)
     res_type = msg.res_type
     res_ext = msg.extension
     res_size = msg.data_length
@@ -73,6 +74,7 @@ async def upload_res(ctx: wire.Context, msg: ResourceUpload) -> Success:
         import gc
         initial_mem_free = gc.mem_free()
         initial_mem_alloc = gc.mem_alloc()
+        print("[upload_res] mem start free:", initial_mem_free, "alloc:", initial_mem_alloc)
     except Exception:
         pass
 
@@ -119,7 +121,9 @@ async def upload_res(ctx: wire.Context, msg: ResourceUpload) -> Success:
         import trezorio
         if hasattr(trezorio, 'jpeg_save_decoder_state'):
             trezorio.jpeg_save_decoder_state()
+            print("[upload_res] jpeg decoder state saved")
     except Exception as e:
+        print("[upload_res] jpeg_save_decoder_state error:", type(e).__name__, e)
         pass
 
     # Clear LVGL image cache to free up texture memory
@@ -143,6 +147,7 @@ async def upload_res(ctx: wire.Context, msg: ResourceUpload) -> Success:
     try:
         import gc
         mem_before = gc.mem_free()
+        print("[upload_res] mem before cleanup:", mem_before)
 
         # CRITICAL: Aggressive memory cleanup for continuous uploads
         # The "Message too large" error is actually a MemoryError in codec_v1.py
@@ -156,6 +161,7 @@ async def upload_res(ctx: wire.Context, msg: ResourceUpload) -> Success:
 
         mem_after = gc.mem_free()
         mem_alloc = gc.mem_alloc()
+        print("[upload_res] mem after cleanup:", mem_after, "alloc:", mem_alloc)
 
         # Check if we have enough free memory (we need at least 50KB for wire buffers)
         MIN_REQUIRED_MEMORY = 50 * 1024  # 50KB
@@ -164,8 +170,10 @@ async def upload_res(ctx: wire.Context, msg: ResourceUpload) -> Success:
             for i in range(3):
                 gc.collect()
             mem_after_emergency = gc.mem_free()
+            print("[upload_res] mem after emergency cleanup:", mem_after_emergency)
 
     except Exception as e:
+        print("[upload_res] memory prep error:", type(e).__name__, e)
         pass
 
     # Give the system a moment to stabilize after cache clearing
@@ -291,65 +299,195 @@ async def upload_res(ctx: wire.Context, msg: ResourceUpload) -> Success:
 
 
     try:
+        print("[upload_res] writing main data to", file_full_path, "size:", res_size)
         with io.fatfs.open(file_full_path, "w") as f:
             data_left = res_size
             offset = 0
             chunk_count = 0
+            current_limit = REQUEST_CHUNK_SIZE
             while data_left > 0:
                 chunk_count += 1
-                chunk_size = REQUEST_CHUNK_SIZE if data_left > REQUEST_CHUNK_SIZE else data_left
-                try:
-                    request = ResourceRequest(data_length=REQUEST_CHUNK_SIZE, offset=offset)
-                    ack: ResourceAck = await ctx.call(request, ResourceAck)
-                except Exception as e:
-                    # Try to free memory and retry once
-                    import gc
-                    mem_before_retry = gc.mem_free()
-                    gc.collect()
-                    mem_after_retry = gc.mem_free()
+                requested = min(current_limit, data_left)
+                while True:
                     try:
-                        request = ResourceRequest(data_length=REQUEST_CHUNK_SIZE, offset=offset)
+                        print(
+                            "[upload_res] main chunk request",
+                            chunk_count,
+                            "offset:",
+                            offset,
+                            "size:",
+                            requested,
+                        )
+                        request = ResourceRequest(data_length=requested, offset=offset)
                         ack: ResourceAck = await ctx.call(request, ResourceAck)
-                    except Exception as retry_e:
-                        raise
+                        break
+                    except Exception as e:
+                        print(
+                            "[upload_res] main chunk",
+                            chunk_count,
+                            "error:",
+                            type(e).__name__,
+                            getattr(e, "args", ()),
+                            "requested:",
+                            requested,
+                        )
+                        if _is_codec_too_large(e) and requested > MIN_CHUNK_SIZE:
+                            new_limit = max(requested // 2, MIN_CHUNK_SIZE)
+                            free_mem, alloc_mem = _heavy_gc(5)
+                            current_limit = new_limit
+                            requested = min(new_limit, data_left)
+                            print(
+                                "[upload_res] main chunk",
+                                chunk_count,
+                                "reduced size to",
+                                requested,
+                                "free:",
+                                free_mem,
+                                "alloc:",
+                                alloc_mem,
+                            )
+                            continue
+                        free_mem, alloc_mem = _heavy_gc(3)
+                        print(
+                            "[upload_res] main chunk",
+                            chunk_count,
+                            "retry after gc free:",
+                            free_mem,
+                            "alloc:",
+                            alloc_mem,
+                        )
+                        try:
+                            request = ResourceRequest(data_length=requested, offset=offset)
+                            ack = await ctx.call(request, ResourceAck)
+                            break
+                        except Exception as retry_e:
+                            print(
+                                "[upload_res] main chunk",
+                                chunk_count,
+                                "retry failed:",
+                                type(retry_e).__name__,
+                                getattr(retry_e, "args", ()),
+                            )
+                            raise
 
                 data = ack.data_chunk
+                actual_len = len(data) if data else 0
+                if actual_len == 0:
+                    raise wire.DataError("Received empty chunk")
+                if actual_len != requested:
+                    print(
+                        "[upload_res] main chunk",
+                        chunk_count,
+                        "actual len differs:",
+                        actual_len,
+                        "requested:",
+                        requested,
+                    )
+                    current_limit = min(current_limit, actual_len)
                 digest = blake2s(data).digest()
                 if digest != ack.hash:
                     raise wire.DataError("Date digest is inconsistent")
                 f.write(data)
-                offset += chunk_size
-                data_left -= REQUEST_CHUNK_SIZE
+                offset += actual_len
+                data_left -= actual_len
+                if chunk_count % 4 == 0 or data_left <= 0:
+                    print("[upload_res] main chunk", chunk_count, "offset:", offset, "remaining:", data_left)
             # force refresh to disk
             f.sync()
 
+        print("[upload_res] writing zoom data to", zoom_path, "size:", res_zoom_size)
         with io.fatfs.open(zoom_path, "w") as f:
             data_left = res_zoom_size
             offset = 0
             chunk_count = 0
+            current_limit = REQUEST_CHUNK_SIZE
             while data_left > 0:
                 chunk_count += 1
-                chunk_size = REQUEST_CHUNK_SIZE if data_left > REQUEST_CHUNK_SIZE else data_left
-                try:
-                    request = ZoomRequest(data_length=REQUEST_CHUNK_SIZE, offset=offset)
-                    ack: ResourceAck = await ctx.call(request, ResourceAck)
-                except Exception as e:
-                    # Retry once with GC
-                    import gc
-                    gc.collect()
+                requested = min(current_limit, data_left)
+                while True:
                     try:
-                        request = ZoomRequest(data_length=REQUEST_CHUNK_SIZE, offset=offset)
+                        print(
+                            "[upload_res] zoom chunk request",
+                            chunk_count,
+                            "offset:",
+                            offset,
+                            "size:",
+                            requested,
+                        )
+                        request = ZoomRequest(data_length=requested, offset=offset)
                         ack: ResourceAck = await ctx.call(request, ResourceAck)
-                    except Exception as retry_e:
-                        raise
+                        break
+                    except Exception as e:
+                        print(
+                            "[upload_res] zoom chunk",
+                            chunk_count,
+                            "error:",
+                            type(e).__name__,
+                            getattr(e, "args", ()),
+                            "requested:",
+                            requested,
+                        )
+                        if _is_codec_too_large(e) and requested > MIN_CHUNK_SIZE:
+                            new_limit = max(requested // 2, MIN_CHUNK_SIZE)
+                            free_mem, alloc_mem = _heavy_gc(5)
+                            current_limit = new_limit
+                            requested = min(new_limit, data_left)
+                            print(
+                                "[upload_res] zoom chunk",
+                                chunk_count,
+                                "reduced size to",
+                                requested,
+                                "free:",
+                                free_mem,
+                                "alloc:",
+                                alloc_mem,
+                            )
+                            continue
+                        free_mem, alloc_mem = _heavy_gc(3)
+                        print(
+                            "[upload_res] zoom chunk",
+                            chunk_count,
+                            "retry after gc free:",
+                            free_mem,
+                            "alloc:",
+                            alloc_mem,
+                        )
+                        try:
+                            request = ZoomRequest(data_length=requested, offset=offset)
+                            ack = await ctx.call(request, ResourceAck)
+                            break
+                        except Exception as retry_e:
+                            print(
+                                "[upload_res] zoom chunk",
+                                chunk_count,
+                                "retry failed:",
+                                type(retry_e).__name__,
+                                getattr(retry_e, "args", ()),
+                            )
+                            raise
 
                 data = ack.data_chunk
+                actual_len = len(data) if data else 0
+                if actual_len == 0:
+                    raise wire.DataError("Received empty zoom chunk")
+                if actual_len != requested:
+                    print(
+                        "[upload_res] zoom chunk",
+                        chunk_count,
+                        "actual len differs:",
+                        actual_len,
+                        "requested:",
+                        requested,
+                    )
+                    current_limit = min(current_limit, actual_len)
                 digest = blake2s(data).digest()
                 if digest != ack.hash:
                     raise wire.DataError("Date digest is inconsistent")
                 f.write(data)
-                offset += chunk_size
-                data_left -= REQUEST_CHUNK_SIZE
+                offset += actual_len
+                data_left -= actual_len
+                if chunk_count % 4 == 0 or data_left <= 0:
+                    print("[upload_res] zoom chunk", chunk_count, "offset:", offset, "remaining:", data_left)
             # force refresh to disk
             f.sync()
 
@@ -363,44 +501,110 @@ async def upload_res(ctx: wire.Context, msg: ResourceUpload) -> Success:
                     gc.collect()
                 mem_free = gc.mem_free()
                 mem_alloc = gc.mem_alloc()
+                print("[upload_res] blur mem free:", mem_free, "alloc:", mem_alloc)
             except Exception as e:
-                pass
+                print("[upload_res] blur gc error:", type(e).__name__, e)
 
             # Wait for system to stabilize
             try:
                 from trezor import loop
                 await loop.sleep(50)  # 50ms delay before blur
             except Exception as e:
-                pass
+                print("[upload_res] blur wait error:", type(e).__name__, e)
 
+            print("[upload_res] writing blur data to", blur_path, "size:", res_blur_size)
             with io.fatfs.open(blur_path, "w") as f:
                 data_left = res_blur_size
                 offset = 0
                 chunk_count = 0
+                current_limit = REQUEST_CHUNK_SIZE
                 while data_left > 0:
                     chunk_count += 1
-                    chunk_size = REQUEST_CHUNK_SIZE if data_left > REQUEST_CHUNK_SIZE else data_left
-                    try:
-                        request = BlurRequest(data_length=REQUEST_CHUNK_SIZE, offset=offset)
-                        ack: ResourceAck = await ctx.call(request, ResourceAck)
-                    except Exception as e:
-                        # Retry once with aggressive GC
-                        import gc
-                        for i in range(3):
-                            gc.collect()
+                    requested = min(current_limit, data_left)
+                    while True:
                         try:
-                            request = BlurRequest(data_length=REQUEST_CHUNK_SIZE, offset=offset)
+                            print(
+                                "[upload_res] blur chunk request",
+                                chunk_count,
+                                "offset:",
+                                offset,
+                                "size:",
+                                requested,
+                            )
+                            request = BlurRequest(data_length=requested, offset=offset)
                             ack: ResourceAck = await ctx.call(request, ResourceAck)
-                        except Exception as retry_e:
-                            raise
+                            break
+                        except Exception as e:
+                            print(
+                                "[upload_res] blur chunk",
+                                chunk_count,
+                                "error:",
+                                type(e).__name__,
+                                getattr(e, "args", ()),
+                                "requested:",
+                                requested,
+                            )
+                            if _is_codec_too_large(e) and requested > MIN_CHUNK_SIZE:
+                                new_limit = max(requested // 2, MIN_CHUNK_SIZE)
+                                free_mem, alloc_mem = _heavy_gc(5)
+                                current_limit = new_limit
+                                requested = min(new_limit, data_left)
+                                print(
+                                    "[upload_res] blur chunk",
+                                    chunk_count,
+                                    "reduced size to",
+                                    requested,
+                                    "free:",
+                                    free_mem,
+                                    "alloc:",
+                                    alloc_mem,
+                                )
+                                continue
+                            free_mem, alloc_mem = _heavy_gc(3)
+                            print(
+                                "[upload_res] blur chunk",
+                                chunk_count,
+                                "retry after gc free:",
+                                free_mem,
+                                "alloc:",
+                                alloc_mem,
+                            )
+                            try:
+                                request = BlurRequest(data_length=requested, offset=offset)
+                                ack = await ctx.call(request, ResourceAck)
+                                break
+                            except Exception as retry_e:
+                                print(
+                                    "[upload_res] blur chunk",
+                                    chunk_count,
+                                    "retry failed:",
+                                    type(retry_e).__name__,
+                                    getattr(retry_e, "args", ()),
+                                )
+                                raise
 
                     data = ack.data_chunk
+                    actual_len = len(data) if data else 0
+                    if actual_len == 0:
+                        raise wire.DataError("Received empty blur chunk")
+                    if actual_len != requested:
+                        print(
+                            "[upload_res] blur chunk",
+                            chunk_count,
+                            "actual len differs:",
+                            actual_len,
+                            "requested:",
+                            requested,
+                        )
+                        current_limit = min(current_limit, actual_len)
                     digest = blake2s(data).digest()
                     if digest != ack.hash:
                         raise wire.DataError("Date digest is inconsistent")
                     f.write(data)
-                    offset += chunk_size
-                    data_left -= REQUEST_CHUNK_SIZE
+                    offset += actual_len
+                    data_left -= actual_len
+                    if chunk_count % 4 == 0 or data_left <= 0:
+                        print("[upload_res] blur chunk", chunk_count, "offset:", offset, "remaining:", data_left)
                 # force refresh to disk
                 f.sync()
 
@@ -417,8 +621,12 @@ async def upload_res(ctx: wire.Context, msg: ResourceUpload) -> Success:
             gc.collect()
             mem_free = gc.mem_free()
             mem_alloc = gc.mem_alloc()
+            print("[upload_res] mem after files free:", mem_free, "alloc:", mem_alloc)
         except Exception as e:
+            print("[upload_res] mem after files error:", type(e).__name__, e)
             pass
+
+        print("[upload_res] upload complete")
 
         if replace:
             # Get current wallpapers to protect them
@@ -724,3 +932,20 @@ async def upload_res(ctx: wire.Context, msg: ResourceUpload) -> Success:
             pass
 
     return Success(message="Success")
+def _heavy_gc(passes: int = 3) -> tuple[int, int]:
+    """Run multiple GC passes and return (free, alloc)."""
+    import gc
+
+    mem_free = gc.mem_free()
+    mem_alloc = gc.mem_alloc()
+    for _ in range(passes):
+        gc.collect()
+    return gc.mem_free(), gc.mem_alloc()
+
+
+def _is_codec_too_large(err: Exception) -> bool:
+    name = type(err).__name__
+    msg = getattr(err, "args", ())
+    if msg:
+        msg = msg[0]
+    return name in ("CodecError", "DataError") and isinstance(msg, str) and "Message too large" in msg

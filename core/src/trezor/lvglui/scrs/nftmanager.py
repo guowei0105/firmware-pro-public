@@ -79,6 +79,17 @@ def _get_main_screen_cls():
 class WallpaperPreviewBase(AnimScreen):
     """Base class for wallpaper preview screens with common functionality."""
 
+    def __init__(self, *args, **kwargs):
+        f = getattr(getattr(lv, "img", None), "cache_set_size", None)
+        self.restore = None
+        if f:
+            try:
+                f(0)
+                self.restore = f
+            except Exception:
+                self.restore = None
+        super().__init__(*args, **kwargs)
+
     def _create_preview_container(self, top_offset=118):
         """Create the preview container with standard settings."""
         self.content_area.set_scrollbar_mode(lv.SCROLLBAR_MODE.OFF)
@@ -213,6 +224,25 @@ class WallpaperPreviewBase(AnimScreen):
                 icon_path = _P11
 
         self.blur_button_icon.set_src(icon_path)
+
+    def load_screen(self, scr, destroy_self: bool = False):
+        f = getattr(self, "restore", None)
+        if f:
+            try:
+                f(1)
+            except Exception:
+                pass
+            self.restore = None
+        return super().load_screen(scr, destroy_self=destroy_self)
+
+    def __del__(self):
+        f = getattr(self, "restore", None)
+        if f:
+            try:
+                f(1)
+            except Exception:
+                pass
+            self.restore = None
 
 
 class NftGallery(Screen):

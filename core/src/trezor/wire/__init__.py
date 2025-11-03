@@ -36,6 +36,7 @@ reads the message's header. When the message type is known the first handler is 
 """
 
 from typing import TYPE_CHECKING
+import gc
 
 from storage.cache import InvalidSessionError
 from trezor import log, loop, protobuf, utils, workflow
@@ -47,6 +48,8 @@ from trezor.wire.errors import ActionCancelled, DataError, Error
 # Import all errors into namespace, so that `wire.Error` is available from
 # other packages.
 from trezor.wire.errors import *  # isort:skip # noqa: F401,F403
+
+SESSION_MEM_LOW_WATERMARK = 96 * 1024
 
 
 if TYPE_CHECKING:
@@ -479,7 +482,7 @@ async def handle_session(
     # Take a mark of modules that are imported at this point, so we can
     # roll back and un-import any others.
     modules = utils.unimport_begin()
-    from trezor.lvglui.scrs.homescreen import change_state
+    from trezor.lvglui.scrs.homescreen import change_state, force_idle_cleanup
 
     while True:
         try:
@@ -487,6 +490,19 @@ async def handle_session(
                 # If the previous run did not keep an unprocessed message for us,
                 # wait for a new one coming from the wire.
                 try:
+                    try:
+                        gc.collect()
+                    except Exception:
+                        pass
+                    try:
+                        if gc.mem_free() < SESSION_MEM_LOW_WATERMARK:
+                            gc.collect()
+                    except AttributeError:
+                        pass
+                    try:
+                        force_idle_cleanup()
+                    except Exception:
+                        pass
                     msg = await ctx.read_from_wire()
                     change_state(is_busy=True)
                 except codec_v1.CodecError as exc:
@@ -537,6 +553,7 @@ async def handle_session(
                     # a quiet period, and works for any request type.
                     try:
                         change_state()
+                        force_idle_cleanup()
                     except Exception:
                         pass
 
