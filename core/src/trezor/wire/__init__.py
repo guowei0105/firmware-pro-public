@@ -38,6 +38,7 @@ reads the message's header. When the message type is known the first handler is 
 from typing import TYPE_CHECKING
 import gc
 
+from storage import cache
 from storage.cache import InvalidSessionError
 from trezor import log, loop, protobuf, utils, workflow
 from trezor.enums import FailureType
@@ -482,7 +483,29 @@ async def handle_session(
     # Take a mark of modules that are imported at this point, so we can
     # roll back and un-import any others.
     modules = utils.unimport_begin()
-    from trezor.lvglui.scrs.homescreen import change_state, force_idle_cleanup
+    import trezor.lvglui.scrs.homescreen as homescreen
+    change_state = homescreen.change_state
+    clear_preview_cache = getattr(homescreen, "_clear_preview_cache", None)
+
+    def _maybe_clear_ui_cache():
+        try:
+            if cache.get_int(cache.APP_COMMON_BUSY_STATE, 0) != 0:
+                return
+        except Exception:
+            return
+        try:
+            homescreen.lv.img.cache_invalidate_src(None)
+        except Exception:
+            pass
+        if clear_preview_cache:
+            try:
+                clear_preview_cache()
+            except Exception:
+                pass
+        try:
+            gc.collect()
+        except Exception:
+            pass
 
     while True:
         try:
@@ -499,10 +522,7 @@ async def handle_session(
                             gc.collect()
                     except AttributeError:
                         pass
-                    try:
-                        force_idle_cleanup()
-                    except Exception:
-                        pass
+                    _maybe_clear_ui_cache()
                     msg = await ctx.read_from_wire()
                     change_state(is_busy=True)
                 except codec_v1.CodecError as exc:
@@ -553,7 +573,7 @@ async def handle_session(
                     # a quiet period, and works for any request type.
                     try:
                         change_state()
-                        force_idle_cleanup()
+                        _maybe_clear_ui_cache()
                     except Exception:
                         pass
 

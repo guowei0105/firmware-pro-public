@@ -150,7 +150,6 @@ def _cancel_busy_restore_timer():
         except Exception:
             pass
         _busy_restore_timer = None
-        print("[BusyState] cancelled pending restore timer")
 
 
 def _schedule_busy_restore(delay_ms: int):
@@ -165,7 +164,6 @@ def _schedule_busy_restore(delay_ms: int):
     timer = lv.timer_create(_callback, delay_ms, None)
     timer.set_repeat_count(1)
     _busy_restore_timer = timer
-    print("[BusyState] new restore timer scheduled in", delay_ms, "ms")
 
 
 def _with_lvgl_timer_pause(func, *args, **kwargs):
@@ -230,31 +228,21 @@ _BUSY_GRACE_MS = 800
 def _restore_idle(t):
     global _busy_restore_timer
     _busy_restore_timer = None
-    print("[BusyState] _restore_idle called, timer:", t)
     d = storage.cache.get_int(storage.cache.APP_COMMON_BUSY_DEADLINE_MS, 0)
-    print("[BusyState] deadline:", d)
     if d > 0 and utime.ticks_diff(utime.ticks_ms(), d) >= 0:
-        print("[BusyState] deadline reached, clearing busy state")
         storage.cache.delete(storage.cache.APP_COMMON_BUSY_DEADLINE_MS)
         storage.cache.set_int(storage.cache.APP_COMMON_BUSY_STATE, 0)
         ms = MainScreen._instance if hasattr(MainScreen, "_instance") and MainScreen._instance else MainScreen()
         ms.change_state(False)
-    else:
-        print("[BusyState] deadline not reached yet")
 
 def change_state(is_busy: bool = False):
     from trezor import config
     from trezor.lvglui.scrs import fingerprints
-    print("[BusyState] change_state start, is_busy:", is_busy)
-    print("[BusyState] current busy state:", storage.cache.get_int(storage.cache.APP_COMMON_BUSY_STATE, 0))
-    print("[BusyState] deadline before action:", storage.cache.get_int(storage.cache.APP_COMMON_BUSY_DEADLINE_MS, 0))
-    print("[BusyState] busy time before action:", storage.cache.get_int(storage.cache.APP_COMMON_BUSY_TIME, 0))
     if (fingerprints.is_available() and not fingerprints.is_unlocked()) or (not fingerprints.is_available() and not config.is_unlocked()):
         return
     if is_busy:
         _cancel_busy_restore_timer()
         storage.cache.set_int(storage.cache.APP_COMMON_BUSY_STATE, 1)
-        print("[BusyState] entered busy state, time:", storage.cache.get_int(storage.cache.APP_COMMON_BUSY_TIME, 0))
         storage.cache.delete(storage.cache.APP_COMMON_BUSY_DEADLINE_MS)
         storage.cache.set_int(storage.cache.APP_COMMON_BUSY_TIME, utime.ticks_ms())
         ms = MainScreen._instance if hasattr(MainScreen, "_instance") and MainScreen._instance else MainScreen()
@@ -268,33 +256,7 @@ def change_state(is_busy: bool = False):
         now = utime.ticks_ms()
         storage.cache.set_int(storage.cache.APP_COMMON_BUSY_TIME, now)
         storage.cache.set_int(storage.cache.APP_COMMON_BUSY_DEADLINE_MS, utime.ticks_add(now, _BUSY_GRACE_MS))
-        print("[BusyState] scheduling restore, deadline:", storage.cache.get_int(storage.cache.APP_COMMON_BUSY_DEADLINE_MS, 0))
         _schedule_busy_restore(_BUSY_GRACE_MS)
-
-
-def force_idle_cleanup():
-    """Force the UI into idle state and release caches to avoid memory pressure between sessions."""
-    _cancel_busy_restore_timer()
-    storage.cache.set_int(storage.cache.APP_COMMON_BUSY_STATE, 0)
-    storage.cache.delete(storage.cache.APP_COMMON_BUSY_DEADLINE_MS)
-    try:
-        lv.img.cache_invalidate_src(None)
-    except Exception:
-        pass
-    try:
-        _clear_preview_cache()
-    except Exception:
-        pass
-    try:
-        gc.collect()
-    except Exception:
-        pass
-    ms = MainScreen._instance if hasattr(MainScreen, "_instance") and MainScreen._instance else None
-    if ms:
-        try:
-            ms.change_state(False)
-        except Exception:
-            pass
 
 
 class MainScreen(Screen):
