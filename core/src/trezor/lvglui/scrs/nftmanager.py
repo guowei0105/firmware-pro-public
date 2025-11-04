@@ -659,10 +659,7 @@ class NftLockScreenPreview(WallpaperPreviewBase):
                         )
                         # Refresh the background with new lockscreen
                         if main_screen:
-                            main_screen.add_style(
-                                StyleWrapper().bg_img_src(safe_unlock_path),
-                                0,
-                            )
+                            main_screen.set_background_image(safe_unlock_path)
 
                             # Also refresh AppDrawer if it exists
                             if hasattr(main_screen, "apps") and main_screen.apps:
@@ -827,10 +824,7 @@ class NftHomeScreenPreview(WallpaperPreviewBase):
                                     lockscreen_path,
                                     _S3,
                                 )
-                                main_screen.add_style(
-                                    StyleWrapper().bg_img_src(safe_lock_path),
-                                    0,
-                                )
+                                main_screen.set_background_image(safe_lock_path)
 
                             # Also refresh AppDrawer if it exists
                             if hasattr(main_screen, "apps") and main_screen.apps:

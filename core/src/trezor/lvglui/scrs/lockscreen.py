@@ -15,6 +15,20 @@ ANIM_PLAYBACK_DELAY = 5
 class LockScreen(Screen):
     _lock_count = 0  # Class variable to track number of times LockScreen is instantiated
 
+    def _ensure_background_style(self):
+        if not hasattr(self, "_background_style"):
+            self._background_style = StyleWrapper().bg_img_opa(lv.OPA._40).border_width(0)
+            self.add_style(self._background_style, 0)
+        return self._background_style
+
+    def set_background_image(self, image_src: str) -> None:
+        style = self._ensure_background_style()
+        style.bg_img_src(image_src)
+        try:
+            self.invalidate()
+        except Exception:
+            pass
+
     @classmethod
     def retrieval(cls) -> tuple[bool, "LockScreen" | None]:
         try:
@@ -73,10 +87,7 @@ class LockScreen(Screen):
                     self.subtitle.set_text("")
                     self.subtitle.add_flag(lv.obj.FLAG.HIDDEN)
         else:
-            self.add_style(
-                StyleWrapper().bg_img_src(lockscreen).bg_img_opa(lv.OPA._40),
-                0,
-            )
+            self.set_background_image(lockscreen)
             if hasattr(self, "title") and self.title:
                 if show_device_names:
                     self.title.set_text(device_name)
@@ -105,10 +116,7 @@ class LockScreen(Screen):
             self.title.align_to(self.content_area, lv.ALIGN.TOP_MID, 0, 76)
         if hasattr(self, "subtitle") and self.subtitle:
             self.subtitle.align_to(self.title, lv.ALIGN.OUT_BOTTOM_MID, 0, 16)
-        self.add_style(
-            StyleWrapper().bg_img_src(lockscreen).bg_img_opa(lv.OPA._40),
-            0,
-        )
+        self.set_background_image(lockscreen)
         self.tap_tip = lv.label(self.content_area)
         self.tap_tip.set_long_mode(lv.label.LONG.WRAP)
         self.show_tips()

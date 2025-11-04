@@ -260,6 +260,22 @@ def change_state(is_busy: bool = False):
 
 
 class MainScreen(Screen):
+    def _ensure_background_style(self):
+        """Ensure the singleton screen has a reusable background style."""
+        if not hasattr(self, "_background_style"):
+            self._background_style = StyleWrapper().border_width(0)
+            self.add_style(self._background_style, 0)
+        return self._background_style
+
+    def set_background_image(self, image_src: str) -> None:
+        """Update background image without accumulating style objects."""
+        style = self._ensure_background_style()
+        style.bg_img_src(image_src)
+        try:
+            self.invalidate()
+        except Exception:
+            pass
+
     def __init__(self, device_name=None, ble_name=None, dev_state=None):
         import storage.device as storage_device
 
@@ -285,7 +301,7 @@ class MainScreen(Screen):
                 super().__init__()
 
             # Set background for first-time initialization
-            self.add_style(StyleWrapper().bg_img_src(lockscreen), 0)
+            self.set_background_image(lockscreen)
         else:
             # Check if device name display setting has changed
             show_device_names = storage_device.is_device_name_display_enabled()
@@ -327,7 +343,7 @@ class MainScreen(Screen):
                     self.subtitle.set_text("")
 
             lockscreen = _normalize_wallpaper_src(storage_device.get_homescreen())
-            self.add_style(StyleWrapper().bg_img_src(lockscreen), 0)
+            self.set_background_image(lockscreen)
             if hasattr(self, "dev_state"):
                 from apps.base import get_state
 
@@ -363,7 +379,7 @@ class MainScreen(Screen):
                 self.dev_state.align_to(self.content_area, lv.ALIGN.TOP_MID, 0, 124)
             self.dev_state.show(dev_state)
         post_lock = _normalize_wallpaper_src(storage_device.get_homescreen())
-        self.add_style(StyleWrapper().bg_img_src(post_lock), 0)
+        self.set_background_image(post_lock)
         self.clear_flag(lv.obj.FLAG.SCROLLABLE)
         self.bottom_tips = lv.label(self.content_area)
         self.bottom_tips.set_long_mode(lv.label.LONG.WRAP)
@@ -692,8 +708,30 @@ class MainScreen(Screen):
 
         # Removed styles property to fix system freeze
 
+        def _ensure_background_style(self):
+            if getattr(self, "_background_style", None) is None:
+                self._background_style = StyleWrapper().border_width(0)
+                self.add_style(self._background_style, 0)
+            return self._background_style
+
+        def _set_background_image(self, image_src: str | None):
+            if image_src:
+                style = self._ensure_background_style()
+                style.bg_img_src(image_src)
+                try:
+                    self.invalidate()
+                except Exception:
+                    pass
+            elif getattr(self, "_background_style", None):
+                try:
+                    self.remove_style(self._background_style, 0)
+                except Exception:
+                    pass
+                self._background_style = None
+
         def init_ui(self):
             self.remove_style_all()
+            self._background_style = None
             self.set_pos(0, 0)
             self.set_size(lv.pct(100), lv.pct(100))
             self.add_style(
@@ -704,8 +742,7 @@ class MainScreen(Screen):
                 0,
             )
             homescreen = _normalize_wallpaper_src(storage_device.get_appdrawer_background(), allow_default=False)
-            if homescreen:
-                self.add_style(StyleWrapper().bg_img_src(homescreen).border_width(0), 0)
+            self._set_background_image(homescreen or None)
             # If homescreen is empty, keep the existing black background
 
             self.add_event_cb(self.on_click, lv.EVENT.CLICKED, None)
@@ -1222,8 +1259,7 @@ class MainScreen(Screen):
 
         def refresh_background(self):
             homescreen = _normalize_wallpaper_src(storage_device.get_appdrawer_background(), allow_default=False)
-            if homescreen:
-                self.add_style(StyleWrapper().bg_img_src(homescreen).border_width(0), 0)
+            self._set_background_image(homescreen or None)
 
         def _preload_layer2_background(self):
             """
@@ -3326,6 +3362,39 @@ class AutolockSetting(AnimScreen):
 
 
 class AppdrawerBackgroundSetting(AnimScreen):
+    @classmethod
+    def _log(cls, message):
+        try:
+            free_mem = gc.mem_free()
+        except AttributeError:
+            free_mem = -1
+        print("[AppdrawerBackgroundSetting] %s | mem_free=%d" % (message, free_mem))
+
+    @classmethod
+    def _dispose_existing(cls, reason=""):
+        if hasattr(cls, "_instance"):
+            instance = cls._instance
+            cls._log(
+                "disposing previous lockscreen preview%s"
+                % (f" ({reason})" if reason else "")
+            )
+            try:
+                if hasattr(utils, "SCREENS") and instance in utils.SCREENS:
+                    utils.SCREENS.remove(instance)
+            except Exception:
+                pass
+            try:
+                instance.delete()
+            except Exception:
+                pass
+            try:
+                if hasattr(instance, "_init"):
+                    delattr(instance, "_init")
+            except Exception:
+                pass
+            del cls._instance
+            gc.collect()
+
     def collect_animation_targets(self) -> list:
         # Disable animations for lock screen preview
         return []
@@ -3333,6 +3402,11 @@ class AppdrawerBackgroundSetting(AnimScreen):
     def __init__(
         self, prev_scr=None, selected_wallpaper=None, return_from_wallpaper=False
     ):
+        self._log(
+            "init start (%s)"
+            % ("warm" if hasattr(self, "_init") else "cold")
+        )
+
         if not hasattr(self, "_init"):
             self._init = True
         else:
@@ -3371,6 +3445,10 @@ class AppdrawerBackgroundSetting(AnimScreen):
                             self.lockscreen_preview.set_src("A:/res/wallpaper-7.jpg")
                         storage_device.set_homescreen("A:/res/wallpaper-7.jpg")
             self.refresh_text()
+            self._log(
+                "refresh existing preview (wallpaper=%s)"
+                % getattr(self, "current_wallpaper_path", "unknown")
+            )
             return
 
         self.selected_wallpaper = selected_wallpaper
@@ -3578,6 +3656,10 @@ class AppdrawerBackgroundSetting(AnimScreen):
             _loop.schedule(self._first_frame_fix())
         except Exception:
             pass
+        self._log(
+            "init complete (wallpaper=%s)"
+            % getattr(self, "current_wallpaper_path", "unknown")
+        )
         gc.collect()
 
     def on_select_clicked(self, event_obj):
@@ -3623,6 +3705,10 @@ class AppdrawerBackgroundSetting(AnimScreen):
 
         except Exception as e:
             pass
+        self._log(
+            "refresh text (wallpaper=%s)"
+            % getattr(self, "current_wallpaper_path", "unknown")
+        )
 
     async def _first_frame_fix(self):
         """Fix first-frame JPEG decoding artifacts by waiting for decode completion"""
@@ -3639,6 +3725,23 @@ class AppdrawerBackgroundSetting(AnimScreen):
                 self.preview_container.invalidate()
             if hasattr(self, "lockscreen_preview") and self.lockscreen_preview:
                 self.lockscreen_preview.invalidate()
+        except Exception:
+            pass
+
+    def __del__(self):
+        self._log("__del__ invoked")
+        try:
+            if hasattr(utils, "SCREENS") and self in utils.SCREENS:
+                utils.SCREENS.remove(self)
+        except Exception:
+            pass
+        try:
+            if hasattr(self, "container") and self.container:
+                self.container.delete()
+        except Exception:
+            pass
+        try:
+            _clear_preview_cache()
         except Exception:
             pass
 
@@ -3704,8 +3807,7 @@ class AppdrawerBackgroundSetting(AnimScreen):
                 if hasattr(MainScreen, "_instance") and MainScreen._instance:
                     ms = MainScreen._instance
                     sanitized = _normalize_wallpaper_src(current_wallpaper)
-                    ms.add_style(StyleWrapper().bg_img_src(sanitized), 0)
-                    ms.invalidate()
+                    ms.set_background_image(sanitized)
                     lv.refr_now(None)
 
                 # Delete LockScreen instance to force recreation with new wallpaper
@@ -4213,7 +4315,26 @@ class WallperChange(AnimScreen):
                                 try:
                                     # Reset HomeScreenSetting singleton if it exists
                                     if hasattr(HomeScreenSetting, "_instance"):
+                                        old_instance = HomeScreenSetting._instance
+                                        try:
+                                            if (
+                                                hasattr(utils, "SCREENS")
+                                                and old_instance in utils.SCREENS
+                                            ):
+                                                utils.SCREENS.remove(old_instance)
+                                        except Exception:
+                                            pass
+                                        try:
+                                            old_instance.delete()
+                                        except Exception:
+                                            pass
+                                        try:
+                                            if hasattr(old_instance, "_init"):
+                                                delattr(old_instance, "_init")
+                                        except Exception:
+                                            pass
                                         del HomeScreenSetting._instance
+                                        gc.collect()
 
                                     new_screen = HomeScreenSetting(
                                         self.prev_scr.prev_scr,
@@ -4257,6 +4378,9 @@ class WallperChange(AnimScreen):
                                 self.del_delayed(100)
                             except Exception as e:
                                 try:
+                                    AppdrawerBackgroundSetting._dispose_existing(
+                                        "recreate after wallpaper selection fallback"
+                                    )
                                     new_screen = AppdrawerBackgroundSetting(
                                         self.prev_scr.prev_scr,
                                         selected_wallpaper=wp.img_path,
@@ -5938,7 +6062,9 @@ class WallpaperScreen(AnimScreen):
         if hasattr(self, "lock_screen") and target == self.lock_screen:
             try:
                 if hasattr(AppdrawerBackgroundSetting, "_instance"):
-                    del AppdrawerBackgroundSetting._instance
+                    AppdrawerBackgroundSetting._dispose_existing(
+                        "navigation from WallpaperScreen"
+                    )
                 AppdrawerBackgroundSetting(self)
             except Exception as e:
                 pass
@@ -5952,7 +6078,6 @@ class WallpaperScreen(AnimScreen):
 
 
 class HomeScreenSetting(AnimScreen):
-    _active_instances = []
 
     def collect_animation_targets(self) -> list:
         return []
@@ -6007,10 +6132,6 @@ class HomeScreenSetting(AnimScreen):
                     self._update_blur_button_state()
 
             return
-
-        # Add current instance to active list
-        if self not in HomeScreenSetting._active_instances:
-            HomeScreenSetting._active_instances.append(self)
 
         self.selected_wallpaper = selected_wallpaper
 
@@ -6289,8 +6410,8 @@ class HomeScreenSetting(AnimScreen):
 
     def __del__(self):
         try:
-            if self in HomeScreenSetting._active_instances:
-                HomeScreenSetting._active_instances.remove(self)
+            if hasattr(utils, "SCREENS") and self in utils.SCREENS:
+                utils.SCREENS.remove(self)
         except Exception:
             pass
         try:
