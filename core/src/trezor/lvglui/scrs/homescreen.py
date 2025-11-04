@@ -3363,21 +3363,9 @@ class AutolockSetting(AnimScreen):
 
 class AppdrawerBackgroundSetting(AnimScreen):
     @classmethod
-    def _log(cls, message):
-        try:
-            free_mem = gc.mem_free()
-        except AttributeError:
-            free_mem = -1
-        print("[AppdrawerBackgroundSetting] %s | mem_free=%d" % (message, free_mem))
-
-    @classmethod
     def _dispose_existing(cls, reason=""):
         if hasattr(cls, "_instance"):
             instance = cls._instance
-            cls._log(
-                "disposing previous lockscreen preview%s"
-                % (f" ({reason})" if reason else "")
-            )
             try:
                 if hasattr(utils, "SCREENS") and instance in utils.SCREENS:
                     utils.SCREENS.remove(instance)
@@ -3402,11 +3390,6 @@ class AppdrawerBackgroundSetting(AnimScreen):
     def __init__(
         self, prev_scr=None, selected_wallpaper=None, return_from_wallpaper=False
     ):
-        self._log(
-            "init start (%s)"
-            % ("warm" if hasattr(self, "_init") else "cold")
-        )
-
         if not hasattr(self, "_init"):
             self._init = True
         else:
@@ -3445,10 +3428,6 @@ class AppdrawerBackgroundSetting(AnimScreen):
                             self.lockscreen_preview.set_src("A:/res/wallpaper-7.jpg")
                         storage_device.set_homescreen("A:/res/wallpaper-7.jpg")
             self.refresh_text()
-            self._log(
-                "refresh existing preview (wallpaper=%s)"
-                % getattr(self, "current_wallpaper_path", "unknown")
-            )
             return
 
         self.selected_wallpaper = selected_wallpaper
@@ -3656,10 +3635,6 @@ class AppdrawerBackgroundSetting(AnimScreen):
             _loop.schedule(self._first_frame_fix())
         except Exception:
             pass
-        self._log(
-            "init complete (wallpaper=%s)"
-            % getattr(self, "current_wallpaper_path", "unknown")
-        )
         gc.collect()
 
     def on_select_clicked(self, event_obj):
@@ -3705,10 +3680,6 @@ class AppdrawerBackgroundSetting(AnimScreen):
 
         except Exception as e:
             pass
-        self._log(
-            "refresh text (wallpaper=%s)"
-            % getattr(self, "current_wallpaper_path", "unknown")
-        )
 
     async def _first_frame_fix(self):
         """Fix first-frame JPEG decoding artifacts by waiting for decode completion"""
@@ -3729,7 +3700,6 @@ class AppdrawerBackgroundSetting(AnimScreen):
             pass
 
     def __del__(self):
-        self._log("__del__ invoked")
         try:
             if hasattr(utils, "SCREENS") and self in utils.SCREENS:
                 utils.SCREENS.remove(self)
