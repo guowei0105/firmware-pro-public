@@ -62,21 +62,11 @@ PATTERN = re.compile(r"^(nft|wp)-[0-9a-f]+-\d+$")
 
 
 async def upload_res(ctx: wire.Context, msg: ResourceUpload) -> Success:
-    print("[upload_res] start", "ext:", msg.extension, "size:", msg.data_length, "zoom:", msg.zoom_data_length, "blur:", msg.blur_data_length)
     res_type = msg.res_type
     res_ext = msg.extension
     res_size = msg.data_length
     res_zoom_size = msg.zoom_data_length
     res_blur_size = msg.blur_data_length or 0
-
-    # Log initial memory state
-    try:
-        import gc
-        initial_mem_free = gc.mem_free()
-        initial_mem_alloc = gc.mem_alloc()
-        print("[upload_res] mem start free:", initial_mem_free, "alloc:", initial_mem_alloc)
-    except Exception:
-        pass
 
     # CRITICAL: Completely stop Layer2 wallpaper display and save decoder state
     # Step 1: Hide Layer2 to stop accessing wallpaper in VRAM
@@ -87,7 +77,7 @@ async def upload_res(ctx: wire.Context, msg: ResourceUpload) -> Success:
             display.cover_background_hide()
         if hasattr(display, 'cover_background_set_visible'):
             display.cover_background_set_visible(False)
-    except Exception as e:
+    except Exception:
         pass
 
     # Step 1.5: CRITICAL - Wait for JPEG decoder to finish any pending operations
@@ -113,7 +103,7 @@ async def upload_res(ctx: wire.Context, msg: ResourceUpload) -> Success:
             # Fallback: just wait a fixed time
             await loop.sleep(500)  # 500ms fixed delay
 
-    except Exception as e:
+    except Exception:
         pass
 
     # Step 2: Save hardware JPEG decoder state (critical for STM32)
@@ -121,16 +111,14 @@ async def upload_res(ctx: wire.Context, msg: ResourceUpload) -> Success:
         import trezorio
         if hasattr(trezorio, 'jpeg_save_decoder_state'):
             trezorio.jpeg_save_decoder_state()
-            print("[upload_res] jpeg decoder state saved")
-    except Exception as e:
-        print("[upload_res] jpeg_save_decoder_state error:", type(e).__name__, e)
+    except Exception:
         pass
 
     # Clear LVGL image cache to free up texture memory
     try:
         from trezor.lvglui.scrs.common import lv
         lv.img.cache_invalidate_src(None)  # Clear all cached images
-    except Exception as e:
+    except Exception:
         pass
 
     try:
@@ -140,40 +128,29 @@ async def upload_res(ctx: wire.Context, msg: ResourceUpload) -> Success:
             homescreen._cached_styles.clear()
         if hasattr(homescreen, '_last_jpeg_loaded'):
             homescreen._last_jpeg_loaded = None
-    except Exception as e:
+    except Exception:
         pass
 
     # Check memory status at the beginning
     try:
         import gc
-        mem_before = gc.mem_free()
-        print("[upload_res] mem before cleanup:", mem_before)
 
         # CRITICAL: Aggressive memory cleanup for continuous uploads
         # The "Message too large" error is actually a MemoryError in codec_v1.py
         # We need to defragment memory as much as possible
-
-        # Multiple GC passes to clean up cycles and defragment
-        for i in range(5):  # Increased from 3 to 5 passes
+        for _ in range(5):  # Increased from 3 to 5 passes
             gc.collect()
-            if i % 2 == 0:
-                mem_current = gc.mem_free()
 
         mem_after = gc.mem_free()
-        mem_alloc = gc.mem_alloc()
-        print("[upload_res] mem after cleanup:", mem_after, "alloc:", mem_alloc)
 
         # Check if we have enough free memory (we need at least 50KB for wire buffers)
         MIN_REQUIRED_MEMORY = 50 * 1024  # 50KB
         if mem_after < MIN_REQUIRED_MEMORY:
             # Try one more aggressive cleanup
-            for i in range(3):
+            for _ in range(3):
                 gc.collect()
-            mem_after_emergency = gc.mem_free()
-            print("[upload_res] mem after emergency cleanup:", mem_after_emergency)
 
-    except Exception as e:
-        print("[upload_res] memory prep error:", type(e).__name__, e)
+    except Exception:
         pass
 
     # Give the system a moment to stabilize after cache clearing
@@ -183,7 +160,7 @@ async def upload_res(ctx: wire.Context, msg: ResourceUpload) -> Success:
 
         # One more decoder check before starting upload
         if hasattr(trezorio, 'jpeg_decoder_is_busy'):
-            for i in range(20):  # Max 200ms wait
+            for _ in range(20):  # Max 200ms wait
                 if not trezorio.jpeg_decoder_is_busy():
                     break
                 await loop.sleep(10)
@@ -282,7 +259,6 @@ async def upload_res(ctx: wire.Context, msg: ResourceUpload) -> Success:
         except BaseException:
             pass
             # Any filesystem error falls back to normal upload path below.
-            pass
     # directly upload without confirmation
 
     config_path = ""
@@ -296,10 +272,11 @@ async def upload_res(ctx: wire.Context, msg: ResourceUpload) -> Success:
         file_full_path = f"1:/res/nfts/imgs/{file_name}.{res_ext}"
         zoom_path = f"1:/res/nfts/zooms/zoom-{file_name}.{res_ext}"
         config_path = f"1:/res/nfts/desc/{file_name}.json"
+        if res_blur_size > 0:
+            blur_path = f"1:/res/nfts/imgs/{file_name}-blur.{res_ext}"
 
 
     try:
-        print("[upload_res] writing main data to", file_full_path, "size:", res_size)
         with io.fatfs.open(file_full_path, "w") as f:
             data_left = res_size
             offset = 0
@@ -310,64 +287,22 @@ async def upload_res(ctx: wire.Context, msg: ResourceUpload) -> Success:
                 requested = min(current_limit, data_left)
                 while True:
                     try:
-                        print(
-                            "[upload_res] main chunk request",
-                            chunk_count,
-                            "offset:",
-                            offset,
-                            "size:",
-                            requested,
-                        )
                         request = ResourceRequest(data_length=requested, offset=offset)
                         ack: ResourceAck = await ctx.call(request, ResourceAck)
                         break
                     except Exception as e:
-                        print(
-                            "[upload_res] main chunk",
-                            chunk_count,
-                            "error:",
-                            type(e).__name__,
-                            getattr(e, "args", ()),
-                            "requested:",
-                            requested,
-                        )
                         if _is_codec_too_large(e) and requested > MIN_CHUNK_SIZE:
                             new_limit = max(requested // 2, MIN_CHUNK_SIZE)
-                            free_mem, alloc_mem = _heavy_gc(5)
+                            _heavy_gc(5)
                             current_limit = new_limit
                             requested = min(new_limit, data_left)
-                            print(
-                                "[upload_res] main chunk",
-                                chunk_count,
-                                "reduced size to",
-                                requested,
-                                "free:",
-                                free_mem,
-                                "alloc:",
-                                alloc_mem,
-                            )
                             continue
-                        free_mem, alloc_mem = _heavy_gc(3)
-                        print(
-                            "[upload_res] main chunk",
-                            chunk_count,
-                            "retry after gc free:",
-                            free_mem,
-                            "alloc:",
-                            alloc_mem,
-                        )
+                        _heavy_gc(3)
                         try:
                             request = ResourceRequest(data_length=requested, offset=offset)
                             ack = await ctx.call(request, ResourceAck)
                             break
-                        except Exception as retry_e:
-                            print(
-                                "[upload_res] main chunk",
-                                chunk_count,
-                                "retry failed:",
-                                type(retry_e).__name__,
-                                getattr(retry_e, "args", ()),
-                            )
+                        except Exception:
                             raise
 
                 data = ack.data_chunk
@@ -375,14 +310,6 @@ async def upload_res(ctx: wire.Context, msg: ResourceUpload) -> Success:
                 if actual_len == 0:
                     raise wire.DataError("Received empty chunk")
                 if actual_len != requested:
-                    print(
-                        "[upload_res] main chunk",
-                        chunk_count,
-                        "actual len differs:",
-                        actual_len,
-                        "requested:",
-                        requested,
-                    )
                     current_limit = min(current_limit, actual_len)
                 digest = blake2s(data).digest()
                 if digest != ack.hash:
@@ -390,12 +317,9 @@ async def upload_res(ctx: wire.Context, msg: ResourceUpload) -> Success:
                 f.write(data)
                 offset += actual_len
                 data_left -= actual_len
-                if chunk_count % 4 == 0 or data_left <= 0:
-                    print("[upload_res] main chunk", chunk_count, "offset:", offset, "remaining:", data_left)
             # force refresh to disk
             f.sync()
 
-        print("[upload_res] writing zoom data to", zoom_path, "size:", res_zoom_size)
         with io.fatfs.open(zoom_path, "w") as f:
             data_left = res_zoom_size
             offset = 0
@@ -406,64 +330,22 @@ async def upload_res(ctx: wire.Context, msg: ResourceUpload) -> Success:
                 requested = min(current_limit, data_left)
                 while True:
                     try:
-                        print(
-                            "[upload_res] zoom chunk request",
-                            chunk_count,
-                            "offset:",
-                            offset,
-                            "size:",
-                            requested,
-                        )
                         request = ZoomRequest(data_length=requested, offset=offset)
                         ack: ResourceAck = await ctx.call(request, ResourceAck)
                         break
                     except Exception as e:
-                        print(
-                            "[upload_res] zoom chunk",
-                            chunk_count,
-                            "error:",
-                            type(e).__name__,
-                            getattr(e, "args", ()),
-                            "requested:",
-                            requested,
-                        )
                         if _is_codec_too_large(e) and requested > MIN_CHUNK_SIZE:
                             new_limit = max(requested // 2, MIN_CHUNK_SIZE)
-                            free_mem, alloc_mem = _heavy_gc(5)
+                            _heavy_gc(5)
                             current_limit = new_limit
                             requested = min(new_limit, data_left)
-                            print(
-                                "[upload_res] zoom chunk",
-                                chunk_count,
-                                "reduced size to",
-                                requested,
-                                "free:",
-                                free_mem,
-                                "alloc:",
-                                alloc_mem,
-                            )
                             continue
-                        free_mem, alloc_mem = _heavy_gc(3)
-                        print(
-                            "[upload_res] zoom chunk",
-                            chunk_count,
-                            "retry after gc free:",
-                            free_mem,
-                            "alloc:",
-                            alloc_mem,
-                        )
+                        _heavy_gc(3)
                         try:
                             request = ZoomRequest(data_length=requested, offset=offset)
                             ack = await ctx.call(request, ResourceAck)
                             break
-                        except Exception as retry_e:
-                            print(
-                                "[upload_res] zoom chunk",
-                                chunk_count,
-                                "retry failed:",
-                                type(retry_e).__name__,
-                                getattr(retry_e, "args", ()),
-                            )
+                        except Exception:
                             raise
 
                 data = ack.data_chunk
@@ -471,14 +353,6 @@ async def upload_res(ctx: wire.Context, msg: ResourceUpload) -> Success:
                 if actual_len == 0:
                     raise wire.DataError("Received empty zoom chunk")
                 if actual_len != requested:
-                    print(
-                        "[upload_res] zoom chunk",
-                        chunk_count,
-                        "actual len differs:",
-                        actual_len,
-                        "requested:",
-                        requested,
-                    )
                     current_limit = min(current_limit, actual_len)
                 digest = blake2s(data).digest()
                 if digest != ack.hash:
@@ -486,33 +360,30 @@ async def upload_res(ctx: wire.Context, msg: ResourceUpload) -> Success:
                 f.write(data)
                 offset += actual_len
                 data_left -= actual_len
-                if chunk_count % 4 == 0 or data_left <= 0:
-                    print("[upload_res] zoom chunk", chunk_count, "offset:", offset, "remaining:", data_left)
             # force refresh to disk
             f.sync()
 
-        # Handle blur data for wallpapers
-        if res_type == ResourceType.WallPaper and blur_path and res_blur_size > 0:
+        # Handle blur data for wallpapers and NFTs
+        if (
+            res_type in (ResourceType.WallPaper, ResourceType.Nft)
+            and blur_path
+            and res_blur_size > 0
+        ):
             # CRITICAL: Free memory before blur upload (largest file, most likely to fail)
             try:
                 import gc
-                mem_before = gc.mem_free()
-                for i in range(5):  # Multiple GC passes
+                for _ in range(5):  # Multiple GC passes
                     gc.collect()
-                mem_free = gc.mem_free()
-                mem_alloc = gc.mem_alloc()
-                print("[upload_res] blur mem free:", mem_free, "alloc:", mem_alloc)
-            except Exception as e:
-                print("[upload_res] blur gc error:", type(e).__name__, e)
+            except Exception:
+                pass
 
             # Wait for system to stabilize
             try:
                 from trezor import loop
                 await loop.sleep(50)  # 50ms delay before blur
-            except Exception as e:
-                print("[upload_res] blur wait error:", type(e).__name__, e)
+            except Exception:
+                pass
 
-            print("[upload_res] writing blur data to", blur_path, "size:", res_blur_size)
             with io.fatfs.open(blur_path, "w") as f:
                 data_left = res_blur_size
                 offset = 0
@@ -523,64 +394,22 @@ async def upload_res(ctx: wire.Context, msg: ResourceUpload) -> Success:
                     requested = min(current_limit, data_left)
                     while True:
                         try:
-                            print(
-                                "[upload_res] blur chunk request",
-                                chunk_count,
-                                "offset:",
-                                offset,
-                                "size:",
-                                requested,
-                            )
                             request = BlurRequest(data_length=requested, offset=offset)
                             ack: ResourceAck = await ctx.call(request, ResourceAck)
                             break
                         except Exception as e:
-                            print(
-                                "[upload_res] blur chunk",
-                                chunk_count,
-                                "error:",
-                                type(e).__name__,
-                                getattr(e, "args", ()),
-                                "requested:",
-                                requested,
-                            )
                             if _is_codec_too_large(e) and requested > MIN_CHUNK_SIZE:
                                 new_limit = max(requested // 2, MIN_CHUNK_SIZE)
-                                free_mem, alloc_mem = _heavy_gc(5)
+                                _heavy_gc(5)
                                 current_limit = new_limit
                                 requested = min(new_limit, data_left)
-                                print(
-                                    "[upload_res] blur chunk",
-                                    chunk_count,
-                                    "reduced size to",
-                                    requested,
-                                    "free:",
-                                    free_mem,
-                                    "alloc:",
-                                    alloc_mem,
-                                )
                                 continue
-                            free_mem, alloc_mem = _heavy_gc(3)
-                            print(
-                                "[upload_res] blur chunk",
-                                chunk_count,
-                                "retry after gc free:",
-                                free_mem,
-                                "alloc:",
-                                alloc_mem,
-                            )
+                            _heavy_gc(3)
                             try:
                                 request = BlurRequest(data_length=requested, offset=offset)
                                 ack = await ctx.call(request, ResourceAck)
                                 break
-                            except Exception as retry_e:
-                                print(
-                                    "[upload_res] blur chunk",
-                                    chunk_count,
-                                    "retry failed:",
-                                    type(retry_e).__name__,
-                                    getattr(retry_e, "args", ()),
-                                )
+                            except Exception:
                                 raise
 
                     data = ack.data_chunk
@@ -588,14 +417,6 @@ async def upload_res(ctx: wire.Context, msg: ResourceUpload) -> Success:
                     if actual_len == 0:
                         raise wire.DataError("Received empty blur chunk")
                     if actual_len != requested:
-                        print(
-                            "[upload_res] blur chunk",
-                            chunk_count,
-                            "actual len differs:",
-                            actual_len,
-                            "requested:",
-                            requested,
-                        )
                         current_limit = min(current_limit, actual_len)
                     digest = blake2s(data).digest()
                     if digest != ack.hash:
@@ -603,8 +424,6 @@ async def upload_res(ctx: wire.Context, msg: ResourceUpload) -> Success:
                     f.write(data)
                     offset += actual_len
                     data_left -= actual_len
-                    if chunk_count % 4 == 0 or data_left <= 0:
-                        print("[upload_res] blur chunk", chunk_count, "offset:", offset, "remaining:", data_left)
                 # force refresh to disk
                 f.sync()
 
@@ -619,14 +438,9 @@ async def upload_res(ctx: wire.Context, msg: ResourceUpload) -> Success:
         try:
             import gc
             gc.collect()
-            mem_free = gc.mem_free()
-            mem_alloc = gc.mem_alloc()
-            print("[upload_res] mem after files free:", mem_free, "alloc:", mem_alloc)
-        except Exception as e:
-            print("[upload_res] mem after files error:", type(e).__name__, e)
+        except Exception:
             pass
 
-        print("[upload_res] upload complete")
 
         if replace:
             # Get current wallpapers to protect them
@@ -695,58 +509,43 @@ async def upload_res(ctx: wire.Context, msg: ResourceUpload) -> Success:
                 zoom_to_delete = f"1:/res/wallpapers/{zoom_file}"
                 orig_to_delete = f"1:/res/wallpapers/{file_name}"
 
-                try:
-                    io.fatfs.unlink(zoom_to_delete)
-                except BaseException as e:
-                    raise
-
-                try:
-                    io.fatfs.unlink(orig_to_delete)
-                except BaseException as e:
-                    raise
+                io.fatfs.unlink(zoom_to_delete)
+                io.fatfs.unlink(orig_to_delete)
 
                 # Also remove blur file if it exists
                 blur_file_name = file_name[: -(len(res_ext) + 1)] + f"-blur.{res_ext}"
                 blur_to_delete = f"1:/res/wallpapers/{blur_file_name}"
                 try:
                     io.fatfs.unlink(blur_to_delete)
-                except BaseException as e:
+                except BaseException:
                     pass  # blur file might not exist
             elif replace and zoom_file and res_type == ResourceType.Nft:
                 zoom_to_delete = f"1:/res/nfts/zooms/{zoom_file}"
                 img_to_delete = f"1:/res/nfts/imgs/{file_name}"
                 config_name = file_name[: -(len(res_ext) + 1)]
                 config_to_delete = f"1:/res/nfts/desc/{config_name}.json"
+                blur_file_name = f"{config_name}-blur.{res_ext}"
+                blur_to_delete = f"1:/res/nfts/imgs/{blur_file_name}"
 
+                io.fatfs.unlink(zoom_to_delete)
+                io.fatfs.unlink(img_to_delete)
+                io.fatfs.unlink(config_to_delete)
                 try:
-                    io.fatfs.unlink(zoom_to_delete)
-                    io.fatfs.unlink(img_to_delete)
-                    io.fatfs.unlink(config_to_delete)
-                except BaseException as e:
-                    raise
+                    io.fatfs.unlink(blur_to_delete)
+                except BaseException:
+                    pass
         elif res_type == ResourceType.WallPaper:
             device.increase_wp_cnts()
 
     except BaseException as e:
-        import sys
-
-        # Log memory state at failure
-        try:
-            import gc
-            fail_mem_free = gc.mem_free()
-            fail_mem_alloc = gc.mem_alloc()
-        except Exception:
-            pass
-
         # Restore system state even on failure
 
         # Clean up memory first (CRITICAL for next upload)
         try:
             import gc
-            for i in range(5):
+            for _ in range(5):
                 gc.collect()
-            cleanup_mem_free = gc.mem_free()
-        except Exception as gc_e:
+        except Exception:
             pass
 
         # Restore JPEG decoder state
@@ -754,14 +553,14 @@ async def upload_res(ctx: wire.Context, msg: ResourceUpload) -> Success:
             import trezorio
             if hasattr(trezorio, 'jpeg_restore_decoder_state'):
                 trezorio.jpeg_restore_decoder_state()
-        except Exception as restore_e:
+        except Exception:
             pass
 
         # Restore Layer2 visibility
         try:
             from trezorui import Display
             display = Display()
-        except Exception as layer_e:
+        except Exception:
             pass
 
         raise wire.FirmwareError(f"Failed to write file with error code {e}")
@@ -771,14 +570,11 @@ async def upload_res(ctx: wire.Context, msg: ResourceUpload) -> Success:
     # Step 0: CRITICAL - Clean up memory for next upload (prevent "Message too large" error)
     try:
         import gc
-        mem_before_cleanup = gc.mem_free()
 
         # Aggressive GC to free memory for next upload
-        for i in range(5):
+        for _ in range(5):
             gc.collect()
-
-        mem_after_cleanup = gc.mem_free()
-    except Exception as e:
+    except Exception:
         pass
 
     # Step 1: Restore JPEG decoder state
@@ -786,7 +582,7 @@ async def upload_res(ctx: wire.Context, msg: ResourceUpload) -> Success:
         import trezorio
         if hasattr(trezorio, 'jpeg_restore_decoder_state'):
             trezorio.jpeg_restore_decoder_state()
-    except Exception as e:
+    except Exception:
         pass
 
     # Step 2: Restore Layer2 visibility (if it was visible before)
@@ -798,7 +594,7 @@ async def upload_res(ctx: wire.Context, msg: ResourceUpload) -> Success:
             # Note: We don't know if it was visible before, so we'll just ensure it's in correct state
             # The MainScreen/LockScreen will manage the visibility
             pass
-    except Exception as e:
+    except Exception:
         pass
 
     # Step 3: Auto-delete old wallpapers (keep only 5 newest, preserve current wallpaper)
@@ -897,7 +693,6 @@ async def upload_res(ctx: wire.Context, msg: ResourceUpload) -> Success:
                             break  # Already have 5 wallpapers total
 
                 # Delete old wallpapers
-                deleted_count = 0
                 for wallpaper_name in wallpaper_files:
                     if wallpaper_name not in files_to_keep:
                         try:
@@ -924,14 +719,14 @@ async def upload_res(ctx: wire.Context, msg: ResourceUpload) -> Success:
                                 except BaseException:
                                     pass  # Blur file may not exist
 
-                            deleted_count += 1
-                        except BaseException as del_e:
+                        except BaseException:
                             pass
 
-        except Exception as cleanup_e:
+        except Exception:
             pass
 
     return Success(message="Success")
+
 def _heavy_gc(passes: int = 3) -> tuple[int, int]:
     """Run multiple GC passes and return (free, alloc)."""
     import gc

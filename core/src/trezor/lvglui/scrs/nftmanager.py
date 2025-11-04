@@ -65,9 +65,12 @@ def _cached_style(name: str, factory: Callable[[], StyleWrapper]) -> StyleWrappe
 
 
 def _safe_wallpaper_src(path: str | None, context: str = "") -> str:
-    from . import homescreen as homescreen_module
-
-    return homescreen_module._lvgl_safe_wallpaper_src(path, context)
+    if not path:
+        return ""
+    # LVGL expects paths prefixed with drive designator. Convert raw FAT path if needed.
+    if path.startswith("1:/"):
+        return "A:1:/" + path[len("1:/") :]
+    return path
 
 
 def _get_main_screen_cls():
@@ -80,18 +83,9 @@ class WallpaperPreviewBase(AnimScreen):
     """Base class for wallpaper preview screens with common functionality."""
 
     def __init__(self, *args, **kwargs):
-        f = getattr(getattr(lv, "img", None), "cache_set_size", None)
-        self.restore = None
-        if f:
-            try:
-                f(0)
-                self.restore = f
-            except Exception:
-                self.restore = None
         super().__init__(*args, **kwargs)
 
     def _create_preview_container(self, top_offset=118):
-        """Create the preview container with standard settings."""
         self.content_area.set_scrollbar_mode(lv.SCROLLBAR_MODE.OFF)
         self.content_area.clear_flag(lv.obj.FLAG.SCROLLABLE)
         self.content_area.set_style_pad_bottom(0, 0)
@@ -108,7 +102,6 @@ class WallpaperPreviewBase(AnimScreen):
         self.container.set_scrollbar_mode(lv.SCROLLBAR_MODE.OFF)
         self.container.clear_flag(lv.obj.FLAG.SCROLLABLE)
 
-        # Preview container
         style = _cached_style(
             _K1,
             lambda: StyleWrapper()
@@ -127,17 +120,20 @@ class WallpaperPreviewBase(AnimScreen):
         )
 
     def _create_preview_image(self, image_path):
-        """Create and configure the preview image."""
+        src = _safe_wallpaper_src(image_path, "NftPreview.Image")
+
+        # Reuse the generic preview helper so scaling matches the system wallpaper preview.
         self.preview_image = create_preview_image(
             self.preview_container,
-            src=image_path,
-            target_size=(self.preview_container.get_width(), self.preview_container.get_height()),
+            base_size=(480, 800),
+            target_size=(344, 574),
         )
+        self.preview_image.set_src(src)
+
         self.preview_mask = create_top_mask(self.preview_container, height=5)
         return self.preview_image
 
     def _create_app_icons(self):
-        """Create the 4 app icons overlay."""
         self.app_icons = []
         scale_x = 343.0 / 480.0
         scale_y = 572.0 / 800.0
@@ -224,26 +220,6 @@ class WallpaperPreviewBase(AnimScreen):
                 icon_path = _P11
 
         self.blur_button_icon.set_src(icon_path)
-
-    def load_screen(self, scr, destroy_self: bool = False):
-        f = getattr(self, "restore", None)
-        if f:
-            try:
-                f(1)
-            except Exception:
-                pass
-            self.restore = None
-        return super().load_screen(scr, destroy_self=destroy_self)
-
-    def __del__(self):
-        f = getattr(self, "restore", None)
-        if f:
-            try:
-                f(1)
-            except Exception:
-                pass
-            self.restore = None
-
 
 class NftGallery(Screen):
     def __init__(self, prev_scr=None):
@@ -410,7 +386,6 @@ class NftManager(AnimScreen):
 
         super().__init__(
             prev_scr=prev_scr,
-            title=_(i18n_keys.TITLE__WALLPAPER),
             nav_back=True,
         )
         self.nft_config = nft_config
@@ -421,6 +396,11 @@ class NftManager(AnimScreen):
         self.content_area.clear_flag(lv.obj.FLAG.SCROLL_CHAIN)
         self.content_area.clear_flag(lv.obj.FLAG.SCROLL_MOMENTUM)
         self.content_area.clear_flag(lv.obj.FLAG.SCROLL_ELASTIC)
+        # Ensure detail page uses solid background instead of underlying wallpaper.
+        self.content_area.add_style(
+            StyleWrapper().bg_color(lv_colors.BLACK).bg_opa(lv.OPA.COVER),
+            0,
+        )
 
         # Add trash icon to title bar (right side)
         self.trash_icon = lv.imgbtn(self.content_area)
@@ -438,12 +418,14 @@ class NftManager(AnimScreen):
         self.nft_image = lv.img(self.content_area)
         self.nft_image.set_src(self.img_path)
         self.nft_image.set_size(456, 456)
-        self.nft_image.align_to(self.title, lv.ALIGN.OUT_BOTTOM_MID, 0, 32)
+        self.nft_image.align(lv.ALIGN.TOP_MID, 0, 104)
         self.nft_image.add_style(StyleWrapper().radius(20).clip_corner(True), 0)
 
         # Title text below image
         self.nft_title = lv.label(self.content_area)
         self.nft_title.set_text(nft_config["header"] or "Title")
+        self.nft_title.set_long_mode(lv.label.LONG.WRAP)
+        self.nft_title.set_size(456, lv.SIZE.CONTENT)
         self.nft_title.add_style(
             StyleWrapper()
             .text_font(font_GeistSemiBold48)
@@ -474,7 +456,7 @@ class NftManager(AnimScreen):
         # Set as Lock Screen button (purple) - height 98px as requested
         self.btn_lock_screen = NormalButton(self.content_area)
         self.btn_lock_screen.set_size(456, 98)
-        self.btn_lock_screen.enable(lv_colors.ONEKEY_PURPLE, lv_colors.WHITE)
+        self.btn_lock_screen.enable(lv_colors.ONEKEY_PURPLE, lv_colors.BLACK)
         self.btn_lock_screen.label.set_text(
             _(i18n_keys.BUTTON__SET_AS_LOCK_SCREEN)
         )
@@ -496,6 +478,18 @@ class NftManager(AnimScreen):
     def del_callback(self):
         trezor_io.fatfs.unlink(self.zoom_path[2:])
         trezor_io.fatfs.unlink(self.img_path[2:])
+        # Remove blur variant if present (A: prefix -> 1:/ for filesystem)
+        img_file = self.img_path.split("/")[-1]
+        if "." in img_file:
+            base_name, ext = img_file.rsplit(".", 1)
+            blur_file = f"{base_name}-blur.{ext}"
+        else:
+            blur_file = f"{img_file}-blur"
+        blur_path = self.img_path.replace(img_file, blur_file)
+        try:
+            trezor_io.fatfs.unlink(blur_path[2:])
+        except Exception:
+            pass
         trezor_io.fatfs.unlink(
             _P3 + self.file_name.split(".")[0] + ".json"
         )
@@ -741,8 +735,13 @@ class NftHomeScreenPreview(WallpaperPreviewBase):
 
         # Check if blur file exists
         file_name = nft_path.split("/")[-1]
-        file_name_without_ext = file_name.split(".")[0]
-        self.blur_path = nft_path.replace(file_name, f"{file_name_without_ext}-blur.jpg")
+        if "." in file_name:
+            base_name, ext = file_name.rsplit(".", 1)
+            blur_file = f"{base_name}-blur.{ext}"
+        else:
+            base_name, ext = file_name, ""
+            blur_file = f"{base_name}-blur"
+        self.blur_path = nft_path.replace(file_name, blur_file)
         self.blur_exists = self._check_blur_exists(self.blur_path)
 
         # Use base class methods to create UI
@@ -776,12 +775,14 @@ class NftHomeScreenPreview(WallpaperPreviewBase):
 
         # Get original file name and construct blur path
         file_name = self.nft_path.split("/")[-1]
-        file_name_without_ext = file_name.split(".")[0]
+        if "." in file_name:
+            base_name, ext = file_name.rsplit(".", 1)
+            blur_file = f"{base_name}-blur.{ext}"
+        else:
+            blur_file = f"{file_name}-blur"
 
-        # Construct blur path using the same directory structure
-        blur_path = self.nft_path.replace(
-            file_name, f"{file_name_without_ext}-blur.jpg"
-        )
+        # Construct blur path using the same directory structure (A: prefix preserved)
+        blur_path = self.nft_path.replace(file_name, blur_file)
 
         if self.is_blur_active:
             # Switch to original
@@ -793,11 +794,6 @@ class NftHomeScreenPreview(WallpaperPreviewBase):
             self.is_blur_active = True
 
         self.homescreen_preview.set_src(self.current_wallpaper_path)
-        base_width, base_height = 480, 800
-        zoom_x = int((344 / base_width) * 256)
-        zoom_y = int((574 / base_height) * 256)
-        scale = min(zoom_x, zoom_y)
-        self.homescreen_preview.set_zoom(scale)
         self.homescreen_preview.align(lv.ALIGN.CENTER, 0, 0)
         self._update_blur_button_state()
 
