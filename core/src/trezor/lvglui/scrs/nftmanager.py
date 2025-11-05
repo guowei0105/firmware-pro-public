@@ -190,11 +190,11 @@ class WallpaperPreviewBase(AnimScreen):
 
     def _check_blur_exists(self, blur_path):
         """Check if blur version exists."""
+        file_path = blur_path.replace("A:1:", "1:")
         try:
-            file_path = blur_path.replace("A:1:", "1:")
-            with trezor_io.fatfs.open(file_path, "r") as f:
+            with trezor_io.fatfs.open(file_path, "r"):
                 return True
-        except Exception:
+        except OSError:
             return False
 
     def _update_blur_button_state(self):
@@ -363,15 +363,12 @@ class NftGallery(Screen):
                                 metadata_load = json.loads(
                                     (description[:n]).decode("utf-8")
                                 )
-                            except BaseException as e:
-                                if __debug__:
-                                    pass  # print removed to reduce qstr usage
-                            else:
-                                if all(
-                                    key in metadata_load.keys()
-                                    for key in metadata.keys()
-                                ):
-                                    metadata = metadata_load
+                            except (ValueError, UnicodeError):
+                                metadata_load = None
+                            if metadata_load and all(
+                                key in metadata_load for key in metadata.keys()
+                            ):
+                                metadata = metadata_load
                     NftManager(self, metadata, nft.file_name)
 
     def _load_scr(self, scr: "Screen", back: bool = False) -> None:
@@ -488,54 +485,42 @@ class NftManager(AnimScreen):
         blur_path = self.img_path.replace(img_file, blur_file)
         try:
             trezor_io.fatfs.unlink(blur_path[2:])
-        except Exception:
+        except OSError:
             pass
         trezor_io.fatfs.unlink(
             _P3 + self.file_name.split(".")[0] + ".json"
         )
 
-        try:
-            replacement_path = _P7
-            deleted_name = self.img_path.split("/")[-1]
+        replacement_path = _P7
+        deleted_name = self.img_path.split("/")[-1]
 
-            current_home = storage_device.get_appdrawer_background()
-            current_lock = storage_device.get_homescreen()
+        current_home = storage_device.get_appdrawer_background()
+        current_lock = storage_device.get_homescreen()
 
-            if current_home and (
-                current_home == self.img_path or current_home.endswith("/" + deleted_name)
-            ):
-                storage_device.set_appdrawer_background(replacement_path)
+        home_uses_image = current_home and (
+            current_home == self.img_path or current_home.endswith("/" + deleted_name)
+        )
+        lock_uses_image = current_lock and (
+            current_lock == self.img_path or current_lock.endswith("/" + deleted_name)
+        )
 
-            if current_lock and (
-                current_lock == self.img_path or current_lock.endswith("/" + deleted_name)
-            ):
-                storage_device.set_homescreen(replacement_path)
+        if home_uses_image:
+            storage_device.set_appdrawer_background(replacement_path)
+        if lock_uses_image:
+            storage_device.set_homescreen(replacement_path)
 
-            # Only invalidate JPEG cache if we actually changed the wallpaper
-            # This prevents unnecessary re-decoding when returning to AppDrawer
-            wallpaper_changed = False
-            if current_home and (
-                current_home == self.img_path or current_home.endswith("/" + deleted_name)
-            ):
-                wallpaper_changed = True
-            if current_lock and (
-                current_lock == self.img_path or current_lock.endswith("/" + deleted_name)
-            ):
-                wallpaper_changed = True
-
-            if wallpaper_changed:
+        if home_uses_image or lock_uses_image:
+            if hasattr(lv.img, "cache_invalidate_src"):
                 try:
-                    from .homescreen import _last_jpeg_loaded  # type: ignore
-                except Exception:
+                    lv.img.cache_invalidate_src(self.img_path)
+                except OSError:
                     pass
-                else:
-                    try:
-                        import trezor.lvglui.scrs.homescreen as hs_mod
-                        hs_mod._last_jpeg_loaded = None
-                    except Exception:
-                        pass
-        except Exception:
-            pass
+            try:
+                import trezor.lvglui.scrs.homescreen as hs_mod
+            except ImportError:
+                pass
+            else:
+                hs_mod._last_jpeg_loaded = None
 
         self.load_screen(self.prev_scr, destroy_self=True)
 
@@ -646,67 +631,40 @@ class NftLockScreenPreview(WallpaperPreviewBase):
                     lockscreen_path = self.nft_path
                     MainScreen = _get_main_screen_cls()
 
-                    try:
-                        storage_device.set_homescreen(lockscreen_path)
+                    storage_device.set_homescreen(lockscreen_path)
 
+                    main_screen = getattr(MainScreen, "_instance", None)
+                    safe_unlock_path = _safe_wallpaper_src(lockscreen_path, _S1)
+                    if main_screen:
+                        main_screen.set_background_image(safe_unlock_path)
+                        if hasattr(main_screen, "apps") and main_screen.apps:
+                            main_screen.apps.refresh_background()
 
-                        # Force refresh MainScreen background to apply new lockscreen
-                        main_screen = None
-                        if hasattr(MainScreen, "_instance") and MainScreen._instance:
-                            main_screen = MainScreen._instance
-                        safe_unlock_path = _safe_wallpaper_src(
-                            lockscreen_path, _S1
-                        )
-                        # Refresh the background with new lockscreen
-                        if main_screen:
-                            main_screen.set_background_image(safe_unlock_path)
-
-                            # Also refresh AppDrawer if it exists
-                            if hasattr(main_screen, "apps") and main_screen.apps:
-                                main_screen.apps.refresh_background()
-
-
-                        # CRITICAL: Clear caches BEFORE deleting LockScreen instance
+                    if hasattr(lv.img, "cache_invalidate_src"):
                         try:
                             lv.img.cache_invalidate_src(lockscreen_path)
-                        except Exception:
+                        except OSError:
                             pass
 
-                        try:
-                            import trezor.lvglui.scrs.homescreen as hs_mod
-                            hs_mod._last_jpeg_loaded = None
-                        except Exception:
-                            pass
+                    try:
+                        import trezor.lvglui.scrs.homescreen as hs_mod
+                    except ImportError:
+                        hs_mod = None
+                    if hs_mod is not None:
+                        hs_mod._last_jpeg_loaded = None
 
-                        # Delete LockScreen instance to force recreation with new wallpaper
-                        # This is the correct approach - don't try to update existing instance
-                        try:
-                            from .lockscreen import LockScreen
-                            if (
-                                hasattr(LockScreen, "_instance")
-                                and LockScreen._instance
-                            ):
-                                # CRITICAL: Remove from utils.SCREENS to prevent resurrection
-                                try:
-                                    old_instance = LockScreen._instance
-                                    if hasattr(utils, "SCREENS") and old_instance in utils.SCREENS:
-                                        utils.SCREENS.remove(old_instance)
-                                except Exception:
-                                    pass
-
-                                # Clear _init flag to force full re-initialization
-                                try:
-                                    if hasattr(LockScreen._instance, "_init"):
-                                        delattr(LockScreen._instance, "_init")
-                                except Exception:
-                                    pass
-
-                                del LockScreen._instance
-                        except Exception:
-                            pass
-                    except Exception as e:
-                        if __debug__:
-                            pass  # print removed to reduce qstr usage
+                    try:
+                        from .lockscreen import LockScreen as LockScreenCls  # type: ignore
+                    except ImportError:
+                        LockScreenCls = None  # type: ignore[assignment]
+                    if LockScreenCls is not None:
+                        lock_instance = getattr(LockScreenCls, "_instance", None)
+                        if lock_instance is not None:
+                            if hasattr(utils, "SCREENS") and lock_instance in utils.SCREENS:
+                                utils.SCREENS.remove(lock_instance)
+                            if hasattr(lock_instance, "_init"):
+                                delattr(lock_instance, "_init")
+                            del LockScreenCls._instance
                     main_screen = (
                         MainScreen._instance
                         if hasattr(MainScreen, "_instance") and MainScreen._instance
@@ -810,42 +768,32 @@ class NftHomeScreenPreview(WallpaperPreviewBase):
                     wallpaper_path = self.current_wallpaper_path
                     MainScreen = _get_main_screen_cls()
 
-                    try:
-                        storage_device.set_appdrawer_background(wallpaper_path)
-                        # Force refresh MainScreen background to apply new homescreen
-                        main_screen = None
-                        if hasattr(MainScreen, "_instance") and MainScreen._instance:
-                            main_screen = MainScreen._instance
-                        if main_screen:
-                            # Refresh the background with new homescreen (lockscreen still used for background)
-                            lockscreen_path = storage_device.get_homescreen()
-                            if lockscreen_path:
-                                safe_lock_path = _safe_wallpaper_src(
-                                    lockscreen_path,
-                                    _S3,
-                                )
-                                main_screen.set_background_image(safe_lock_path)
+                    storage_device.set_appdrawer_background(wallpaper_path)
+                    main_screen = getattr(MainScreen, "_instance", None)
+                    if main_screen:
+                        lockscreen_path = storage_device.get_homescreen()
+                        if lockscreen_path:
+                            safe_lock_path = _safe_wallpaper_src(
+                                lockscreen_path,
+                                _S3,
+                            )
+                            main_screen.set_background_image(safe_lock_path)
 
-                            # Also refresh AppDrawer if it exists
-                            if hasattr(main_screen, "apps") and main_screen.apps:
-                                main_screen.apps.refresh_background()
+                        if hasattr(main_screen, "apps") and main_screen.apps:
+                            main_screen.apps.refresh_background()
 
-                            # Clear image cache to ensure new wallpaper loads properly
+                        if hasattr(lv.img, "cache_invalidate_src"):
                             try:
                                 lv.img.cache_invalidate_src(wallpaper_path)
-                            except Exception:
+                            except OSError:
                                 pass
 
-                            # Clear Python-side JPEG cache
-                            try:
-                                import trezor.lvglui.scrs.homescreen as hs_mod
-                                hs_mod._last_jpeg_loaded = None
-                            except Exception:
-                                pass
-
-                    except Exception as e:
-                        if __debug__:
-                            pass  # print removed to reduce qstr usage
+                        try:
+                            import trezor.lvglui.scrs.homescreen as hs_mod
+                        except ImportError:
+                            hs_mod = None
+                        if hs_mod is not None:
+                            hs_mod._last_jpeg_loaded = None
                     # Find the root MainScreen instance
                     main_screen = (
                         MainScreen._instance

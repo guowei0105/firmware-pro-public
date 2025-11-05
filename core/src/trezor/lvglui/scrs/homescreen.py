@@ -49,7 +49,6 @@ from .components.listitem import (
 from .deviceinfo import DeviceInfoManager
 from .nftmanager import (
     NftGallery,
-    WallpaperPreviewBase,
 )
 from .preview_utils import create_preview_container, create_preview_image, create_top_mask
 from .widgets.style import StyleWrapper
@@ -59,18 +58,11 @@ _animation_in_progress = False
 _last_jpeg_loaded = None
 _active_timers = []
 _cached_styles = {}
-_busy_restore_timer = None
 
 
 def _clear_preview_cache() -> None:
-    try:
-        lv.img.cache_invalidate_src(None)
-    except Exception:
-        pass
-    try:
-        gc.collect()
-    except Exception:
-        pass
+    lv.img.cache_invalidate_src(None)
+    gc.collect()
 
 
 def _normalize_wallpaper_src(raw, *, allow_default: bool = True, default=None) -> str:
@@ -142,30 +134,6 @@ def _schedule_once(delay_ms: int, callback):
     return timer
 
 
-def _cancel_busy_restore_timer():
-    global _busy_restore_timer
-    if _busy_restore_timer:
-        try:
-            _busy_restore_timer.delete()
-        except Exception:
-            pass
-        _busy_restore_timer = None
-
-
-def _schedule_busy_restore(delay_ms: int):
-    global _busy_restore_timer
-
-    def _callback(timer):
-        global _busy_restore_timer
-        _busy_restore_timer = None
-        _restore_idle(timer)
-
-    _cancel_busy_restore_timer()
-    timer = lv.timer_create(_callback, delay_ms, None)
-    timer.set_repeat_count(1)
-    _busy_restore_timer = timer
-
-
 def _with_lvgl_timer_pause(func, *args, **kwargs):
     pause_handler = getattr(lv, "timer_handler_pause", None)
     resume_handler = getattr(lv, "timer_handler_resume", None)
@@ -223,40 +191,10 @@ APP_DRAWER_UP_PATH_CB = PATH_EASE_OUT
 APP_DRAWER_DOWN_PATH_CB = PATH_EASE_OUT
 
 
-_BUSY_GRACE_MS = 800
-
-def _restore_idle(t):
-    global _busy_restore_timer
-    _busy_restore_timer = None
-    d = storage.cache.get_int(storage.cache.APP_COMMON_BUSY_DEADLINE_MS, 0)
-    if d > 0 and utime.ticks_diff(utime.ticks_ms(), d) >= 0:
-        storage.cache.delete(storage.cache.APP_COMMON_BUSY_DEADLINE_MS)
-        storage.cache.set_int(storage.cache.APP_COMMON_BUSY_STATE, 0)
-        ms = MainScreen._instance if hasattr(MainScreen, "_instance") and MainScreen._instance else MainScreen()
-        ms.change_state(False)
-
 def change_state(is_busy: bool = False):
-    from trezor import config
-    from trezor.lvglui.scrs import fingerprints
-    if (fingerprints.is_available() and not fingerprints.is_unlocked()) or (not fingerprints.is_available() and not config.is_unlocked()):
-        return
-    if is_busy:
-        _cancel_busy_restore_timer()
-        storage.cache.set_int(storage.cache.APP_COMMON_BUSY_STATE, 1)
-        storage.cache.delete(storage.cache.APP_COMMON_BUSY_DEADLINE_MS)
-        storage.cache.set_int(storage.cache.APP_COMMON_BUSY_TIME, utime.ticks_ms())
-        ms = MainScreen._instance if hasattr(MainScreen, "_instance") and MainScreen._instance else MainScreen()
-        if not ms.is_visible():
-            lv.scr_load(ms)
-        if hasattr(ms, "apps") and ms.apps:
-            ms.apps.add_flag(lv.obj.FLAG.HIDDEN)
-            ms.apps.visible = False
-        ms.change_state(True)
-    else:
-        now = utime.ticks_ms()
-        storage.cache.set_int(storage.cache.APP_COMMON_BUSY_TIME, now)
-        storage.cache.set_int(storage.cache.APP_COMMON_BUSY_DEADLINE_MS, utime.ticks_add(now, _BUSY_GRACE_MS))
-        _schedule_busy_restore(_BUSY_GRACE_MS)
+    if hasattr(MainScreen, "_instance"):
+        if MainScreen._instance:
+            MainScreen._instance.change_state(is_busy)
 
 
 class MainScreen(Screen):
@@ -408,13 +346,6 @@ class MainScreen(Screen):
         MainScreen._instance = self
 
         save_app_obj(self)
-
-        busy_state = storage.cache.get_int(storage.cache.APP_COMMON_BUSY_STATE, 0) or 0
-        if busy_state:
-            self.change_state(True)
-            if hasattr(self, "apps") and self.apps:
-                self.apps.add_flag(lv.obj.FLAG.HIDDEN)
-                self.apps.visible = False
 
     def on_main_gesture(self, event_obj):
         global _animation_in_progress
@@ -619,29 +550,13 @@ class MainScreen(Screen):
 
     def change_state(self, busy: bool):
         if busy:
-            if hasattr(self, "clear_flag"):
-                self.clear_flag(lv.obj.FLAG.CLICKABLE)
-            if hasattr(self, "up_arrow") and self.up_arrow:
-                self.up_arrow.add_flag(lv.obj.FLAG.HIDDEN)
-            if hasattr(self, "bottom_tips") and self.bottom_tips:
-                self.bottom_tips.clear_flag(lv.obj.FLAG.HIDDEN)
-                self.bottom_tips.set_text(_(i18n_keys.BUTTON__PROCESSING))
-            if hasattr(self, "title") and self.title:
-                self.title.clear_flag(lv.obj.FLAG.HIDDEN)
-            if hasattr(self, "subtitle") and self.subtitle:
-                self.subtitle.clear_flag(lv.obj.FLAG.HIDDEN)
+            self.clear_flag(lv.obj.FLAG.CLICKABLE)
+            self.up_arrow.add_flag(lv.obj.FLAG.HIDDEN)
+            self.bottom_tips.set_text(_(i18n_keys.BUTTON__PROCESSING))
         else:
-            if hasattr(self, "add_flag"):
-                self.add_flag(lv.obj.FLAG.CLICKABLE)
-            if hasattr(self, "up_arrow") and self.up_arrow:
-                self.up_arrow.clear_flag(lv.obj.FLAG.HIDDEN)
-            if hasattr(self, "bottom_tips") and self.bottom_tips:
-                self.bottom_tips.clear_flag(lv.obj.FLAG.HIDDEN)
-                self.bottom_tips.set_text(_(i18n_keys.BUTTON__SWIPE_TO_SHOW_APPS))
-            if hasattr(self, "title") and self.title:
-                self.title.clear_flag(lv.obj.FLAG.HIDDEN)
-            if hasattr(self, "subtitle") and self.subtitle:
-                self.subtitle.clear_flag(lv.obj.FLAG.HIDDEN)
+            self.add_flag(lv.obj.FLAG.CLICKABLE)
+            self.up_arrow.clear_flag(lv.obj.FLAG.HIDDEN)
+            self.bottom_tips.set_text(_(i18n_keys.BUTTON__SWIPE_TO_SHOW_APPS))
 
     def _load_scr(self, scr: "Screen", back: bool = False) -> None:
         lv.scr_load(scr)
@@ -718,15 +633,9 @@ class MainScreen(Screen):
             if image_src:
                 style = self._ensure_background_style()
                 style.bg_img_src(image_src)
-                try:
-                    self.invalidate()
-                except Exception:
-                    pass
+                self.invalidate()
             elif getattr(self, "_background_style", None):
-                try:
-                    self.remove_style(self._background_style, 0)
-                except Exception:
-                    pass
+                self.remove_style(self._background_style, 0)
                 self._background_style = None
 
         def init_ui(self):
@@ -1031,7 +940,6 @@ class MainScreen(Screen):
             # 等待 Layer2 完全落下后再恢复主屏
             _schedule_once(200, on_layer2_covers_screen)
 
-        # 硬件动画不可用时的主屏回退流程
         def hide_to_mainscreen_fallback(self):
             global _animation_in_progress
             self.add_flag(lv.obj.FLAG.HIDDEN)
@@ -1042,7 +950,6 @@ class MainScreen(Screen):
             _animation_in_progress = False
             cleanup_timers()
 
-            # 没有 Layer2 动画能力时直接恢复主屏可见性
             if hasattr(self.parent, "restore_main_content"):
                 self.parent.restore_main_content()
 
@@ -1051,11 +958,8 @@ class MainScreen(Screen):
             # 处理左右滑动手势，驱动应用页切换动画
             if _dir not in [lv.DIR.RIGHT, lv.DIR.LEFT]:
                 return
+            # 手势限流：动画进行中直接丢弃新左右滑，避免打断与额外开销
             if self.page_animating:
-                for handle in self._page_anim_handles:
-                    lv.anim_del(handle, None)
-                if hasattr(self, "_page_anim_target"):
-                    self._on_page_anim_ready(self.current_page, self._page_anim_target)
                 return
 
             if not hasattr(self, "indicators") or not self.indicators:
@@ -1071,7 +975,7 @@ class MainScreen(Screen):
 
             self.indicators[self.current_page].set_active(False)
             self.indicators[target_page].set_active(True)
-            # Record target page for restoring when animation is interrupted
+            # 记录目标页，供动画完成后设置当前页
             self._page_anim_target = target_page
             self.animate_page_transition(target_page, _dir)
 
@@ -1183,21 +1087,8 @@ class MainScreen(Screen):
                 lv.anim_t.start(anim_in),
             ]
 
-            # Immediately refresh once to minimise initial lag
+            # 启动时做一次立即刷新，避免首帧滞后
             lv.refr_now(None)
-
-            # Optimize animation refresh logic
-            def animation_refresh():
-                # 定时调用 task_handler 维持动画流畅度
-                if self.page_animating:
-                    try:
-                        lv.task_handler()
-                    except:
-                        lv.refr_now(None)
-                    _schedule_once(16, animation_refresh)
-
-            # roughly 60FPS 刷新一次
-            _schedule_once(16, animation_refresh)
 
         # 页面动画结束后重置布局与状态
         def _on_page_anim_ready(self, old_index: int, target_index: int):
@@ -3947,38 +3838,37 @@ class WallperChange(AnimScreen):
         if file_name_list:
             btn_style = StyleWrapper().bg_opa(lv.OPA.TRANSP).border_opa(lv.OPA.TRANSP).pad_ver(5)
 
+            # Edit 按钮使用图标（保持与早期风格一致）
             self.edit_button = lv.btn(self.custom_header_container)
             self.edit_button.set_size(lv.SIZE.CONTENT, 60)
             self.edit_button.add_style(btn_style.pad_left(12).pad_right(0), 0)
-            self.edit_button.align(lv.ALIGN.RIGHT_MID, -12, 0)  # 12px from right edge
-            self.edit_button_label = lv.label(self.edit_button)
-            self.edit_button_label.set_text(_(i18n_keys.BUTTON__EDIT))
-            self.edit_button_label.add_style(StyleWrapper().text_font(font_GeistSemiBold30), 0)
-            self.edit_button_label.center()
-            self.edit_button_label.set_style_text_color(lv.color_hex(0xD2D2D2), 0)
+            self.edit_button.align(lv.ALIGN.RIGHT_MID, -12, 0)  # 右上方
+            self.edit_button_icon = lv.img(self.edit_button)
+            # 使用统一的编辑图标
+            self.edit_button_icon.set_src("A:/res/edit.png")
+            self.edit_button_icon.center()
             self.edit_button.add_event_cb(self.on_edit_button_clicked, lv.EVENT.CLICKED, None)
 
+            # Done 按钮使用勾选图标
             self.done_button = lv.btn(self.custom_header_container)
             self.done_button.set_size(lv.SIZE.CONTENT, 60)
             self.done_button.add_style(btn_style.pad_left(12).pad_right(0), 0)
-            self.done_button.align(lv.ALIGN.RIGHT_MID, -12, 0)  # 12px from right edge
+            self.done_button.align(lv.ALIGN.RIGHT_MID, -12, 0)
             self.done_button.add_flag(lv.obj.FLAG.HIDDEN)
-            self.done_button_label = lv.label(self.done_button)
-            self.done_button_label.set_text(_(i18n_keys.BUTTON__DONE))
-            self.done_button_label.add_style(StyleWrapper().text_font(font_GeistSemiBold30), 0)
-            self.done_button_label.set_style_text_color(lv.color_hex(0xD2D2D2), 0)
-            self.done_button_label.center()
+            self.done_button_icon = lv.img(self.done_button)
+            self.done_button_icon.set_src("A:/res/checkmark.png")
+            self.done_button_icon.center()
             self.done_button.add_event_cb(self.on_done_button_clicked, lv.EVENT.CLICKED, None)
 
+            # Delete 按钮使用垃圾桶/删除图标（与 NFT 管理页资源一致）
             self.delete_button = lv.btn(self.custom_header_container)
             self.delete_button.set_size(lv.SIZE.CONTENT, 60)
             self.delete_button.add_style(btn_style.pad_hor(8), 0)
             self.delete_button.add_flag(lv.obj.FLAG.HIDDEN)
-            self.delete_button_label = lv.label(self.delete_button)
-            self.delete_button_label.set_text(_(i18n_keys.BUTTON__DELETE))
-            self.delete_button_label.add_style(StyleWrapper().text_font(font_GeistSemiBold30), 0)
-            self.delete_button_label.center()
-            self.delete_button_label.set_style_text_color(lv.color_hex(0xFF3B30), 0)
+            self.delete_button_icon = lv.img(self.delete_button)
+            # 使用统一的删除图标
+            self.delete_button_icon.set_src("A:/res/delete.png")
+            self.delete_button_icon.center()
             self.delete_button.add_event_cb(self.on_delete_button_clicked, lv.EVENT.CLICKED, None)
 
         # Custom wallpapers

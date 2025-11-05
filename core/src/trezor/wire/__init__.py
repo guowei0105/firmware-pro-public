@@ -36,9 +36,6 @@ reads the message's header. When the message type is known the first handler is 
 """
 
 from typing import TYPE_CHECKING
-import gc
-
-from storage import cache
 from storage.cache import InvalidSessionError
 from trezor import log, loop, protobuf, utils, workflow
 from trezor.enums import FailureType
@@ -49,8 +46,6 @@ from trezor.wire.errors import ActionCancelled, DataError, Error
 # Import all errors into namespace, so that `wire.Error` is available from
 # other packages.
 from trezor.wire.errors import *  # isort:skip # noqa: F401,F403
-
-SESSION_MEM_LOW_WATERMARK = 96 * 1024
 
 
 if TYPE_CHECKING:
@@ -483,29 +478,7 @@ async def handle_session(
     # Take a mark of modules that are imported at this point, so we can
     # roll back and un-import any others.
     modules = utils.unimport_begin()
-    import trezor.lvglui.scrs.homescreen as homescreen
-    change_state = homescreen.change_state
-    clear_preview_cache = getattr(homescreen, "_clear_preview_cache", None)
-
-    def _maybe_clear_ui_cache():
-        try:
-            if cache.get_int(cache.APP_COMMON_BUSY_STATE, 0) != 0:
-                return
-        except Exception:
-            return
-        try:
-            homescreen.lv.img.cache_invalidate_src(None)
-        except Exception:
-            pass
-        if clear_preview_cache:
-            try:
-                clear_preview_cache()
-            except Exception:
-                pass
-        try:
-            gc.collect()
-        except Exception:
-            pass
+    from trezor.lvglui.scrs.homescreen import change_state
 
     while True:
         try:
@@ -513,38 +486,13 @@ async def handle_session(
                 # If the previous run did not keep an unprocessed message for us,
                 # wait for a new one coming from the wire.
                 try:
-                    try:
-                        gc.collect()
-                    except Exception:
-                        pass
-                    try:
-                        if gc.mem_free() < SESSION_MEM_LOW_WATERMARK:
-                            gc.collect()
-                    except AttributeError:
-                        pass
-                    _maybe_clear_ui_cache()
                     msg = await ctx.read_from_wire()
                     change_state(is_busy=True)
                 except codec_v1.CodecError as exc:
                     if __debug__:
-                        pass  # log call removed
-                    try:
-                        await ctx.write(failure(exc))
-                    except codec_v1.WriteError:
-                        # USB disconnected during error response, exit session
-                        if __debug__:
-                            pass  # USB disconnect during write
-                        change_state()
-                        loop.clear()
-                        return
+                        log.exception(__name__, exc)
+                    await ctx.write(failure(exc))
                     continue
-                except codec_v1.WriteError as exc:
-                    # USB disconnected during read, exit session
-                    if __debug__:
-                        pass  # USB disconnect during read
-                    change_state()
-                    loop.clear()
-                    return
 
             else:
                 # Process the message from previous run.
@@ -559,7 +507,7 @@ async def handle_session(
                 # Log and ignore. The session handler can only exit explicitly in the
                 # following finally block.
                 if __debug__:
-                    pass  # log call removed
+                    log.exception(__name__, exc)
             finally:
                 if not __debug__ or not is_debug_session:
                     # Unload modules imported by the workflow.  Should not raise.
@@ -567,15 +515,6 @@ async def handle_session(
                     # in a debug session would clear modules which are in use by the
                     # workflow running on wire.
                     utils.unimport_end(modules)
-
-                    # For UI: mark end of handling this message. This allows the
-                    # homescreen logic to debounce and restore to AppDrawer after
-                    # a quiet period, and works for any request type.
-                    try:
-                        change_state()
-                        _maybe_clear_ui_cache()
-                    except Exception:
-                        pass
 
                     if next_msg is None and msg.type not in AVOID_RESTARTING_FOR:
                         # Shut down the loop if there is no next message waiting.
@@ -588,8 +527,7 @@ async def handle_session(
             # Log and try again. The session handler can only exit explicitly via
             # loop.clear() above.
             if __debug__:
-                pass  # log call removed
-
+                log.exception(__name__, exc)
 
 def _find_handler_placeholder(iface: WireInterface, msg_type: int) -> Handler | None:
     """Placeholder handler lookup before a proper one is registered."""
