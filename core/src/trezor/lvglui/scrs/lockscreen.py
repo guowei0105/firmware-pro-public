@@ -17,15 +17,7 @@ class LockScreen(Screen):
     @classmethod
     def retrieval(cls) -> tuple[bool, "LockScreen" | None]:
         try:
-            if __debug__:
-                print(
-                    f"[LOCKSCREEN] retrieval() - checking _instance: {hasattr(cls, '_instance')}"
-                )
             if hasattr(cls, "_instance") and cls._instance.is_visible():
-                if __debug__:
-                    print(
-                        "[LOCKSCREEN] retrieval() - _instance is visible, returning True"
-                    )
                 return True, cls._instance
         except Exception:
             pass

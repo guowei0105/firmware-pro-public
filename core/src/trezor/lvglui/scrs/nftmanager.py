@@ -223,7 +223,9 @@ class WallpaperPreviewBase(AnimScreen):
 
 class NftGallery(Screen):
     def __init__(self, prev_scr=None):
-        if not hasattr(self, "_init"):
+        is_reinit = hasattr(self, "_init")
+
+        if not is_reinit:
             self._init = True
             kwargs = {
                 "prev_scr": prev_scr,
@@ -239,10 +241,17 @@ class NftGallery(Screen):
             self.content_area.clear_flag(lv.obj.FLAG.SCROLL_MOMENTUM)
             self.content_area.clear_flag(lv.obj.FLAG.SCROLL_ELASTIC)
         else:
+            # Re-entering: clean up old UI elements and reload screen
             if hasattr(self, "overview") and self.overview:
                 self.overview.delete()
             if hasattr(self, "container") and self.container:
                 self.container.delete()
+            if hasattr(self, "empty_tips") and self.empty_tips:
+                self.empty_tips.delete()
+            if hasattr(self, "tips_bar") and self.tips_bar:
+                self.tips_bar.delete()
+            # Update prev_scr for proper navigation
+            self.prev_scr = prev_scr or lv.scr_act()
 
         nft_counts = 0
         file_name_list = []
@@ -314,9 +323,10 @@ class NftGallery(Screen):
 
             self.container.add_event_cb(self.on_click, lv.EVENT.CLICKED, None)
 
-    def on_nav_back(self, event_obj):
-
-        return
+        # Load screen if this is a re-initialization (second+ time)
+        # First initialization calls load_screen automatically via super().__init__()
+        if is_reinit:
+            self.load_screen(self)
 
     def empty(self):
 
@@ -370,9 +380,6 @@ class NftGallery(Screen):
                             ):
                                 metadata = metadata_load
                     NftManager(self, metadata, nft.file_name)
-
-    def _load_scr(self, scr: "Screen", back: bool = False) -> None:
-        lv.scr_load(scr)
 
 
 class NftManager(AnimScreen):
@@ -523,13 +530,6 @@ class NftManager(AnimScreen):
                 hs_mod._last_jpeg_loaded = None
 
         self.load_screen(self.prev_scr, destroy_self=True)
-
-    def on_nav_back(self, event_obj):
-
-        return
-
-    def _load_scr(self, scr: "Screen", back: bool = False) -> None:
-        lv.scr_load(scr)
 
     def eventhandler(self, event_obj):
         code = event_obj.code
@@ -720,7 +720,7 @@ class NftHomeScreenPreview(WallpaperPreviewBase):
         # Initialize blur button state
         self._update_blur_button_state()
 
-    def on_blur_clicked(self, event_obj):
+    def on_blur_clicked(self, _event_obj):
         if self.blur_exists:
             self._toggle_blur()
 
