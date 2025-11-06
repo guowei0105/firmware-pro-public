@@ -168,10 +168,11 @@ class Layer2Manager:
         resume_handler = getattr(lv, "timer_handler_resume", None)
         if pause_handler:
             pause_handler()
-        result = func(*args, **kwargs)
-        if resume_handler:
-            resume_handler()
-        return result
+        try:
+            return func(*args, **kwargs)
+        finally:
+            if resume_handler:
+                resume_handler()
 
 
 def get_cached_style(image_src):
@@ -225,7 +226,6 @@ def change_state(is_busy: bool = False):
         if MainScreen._instance:
             MainScreen._instance.change_state(is_busy)
 
-
 class MainScreen(Screen):
     # When True, the next time MainScreen appears it should reopen AppDrawer
     _reopen_drawer_on_next_show = False
@@ -247,6 +247,9 @@ class MainScreen(Screen):
 
     def __init__(self, device_name=None, ble_name=None, dev_state=None):
         import storage.device as storage_device
+
+        self._is_busy = False
+        self._communication_hold = False
 
         lockscreen = _normalize_wallpaper_src(storage_device.get_homescreen())
         if not hasattr(self, "_init"):
@@ -390,6 +393,8 @@ class MainScreen(Screen):
     def on_main_gesture(self, event_obj):
         code = event_obj.code
         if code == lv.EVENT.GESTURE:
+            if getattr(self, "_communication_hold", False):
+                return
             if Layer2Manager.is_animating():
                 return
 
@@ -410,6 +415,8 @@ class MainScreen(Screen):
 
     # 主屏向上滑动时开启应用抽屉动画
     def show_appdrawer_simple(self):
+        if getattr(self, "_communication_hold", False):
+            return
         if Layer2Manager.is_animating() or not (hasattr(self, "apps") and self.apps):
             return
 
@@ -436,9 +443,16 @@ class MainScreen(Screen):
 
         def start_layer2_animation():
             # 启动 Layer2 向上的滑动动画，同时处理异常兜底
-            Layer2Manager.with_lvgl_timer_pause(
-                display.cover_background_animate_to_y, -800, 200
-            )
+            try:
+                Layer2Manager.with_lvgl_timer_pause(
+                    display.cover_background_animate_to_y, -800, 200
+                )
+            except Exception:
+                # 如果硬件动画失败，立即恢复到安全状态
+                Layer2Manager.set_visibility(display, False)
+                Layer2Manager.set_animating(False)
+                Layer2Manager.cleanup_timers()
+                return
 
             def on_slide_complete():
                 # Layer2 收起后关闭覆盖层并清理资源
@@ -586,20 +600,28 @@ class MainScreen(Screen):
             self.apps.refresh_background()
 
     def change_state(self, busy: bool):
+        if getattr(self, "_is_busy", False) == busy:
+            return
+        self._is_busy = busy
+        apps = getattr(self, "apps", None)
         if busy:
-            apps = getattr(self, "apps", None)
+            self._communication_hold = True
             if apps:
-                force_cleanup = getattr(apps, "force_cleanup", None)
-                if callable(force_cleanup):
-                    force_cleanup()
-                else:
-                    finish_anim = getattr(apps, "finish_page_animation", None)
-                    if callable(finish_anim):
-                        finish_anim(force=True)
+                lock_comm = getattr(apps, "lock_for_communication", None)
+                if callable(lock_comm):
+                    lock_comm()
+                hide_fallback = getattr(apps, "hide_to_mainscreen_fallback", None)
+                if callable(hide_fallback):
+                    hide_fallback()
             self.clear_flag(lv.obj.FLAG.CLICKABLE)
             self.up_arrow.add_flag(lv.obj.FLAG.HIDDEN)
             self.bottom_tips.set_text(_(i18n_keys.BUTTON__PROCESSING))
         else:
+            self._communication_hold = False
+            if apps:
+                unlock_comm = getattr(apps, "unlock_after_communication", None)
+                if callable(unlock_comm):
+                    unlock_comm()
             self.add_flag(lv.obj.FLAG.CLICKABLE)
             self.up_arrow.clear_flag(lv.obj.FLAG.HIDDEN)
             self.bottom_tips.set_text(_(i18n_keys.BUTTON__SWIPE_TO_SHOW_APPS))
@@ -653,6 +675,7 @@ class MainScreen(Screen):
             self._icon_sources = set()
             self._page_anim_refs = []
             self._page_anim_handles = []
+            self.communication_locked = False
 
             # Remove style and lazy loading related code to fix system freeze
 
@@ -661,6 +684,9 @@ class MainScreen(Screen):
             self._configure_image_cache()
             self.init_indicators()
             self.init_anim()
+
+        def _is_on_hold(self) -> bool:
+            return bool(getattr(self.parent, "_communication_hold", False))
 
         # Removed styles property to fix system freeze
 
@@ -931,7 +957,35 @@ class MainScreen(Screen):
                 delay=APP_DRAWER_DOWN_DELAY,
             )
 
+        def is_animating(self) -> bool:
+            return bool(getattr(self, "page_animating", False))
+
+        async def wait_for_animation(self, timeout_ms: int = 500):
+            if not self.is_animating():
+                return
+            deadline = utime.ticks_add(utime.ticks_ms(), timeout_ms)
+            while self.is_animating():
+                if utime.ticks_diff(deadline, utime.ticks_ms()) <= 0:
+                    self.finish_page_animation(force=True)
+                    break
+                try:
+                    await loop.sleep(10)
+                except Exception:
+                    break
+
+        def lock_for_communication(self):
+            if self.communication_locked:
+                return
+            self.communication_locked = True
+            if self.is_animating():
+                self.finish_page_animation(force=True)
+
+        def unlock_after_communication(self):
+            self.communication_locked = False
+
         def on_gesture(self, event_obj):
+            if self._is_on_hold():
+                return
             code = event_obj.code
             is_hidden = self.has_flag(lv.obj.FLAG.HIDDEN)
 
@@ -1011,6 +1065,19 @@ class MainScreen(Screen):
             self.add_flag(lv.obj.FLAG.GESTURE_BUBBLE)
             self.visible = False
 
+            try:
+                from trezorui import Display
+
+                display = Display()
+            except Exception:
+                display = None
+
+            if display:
+                try:
+                    Layer2Manager.set_visibility(display, False)
+                except Exception:
+                    pass
+
             # Ensure animation flag is properly reset
             Layer2Manager.set_animating(False)
             Layer2Manager.cleanup_timers()
@@ -1023,8 +1090,12 @@ class MainScreen(Screen):
             # 处理左右滑动手势，驱动应用页切换动画
             if _dir not in [lv.DIR.RIGHT, lv.DIR.LEFT]:
                 return
+            if self._is_on_hold():
+                return
             # 手势限流：动画进行中直接丢弃新左右滑，避免打断与额外开销
             if self.page_animating:
+                return
+            if self.communication_locked:
                 return
 
             if not hasattr(self, "indicators") or not self.indicators:
@@ -1081,6 +1152,9 @@ class MainScreen(Screen):
         def animate_page_transition(self, target_index: int, direction: int):
             # 根据目标页与方向创建滑动动画，完成页面切换
             if target_index < 0 or target_index >= self.PAGE_SIZE:
+                return
+
+            if self.communication_locked:
                 return
 
             old_index = self.current_page
@@ -1244,6 +1318,8 @@ class MainScreen(Screen):
                 self.finish_page_animation(force=True)
             except Exception:
                 pass
+
+            self.communication_locked = False
 
             try:
                 is_hidden = self.has_flag(lv.obj.FLAG.HIDDEN)
@@ -3905,12 +3981,13 @@ class WallperChange(AnimScreen):
         row_dsc = []
         if custom_rows > 0:
             row_dsc.extend([GRID_CELL_SIZE_ROWS] * custom_rows)  # Custom images
-            # Collection label: 32px top spacing + 60px label height + 16px bottom spacing = 108px total
-            row_dsc.append(108)  # Pro header (32px top + 60px height + 16px bottom)
+            # Collection label: reduced spacing to match Custom section
+            row_dsc.append(60)  # Pro header (same height as Custom header)
         else:
+            # Calculate height for empty state: title (~30px) + gap (16px) + 3 lines of desc (~90px) + padding
             row_dsc.append(
-                178
-            )  # Empty state text container (with 56px spacing to Collection)
+                180
+            )  # Empty state text container with enough space for 3 lines
             row_dsc.append(
                 60
             )  # Pro header with normal spacing when no custom wallpapers
@@ -3962,7 +4039,7 @@ class WallperChange(AnimScreen):
             .text_align(lv.TEXT_ALIGN.LEFT),
             0,
         )
-        self.custom_header.align(lv.ALIGN.LEFT_MID, 12, 0)  # 12px from left edge, matching Edit button's pad_left
+        self.custom_header.align(lv.ALIGN.LEFT_MID, 7, 0)  # 7px from screen left edge (8px - 1px)
 
         # No need to increment current_row since custom_header_container is outside the grid now
 
@@ -4101,8 +4178,8 @@ class WallperChange(AnimScreen):
             # No custom wallpapers - show instructional text
             self.empty_state_container = lv.obj(self.container)
             self.empty_state_container.set_size(
-                lv.pct(100), 139
-            )  # Height for title + description + spacing
+                lv.pct(100), lv.SIZE.CONTENT
+            )  # Auto height to accommodate different language lengths
             self.empty_state_container.clear_flag(lv.obj.FLAG.SCROLLABLE)
             self.empty_state_container.set_style_bg_opa(lv.OPA.TRANSP, 0)
             self.empty_state_container.set_style_border_opa(lv.OPA.TRANSP, 0)
@@ -4114,6 +4191,10 @@ class WallperChange(AnimScreen):
             # Title: "Add Wallpaper from OneKey App"
             self.empty_title = lv.label(self.empty_state_container)
             self.empty_title.set_text(_(i18n_keys.TITLE__ADD_WALLPAPER_FROM_ONEKEY_APP))
+            self.empty_title.set_long_mode(lv.label.LONG.WRAP)  # Enable text wrapping for title
+            self.empty_title.set_size(
+                lv.pct(100), lv.SIZE.CONTENT
+            )  # Full width, auto height
             self.empty_title.add_style(
                 StyleWrapper()
                 .text_font(font_GeistSemiBold26)
@@ -4123,8 +4204,8 @@ class WallperChange(AnimScreen):
                 0,  # Reduce letter spacing
             )
             self.empty_title.align(
-                lv.ALIGN.TOP_LEFT, 4, 10
-            )  # Slightly further from left border
+                lv.ALIGN.TOP_LEFT, 3, 10
+            )  # 6px from screen left edge (11px - 5px)
             # Description: "Upload an image in My OneKey > Select your OneKey device > Wallpaper."
             self.empty_desc = lv.label(self.empty_state_container)
             self.empty_desc.set_text(
@@ -4133,23 +4214,17 @@ class WallperChange(AnimScreen):
             self.empty_desc.set_long_mode(lv.label.LONG.WRAP)  # Enable text wrapping
             self.empty_desc.set_size(
                 lv.pct(100), lv.SIZE.CONTENT
-            )  # Full width, auto height
+            )  # Full width, auto height for up to 3 lines
             self.empty_desc.add_style(
                 StyleWrapper()
                 .text_font(font_GeistRegular26)
                 .text_color(lv_colors.ONEKEY_GRAY_1)
                 .text_align(lv.TEXT_ALIGN.LEFT)
-                .text_letter_space(-2),
-                0,  # Reduce letter spacing
-            )
-            self.empty_desc.align_to(self.empty_title, lv.ALIGN.OUT_BOTTOM_LEFT, 2, 16)
-            self.empty_desc.add_style(
-                StyleWrapper()
-                .text_font(font_GeistRegular26)
-                .text_color(lv_colors.ONEKEY_GRAY_1)
-                .text_align(lv.TEXT_ALIGN.LEFT),
+                .text_letter_space(-2)
+                .text_line_space(4),  # Add line spacing for better readability
                 0,
             )
+            self.empty_desc.align_to(self.empty_title, lv.ALIGN.OUT_BOTTOM_LEFT, 0, 16)
 
             current_row += 1
 
@@ -4160,13 +4235,14 @@ class WallperChange(AnimScreen):
             StyleWrapper()
             .text_font(font_GeistSemiBold30)
             .text_color(lv_colors.WHITE)
-            .text_align(lv.TEXT_ALIGN.LEFT)
-            .pad_top(32),  # 32px spacing from top of the grid cell
+            .text_align(lv.TEXT_ALIGN.LEFT),
             0,
         )
         self.pro_header.set_grid_cell(
-            lv.GRID_ALIGN.START, 0, 3, lv.GRID_ALIGN.START, current_row, 1
+            lv.GRID_ALIGN.START, 0, 3, lv.GRID_ALIGN.CENTER, current_row, 1
         )
+        # Set to 8px from screen left edge (same as Custom header)
+        self.pro_header.set_x(8)
         current_row += 1
 
         # Pro wallpapers (built-in)

@@ -1559,7 +1559,7 @@ TITLE__EXPORT_SIGNED_TRANSACTION = 709
 ITEM__AIR_GAP_MODE = 710
 TITLE__AIR_GAP_MODE = 710
 ITEM__AIR_GAP = 710
-# Enabling this mode disables Bluetooth, USB, and NFC.
+# Enabling this mode disables Bluetooth, USB and NFC.
 CONTENT__AFTER_ENABLING_THE_AIRGAP_BLUETOOTH_USB_AND_NFC_TRANSFER_WILL_BE_DISABLED_SIMULTANEOUSLY = 711
 # Bluetooth, USB and NFC have been disabled.
 CONTENT__BLUETOOTH_USB_AND_NFT_TRANSFER_FUNCTIONS_HAVE_BEEN_DISABLED = 712
@@ -2282,9 +2282,8 @@ TITLE__PIN_SET_DESC = 1035
 # Set Your Wallet
 TITLE__SET_YOUR_WALLET = 1036
 # Create a new 12-word wallet, or restore a previously used wallet from recove
-# ry phrase backup.
-# For other recovery phrase lengths or a multi-share wallet,
-# tap More in the top-right to select the recovery phrase type.
+# ry phrase backup. \nFor other recovery phrase lengths or a multi-share walle
+# t, tap More in the top-right to select the recovery phrase type.
 TITLE__SET_YOUR_WALLET_DESC = 1037
 # Choose the backup type for your new wallet.
 CONTENT__CHOOSE_THE_BACKUP_TYPE_FOR_YOUR_NEW_WALLET = 1038
@@ -2295,4 +2294,21 @@ CONTENT__THE_NUMBER_OF_WORDS_IN_YOUR_SEED_PHRASE_DOES_NOT_AFFECT_ITS_SECURITY_AL
 BUTTON__SHOW_DYNAMIC_QR_CODE = 1040
 # BTC, TRON, SOL, ETH, BNB ...
 CONTENT__BTC_TRON_SOL_ETH_BNB = 1041
+# Some crypto assets and hardware features are unavailable in QR Code communic
+# ation mode. \nThis mode is intended only for a small number of users who rar
+# ely operate their hardware wallet and is not compatible with other connectio
+# n methods. \nIf you wish to connect your hardware wallet via Bluetooth or US
+# B, please re-add the wallet to switch the communication mode.
+TITLE__QR_CODE_CONNECT_DESC = 1042
+# Select the way to connect. \nTo use the QR code connection, tap "More" in th
+# e top right corner.
+CONTENT__CONNECT_APP_WALLET_DESC = 1043
+# Advanced
+TITLE__ADVANCED = 1044
+# Danger Zone
+TITLE__DANGER_ZONE = 1045
+# Continue with QR Code
+BUTTON__CONTINUE_WITH_QR_CODE = 1046
+# Connect OneKey App Wallet
+TITLE_BTC_ONLY_CONNECT_WALLET = 1047
 # fmt: on

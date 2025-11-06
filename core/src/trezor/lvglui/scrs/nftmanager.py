@@ -421,7 +421,7 @@ class NftManager(AnimScreen):
         self.nft_image = lv.img(self.content_area)
         self.nft_image.set_src(self.img_path)
         self.nft_image.set_size(456, 456)
-        self.nft_image.align(lv.ALIGN.TOP_MID, 0, 104)
+        self.nft_image.align(lv.ALIGN.TOP_MID, 0, 128)  # Position image 128px from top
         self.nft_image.add_style(StyleWrapper().radius(20).clip_corner(True), 0)
 
         # Title text below image

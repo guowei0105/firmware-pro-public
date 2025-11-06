@@ -7,10 +7,10 @@ langs = [
     ("ko", "한국어"),
     ("fr", "Français"),
     ("de", "Deutsch"),
-    ("ru", "Русский"),
-    ("es", "Español"),
+    ("ru", "Russian"),
+    ("es", "Spanish"),
     ("it", "Italiano"),
-    ("pt_br", "Português (Brasil)"),
+    ("pt_br", "Portuguese (Brazil)"),
 ]
 
 langs_keys = [x[0] for x in langs]
