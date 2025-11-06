@@ -250,8 +250,7 @@ class NftGallery(Screen):
                 self.empty_tips.delete()
             if hasattr(self, "tips_bar") and self.tips_bar:
                 self.tips_bar.delete()
-            # Update prev_scr for proper navigation
-            self.prev_scr = prev_scr or lv.scr_act()
+            # Don't update prev_scr on re-entry to maintain correct navigation chain
 
         nft_counts = 0
         file_name_list = []
@@ -545,8 +544,9 @@ class NftManager(AnimScreen):
                     # Handle trash icon click - delete NFT
                     from trezor.ui.layouts import confirm_remove_nft
                     from trezor.wire import DUMMY_CONTEXT
+                    from .homescreen import spawn_with_animation_guard
 
-                    workflow.spawn(
+                    spawn_with_animation_guard(
                         confirm_remove_nft(
                             DUMMY_CONTEXT,
                             self.del_callback,
@@ -709,7 +709,7 @@ class NftHomeScreenPreview(WallpaperPreviewBase):
             self.blur_button,
             self.blur_button_icon,
             self.blur_label,
-        ) = self._create_button_with_label(_P11, "Blur", self.on_blur_clicked)
+        ) = self._create_button_with_label(_P11, _(i18n_keys.BUTTON__BLUR), self.on_blur_clicked)
 
         # Position blur button centered at bottom
         self.blur_button.align_to(
