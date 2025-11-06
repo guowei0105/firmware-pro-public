@@ -768,32 +768,44 @@ class NftHomeScreenPreview(WallpaperPreviewBase):
                     wallpaper_path = self.current_wallpaper_path
                     MainScreen = _get_main_screen_cls()
 
+                    # Save old wallpaper path BEFORE setting new one
+                    old_wallpaper = storage_device.get_appdrawer_background()
+
+                    # Set the new AppDrawer background
                     storage_device.set_appdrawer_background(wallpaper_path)
+
+                    # CRITICAL: Clear LVGL image cache for BOTH old and new wallpapers
+                    if hasattr(lv.img, "cache_invalidate_src"):
+                        try:
+                            # Clear old wallpaper cache
+                            if old_wallpaper:
+                                lv.img.cache_invalidate_src(old_wallpaper)
+                            # Clear new wallpaper cache
+                            lv.img.cache_invalidate_src(wallpaper_path)
+                            # Clear all caches for good measure
+                            lv.img.cache_invalidate_src(None)
+                        except OSError:
+                            pass
+
                     main_screen = getattr(MainScreen, "_instance", None)
                     if main_screen:
-                        lockscreen_path = storage_device.get_homescreen()
-                        if lockscreen_path:
-                            safe_lock_path = _safe_wallpaper_src(
-                                lockscreen_path,
-                                _S3,
-                            )
-                            main_screen.set_background_image(safe_lock_path)
-
+                        # Refresh the AppDrawer background
                         if hasattr(main_screen, "apps") and main_screen.apps:
+                            # Remove existing background style first to avoid style stacking
+                            if hasattr(main_screen.apps, "_background_style") and main_screen.apps._background_style:
+                                try:
+                                    main_screen.apps.remove_style(main_screen.apps._background_style, 0)
+                                    main_screen.apps._background_style = None
+                                except:
+                                    pass
+
+                            # Now refresh the background which will create a new style
                             main_screen.apps.refresh_background()
 
-                        if hasattr(lv.img, "cache_invalidate_src"):
-                            try:
-                                lv.img.cache_invalidate_src(wallpaper_path)
-                            except OSError:
-                                pass
+                            # Force invalidate to refresh display
+                            if main_screen.apps.has_flag(lv.obj.FLAG.HIDDEN):
+                                main_screen.apps.invalidate()
 
-                        try:
-                            import trezor.lvglui.scrs.homescreen as hs_mod
-                        except ImportError:
-                            hs_mod = None
-                        if hs_mod is not None:
-                            hs_mod._last_jpeg_loaded = None
                     # Find the root MainScreen instance
                     main_screen = (
                         MainScreen._instance
